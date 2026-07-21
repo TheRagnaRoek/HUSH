@@ -1,0 +1,13 @@
+HEADER    HUSH TEST STRUCTURE                     01-JAN-26   MINI
+TITLE     MINIMAL SYNTHETIC PROTEIN FOR HUSH INPUT-LAYER TESTS
+SEQRES   1 A    8  MET LYS LEU VAL TRP GLN ALA GLY
+ATOM      1  CA  MET A   1      11.104  13.207  10.000  1.00 20.00           C
+ATOM      2  CA  LYS A   2      12.560  13.800  10.500  1.00 20.00           C
+ATOM      3  CA  LEU A   3      14.000  14.100  11.000  1.00 20.00           C
+ATOM      4  CA  VAL A   4      15.500  14.500  11.500  1.00 20.00           C
+ATOM      5  CA  TRP A   5      17.000  15.000  12.000  1.00 20.00           C
+ATOM      6  CA  GLN A   6      18.500  15.500  12.500  1.00 20.00           C
+ATOM      7  CA  ALA A   7      20.000  16.000  13.000  1.00 20.00           C
+ATOM      8  CA  GLY A   8      21.500  16.500  13.500  1.00 20.00           C
+TER       9      GLY A   8
+END
