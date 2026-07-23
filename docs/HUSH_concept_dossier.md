@@ -1,4 +1,4 @@
-# A Modern, HLA-Aware siRNA/shRNA Design Tool
+# A Modern, Allele-Aware siRNA/shRNA Design Tool
 ### Project One-Pager
 
 ---
@@ -36,7 +36,7 @@ We are building a modernized, open-source successor to siDirect's core logic tha
 
 1. **Modernized design core** — retain the classical rule filter as a fast pre-screen, paired with a lightweight, interpretable ML scoring layer (logistic regression / gradient boosting trained on public benchmark data such as Huesken) rather than a deep architecture — feasible within our timeline and, per recent comparative work, competitive with deep learning approaches on the same benchmarks.
 2. **Native shRNA conversion** — seed-duplex-aware siRNA candidates are carried through to scored shRNA scaffold design (stem-loop vs. miR-30/miR-E-style pri-miRNA context), rather than naive template-stamping.
-3. **HLA allele-awareness** — an IPD-IMGT/HLA-integrated module that aligns a user-selected allele panel and scores candidates for either pan-allele conserved-region targeting or single-allele-specific targeting, using seed-duplex thermodynamic differentials — the RNAi-appropriate analog of what HLA-Knockout does for CRISPR.
+3. **Allele-awareness** - an MSA-driven module that aligns a user-selected allele panel and scores candidates for either pan-allele conserved-region targeting or single-allele-specific targeting, using seed-duplex thermodynamic differentials. The tool is sequence-agnostic; HLA (via IPD-IMGT/HLA integration) is the proof-of-concept panel that motivated the module, making this the RNAi-appropriate analog of what HLA-Knockout does for CRISPR.
 
 ## Conclusion
 
