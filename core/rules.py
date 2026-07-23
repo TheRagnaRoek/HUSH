@@ -5,18 +5,20 @@ They all encode thermodynamic asymmetry - the duplex should unwind more easily
 at the guide (antisense) 5' end so RISC loads the guide rather than the
 passenger - but express it differently:
 
-* Ui-Tei    - a strict 4-rule pass/fail filter (implemented here).
-* Reynolds  - an 8-point additive checklist (later unit).
+* Ui-Tei    - a strict 4-rule pass/fail filter.
+* Reynolds  - an 8-point additive checklist.
 * Amarzguioui - a compact weighted regression score (later unit).
 
 Strand conventions match core.sirna: sense/passenger and antisense/guide are
 both stored 5'->3'. Rules are evaluated on whichever strand they are naturally
 defined for and documented per rule.
 
-Reference:
+References:
     Ui-Tei, K. et al. (2004). Guidelines for the selection of highly effective
     siRNA sequences for mammalian and chick RNA interference.
     Nucleic Acids Research 32(3), 936-948.
+    Reynolds, A. et al. (2004). Rational siRNA design for RNA interference.
+    Nature Biotechnology 22, 326-330.
 """
 
 from __future__ import annotations
@@ -145,4 +147,168 @@ def ui_tei(candidate: SiRNACandidate) -> UiTeiResult:
         sense_5p_gc=sense_5p_gc,
         guide_5p_au_rich=guide_5p_au_rich,
         no_long_gc_run=no_long_gc_run,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Reynolds constants
+# --------------------------------------------------------------------------- #
+
+# All Reynolds criteria are evaluated on the sense strand, 5'->3'. The original
+# criteria are defined for a 19-mer; for a longer core (20-24 nt) we anchor the
+# 3'-end rules (II, IV, VII) to the actual 3' terminus and keep the internal
+# rules (V, VI, VIII) at their absolute 1-based positions from the 5' end.
+REYNOLDS_MIN_LENGTH = 19
+
+# Criterion I: GC content window (fraction, inclusive bounds).
+REYNOLDS_GC_MIN = 0.30
+REYNOLDS_GC_MAX = 0.52
+
+# Criterion II: at least this many A/U in the 3'-terminal window.
+REYNOLDS_AU_3P_WINDOW = 5
+REYNOLDS_MIN_AU_3P = 3
+
+# Internal positional criteria (1-based positions from the 5' end).
+REYNOLDS_POS_A_INTERNAL = 3   # V:    'A' at position 3
+REYNOLDS_POS_U = 10           # VI:   'U' at position 10
+REYNOLDS_POS_NOT_G = 13       # VIII: not 'G' at position 13
+
+# Score at or above which Reynolds predicts a functional siRNA. The classic
+# cutoff is 6 (out of 8). While criterion III is deferred the effective maximum
+# is 7 (see ReynoldsResult.max_possible); the cutoff itself is unchanged.
+REYNOLDS_DEFAULT_THRESHOLD = 6
+
+
+def _base_at(seq: str, pos_1based: int) -> str:
+    """Return the residue at a 1-based position from the 5' end."""
+    return seq[pos_1based - 1]
+
+
+# --------------------------------------------------------------------------- #
+# Reynolds result
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class ReynoldsResult:
+    """Outcome of the eight Reynolds criteria for one candidate.
+
+    Unlike Ui-Tei this is a graded checklist, not a gate: each satisfied
+    criterion contributes one point and a total of at least
+    REYNOLDS_DEFAULT_THRESHOLD predicts a functional siRNA.
+
+    Criterion III (low internal secondary structure) needs a folding/Tm
+    calculation that lives in the later thermodynamics unit. Until it is
+    supplied it is left as None ("not assessed") rather than assumed pass or
+    fail: it is excluded from 'score' and 'max_possible' and named in 'pending',
+    so the checklist never silently under- or over-counts.
+
+    Fields (Roman numerals are the original Reynolds criteria):
+        gc_in_range:      I    GC content within [30%, 52%].
+        au_rich_3p:       II   >= 3 A/U in the sense 3'-terminal 5 nt.
+        low_internal_structure: III  low internal secondary structure (deferred).
+        a_at_3p_end:      IV   'A' at the sense 3' terminus.
+        a_at_pos3:        V    'A' at position 3.
+        u_at_pos10:       VI   'U' at position 10.
+        not_gc_at_3p_end: VII  sense 3' terminus is not G/C.
+        not_g_at_pos13:   VIII position 13 is not 'G'.
+    """
+
+    gc_in_range: bool
+    au_rich_3p: bool
+    low_internal_structure: bool | None
+    a_at_3p_end: bool
+    a_at_pos3: bool
+    u_at_pos10: bool
+    not_gc_at_3p_end: bool
+    not_g_at_pos13: bool
+
+    def _criteria(self) -> list[tuple[str, bool | None]]:
+        return [
+            ("gc_in_range", self.gc_in_range),
+            ("au_rich_3p", self.au_rich_3p),
+            ("low_internal_structure", self.low_internal_structure),
+            ("a_at_3p_end", self.a_at_3p_end),
+            ("a_at_pos3", self.a_at_pos3),
+            ("u_at_pos10", self.u_at_pos10),
+            ("not_gc_at_3p_end", self.not_gc_at_3p_end),
+            ("not_g_at_pos13", self.not_g_at_pos13),
+        ]
+
+    @property
+    def pending(self) -> list[str]:
+        """Names of criteria not yet assessed (value is None)."""
+        return [name for name, value in self._criteria() if value is None]
+
+    @property
+    def score(self) -> int:
+        """Points earned among the assessed criteria."""
+        return sum(1 for _, value in self._criteria() if value is True)
+
+    @property
+    def max_possible(self) -> int:
+        """Number of criteria actually assessed (excludes pending ones)."""
+        return sum(1 for _, value in self._criteria() if value is not None)
+
+    def meets_threshold(self, threshold: int = REYNOLDS_DEFAULT_THRESHOLD) -> bool:
+        """True when 'score' reaches 'threshold' (default 6)."""
+        return self.score >= threshold
+
+    def __repr__(self) -> str:
+        pending = ",".join(self.pending) or "none"
+        return (
+            f"ReynoldsResult(score={self.score}/{self.max_possible}, "
+            f"meets_threshold={self.meets_threshold()}, pending={pending})"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Reynolds evaluation
+# --------------------------------------------------------------------------- #
+
+
+def reynolds(
+    candidate: SiRNACandidate,
+    low_internal_structure: bool | None = None,
+) -> ReynoldsResult:
+    """Evaluate the Reynolds criteria for a candidate (sense strand, 5'->3').
+
+    Criterion III (low internal secondary structure) is not computed here; pass
+    'low_internal_structure' once the thermodynamics unit can assess it. Left as
+    None it is reported as pending and excluded from the score.
+
+    Raises:
+        ValueError: if the sense strand is shorter than REYNOLDS_MIN_LENGTH; the
+        criteria are only defined for a standard-length (>= 19 nt) core.
+    """
+    sense = candidate.sense.seq
+    if len(sense) < REYNOLDS_MIN_LENGTH:
+        raise ValueError(
+            f"Reynolds criteria need a core of at least {REYNOLDS_MIN_LENGTH} nt; "
+            f"got {len(sense)} nt."
+        )
+
+    gc = candidate.gc_content
+    gc_in_range = REYNOLDS_GC_MIN <= gc <= REYNOLDS_GC_MAX
+
+    tail = sense[-REYNOLDS_AU_3P_WINDOW:]
+    au_rich_3p = sum(base in _AU for base in tail) >= REYNOLDS_MIN_AU_3P
+
+    three_prime = sense[-1]
+    a_at_3p_end = three_prime == "A"
+    not_gc_at_3p_end = three_prime not in _GC
+
+    a_at_pos3 = _base_at(sense, REYNOLDS_POS_A_INTERNAL) == "A"
+    u_at_pos10 = _base_at(sense, REYNOLDS_POS_U) == "U"
+    not_g_at_pos13 = _base_at(sense, REYNOLDS_POS_NOT_G) != "G"
+
+    return ReynoldsResult(
+        gc_in_range=gc_in_range,
+        au_rich_3p=au_rich_3p,
+        low_internal_structure=low_internal_structure,
+        a_at_3p_end=a_at_3p_end,
+        a_at_pos3=a_at_pos3,
+        u_at_pos10=u_at_pos10,
+        not_gc_at_3p_end=not_gc_at_3p_end,
+        not_g_at_pos13=not_g_at_pos13,
     )
