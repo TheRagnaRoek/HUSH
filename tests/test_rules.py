@@ -3,9 +3,11 @@
 import pytest
 
 from core.rules import (
+    AMARZGUIOUI_DEFAULT_THRESHOLD,
     REYNOLDS_DEFAULT_THRESHOLD,
     UI_TEI_MAX_GC_RUN,
     _longest_run,
+    amarzguioui,
     reynolds,
     ui_tei,
 )
@@ -220,3 +222,95 @@ class TestReynoldsIntegration:
         for r in results:
             assert 0 <= r.score <= r.max_possible == 7
             assert r.pending == ["low_internal_structure"]
+
+
+# --------------------------------------------------------------------------- #
+# Amarzguioui
+# --------------------------------------------------------------------------- #
+
+# A 19-mer hitting all three positive motifs and no negatives:
+#   pos1 = G  -> S1 (+1), not U1
+#   pos6 = A  -> A6 (+1)
+#   pos19 = A -> W19 (+1), not G19
+AMARZ_ALL_POSITIVE = "GCCCCACCCCCCCCCCCCA"
+
+
+def amarz_candidate(sense: str):
+    return make_candidate(sense, "A" * len(sense))
+
+
+class TestAmarzguiouiMotifs:
+    def test_all_positive_motifs_score_three_asymmetry_pending(self):
+        r = amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE))
+        assert (r.s1_gc, r.a6_a, r.w19_au) == (True, True, True)
+        assert (r.u1, r.g19) == (False, False)
+        assert r.motif_score == 3
+        assert r.end_asymmetry is None
+        assert r.pending == ["end_asymmetry"]
+        assert r.is_complete is False
+        # Motif points alone already reach the threshold of 3.
+        assert r.meets_threshold(AMARZGUIOUI_DEFAULT_THRESHOLD) is True
+
+    def test_negative_motifs_subtract(self):
+        # pos1 = U -> U1 (-1) and not S1; pos19 = G -> G19 (-1) and not W19.
+        r = amarzguioui(amarz_candidate("UCCCCCCCCCCCCCCCCCG"))
+        assert (r.u1, r.g19) == (True, True)
+        assert (r.s1_gc, r.w19_au) == (False, False)
+        assert r.motif_score == -2
+
+    def test_s1_and_u1_are_mutually_exclusive_at_pos1(self):
+        r_gc = amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE))
+        assert r_gc.s1_gc is True and r_gc.u1 is False
+        # pos1 = A: neither S1 nor U1.
+        r_a = amarzguioui(amarz_candidate("ACCCCACCCCCCCCCCCCA"))
+        assert r_a.s1_gc is False and r_a.u1 is False
+
+
+class TestAmarzguiouiEndDifferential:
+    def test_differential_5p_minus_3p(self):
+        # 5' triplet AAA (3 A/U), 3' triplet GGG (0) -> differential +3.
+        r = amarzguioui(amarz_candidate("AAA" + "C" * 13 + "GGG"))
+        assert r.end_au_differential == 3
+
+    def test_differential_can_be_negative(self):
+        # 5' triplet GGG (0), 3' triplet AAA (3) -> differential -3.
+        r = amarzguioui(amarz_candidate("GGG" + "C" * 13 + "AAA"))
+        assert r.end_au_differential == -3
+
+
+class TestAmarzguiouiAsymmetryTerm:
+    def test_supplying_asymmetry_completes_and_adds_to_score(self):
+        r = amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE), end_asymmetry=3)
+        assert r.is_complete is True
+        assert r.pending == []
+        assert r.score == 6  # motif 3 + asymmetry 3
+
+    def test_negative_asymmetry_can_drop_below_threshold(self):
+        r = amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE), end_asymmetry=-2)
+        assert r.score == 1
+        assert r.meets_threshold() is False
+
+    def test_asymmetry_above_range_raises(self):
+        with pytest.raises(ValueError):
+            amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE), end_asymmetry=4)
+
+    def test_asymmetry_below_range_raises(self):
+        with pytest.raises(ValueError):
+            amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE), end_asymmetry=-3)
+
+
+class TestAmarzguiouiLengthGuard:
+    def test_short_core_raises(self):
+        with pytest.raises(ValueError):
+            amarzguioui(amarz_candidate("A" * 18))
+
+
+class TestAmarzguiouiIntegration:
+    def test_over_real_candidates_asymmetry_pending(self):
+        target = BioSequence("ATGGCTACGTTAGCCATTGCACGTAACGGCATATGCC", id="t",
+                             moltype=MolType.DNA)
+        results = [amarzguioui(c) for c in enumerate_candidates(target, length=19)]
+        assert results
+        for r in results:
+            assert -2 <= r.motif_score <= 3
+            assert r.pending == ["end_asymmetry"]

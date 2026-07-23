@@ -7,7 +7,9 @@ passenger - but express it differently:
 
 * Ui-Tei    - a strict 4-rule pass/fail filter.
 * Reynolds  - an 8-point additive checklist.
-* Amarzguioui - a compact weighted regression score (later unit).
+* Amarzguioui - a criterion-based additive score; the five motif criteria are
+  implemented, the duplex-end asymmetry term is deferred pending confirmation of
+  its differential->points mapping (see the Amarzguioui section below).
 
 Strand conventions match core.sirna: sense/passenger and antisense/guide are
 both stored 5'->3'. Rules are evaluated on whichever strand they are naturally
@@ -19,6 +21,9 @@ References:
     Nucleic Acids Research 32(3), 936-948.
     Reynolds, A. et al. (2004). Rational siRNA design for RNA interference.
     Nature Biotechnology 22, 326-330.
+    Amarzguioui, M. & Prydz, H. (2004). An algorithm for selection of functional
+    siRNA sequences. Biochem Biophys Res Commun 316(4), 1050-1058.
+    doi:10.1016/j.bbrc.2004.02.157
 """
 
 from __future__ import annotations
@@ -311,4 +316,198 @@ def reynolds(
         u_at_pos10=u_at_pos10,
         not_gc_at_3p_end=not_gc_at_3p_end,
         not_g_at_pos13=not_g_at_pos13,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Amarzguioui constants
+# --------------------------------------------------------------------------- #
+#
+# Amarzguioui & Prydz (2004) use a simple additive, criterion-based score (like
+# Reynolds), NOT a weighted regression. Each position-specific motif contributes
+# a fixed +1 (positive) or -1 (negative); the duplex-end A/U asymmetry adds a
+# separate integer term. A total at or above the threshold marks a functional
+# siRNA. Positions are 1-based on the SENSE strand, 5'->3' (confirmed).
+#
+#   Positive motifs (+1 when present):
+#     S1  = G/C at position 1
+#     A6  = A   at position 6
+#     W19 = A/U at position 19
+#   Negative motifs (-1 when present):
+#     U1  = U   at position 1
+#     G19 = G   at position 19
+#
+# The duplex-end asymmetry term is tabulated in the paper as an integer in the
+# range [-2, 3], but the exact mapping from the terminal-triplet A/U differential
+# to that integer is not clearly described and is NOT yet confirmed. It is
+# therefore handled like Reynolds criterion III: passed in explicitly and, until
+# confirmed, left as None (excluded from the score, reported in .pending). No
+# differential->points mapping is guessed here.
+#
+# Open question to resolve when the asymmetry mapping is confirmed: how the
+# position-19 motifs and the 3' terminal triplet anchor for cores longer than
+# the 19 nt the model was fit on. This implementation uses absolute 1-based
+# positions for the motifs and the actual 3' terminus for the triplet.
+
+AMARZGUIOUI_MIN_LENGTH = 19
+AMARZGUIOUI_TERMINAL_BP = 3
+
+# Motif positions, 1-based on the sense strand.
+AMARZGUIOUI_POS_S1 = 1
+AMARZGUIOUI_POS_A6 = 6
+AMARZGUIOUI_POS_W19 = 19
+
+# Verifiable bounds of the asymmetry term as tabulated (inclusive). The exact
+# differential->points mapping within these bounds is still to be confirmed.
+AMARZGUIOUI_ASYMMETRY_MIN = -2
+AMARZGUIOUI_ASYMMETRY_MAX = 3
+
+# Score at or above which the paper calls an siRNA functional (inclusive). The
+# authors note this cut-off may be over-conservative.
+AMARZGUIOUI_DEFAULT_THRESHOLD = 3
+
+
+# --------------------------------------------------------------------------- #
+# Amarzguioui result
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class AmarzguiouiResult:
+    """Outcome of the Amarzguioui & Prydz (2004) criterion-based score.
+
+    The five motif criteria are fully evaluated. The duplex-end asymmetry term
+    is supplied via 'end_asymmetry'; until its differential->points mapping is
+    confirmed it is left as None, excluded from 'score', and named in 'pending'
+    (mirroring how Reynolds defers criterion III), so the score is never inflated
+    or deflated by a guessed asymmetry value.
+
+    Fields:
+        end_au_differential: raw feature - A/U count in the sense 5'-terminal 3
+            nt minus that in the 3'-terminal 3 nt. Well-defined arithmetic; the
+            sign convention the paper's table uses (and how it maps to points) is
+            part of the unconfirmed mapping, so this is informational only.
+        end_asymmetry: the paper's integer asymmetry points in [-2, 3], or None
+            when not yet assessed.
+        s1_gc:  G/C at sense position 1   (positive motif S1, +1).
+        a6_a:   A at sense position 6     (positive motif A6, +1).
+        w19_au: A/U at sense position 19  (positive motif W19, +1).
+        u1:     U at sense position 1     (negative motif U1, -1 when True).
+        g19:    G at sense position 19    (negative motif G19, -1 when True).
+    """
+
+    end_au_differential: int
+    end_asymmetry: int | None
+    s1_gc: bool
+    a6_a: bool
+    w19_au: bool
+    u1: bool
+    g19: bool
+
+    @property
+    def motif_score(self) -> int:
+        """Sum of the five motif contributions (+1 positive, -1 negative)."""
+        return (
+            (1 if self.s1_gc else 0)
+            + (1 if self.a6_a else 0)
+            + (1 if self.w19_au else 0)
+            + (-1 if self.u1 else 0)
+            + (-1 if self.g19 else 0)
+        )
+
+    @property
+    def is_complete(self) -> bool:
+        """True once the asymmetry term has been supplied."""
+        return self.end_asymmetry is not None
+
+    @property
+    def pending(self) -> list[str]:
+        """Names of components not yet assessed."""
+        return [] if self.is_complete else ["end_asymmetry"]
+
+    @property
+    def score(self) -> int:
+        """Total score: motif points plus the asymmetry term (0 while pending)."""
+        asymmetry = 0 if self.end_asymmetry is None else self.end_asymmetry
+        return self.motif_score + asymmetry
+
+    def meets_threshold(
+        self, threshold: int = AMARZGUIOUI_DEFAULT_THRESHOLD
+    ) -> bool:
+        """True when 'score' reaches 'threshold' (default 3, inclusive).
+
+        Provisional while 'end_asymmetry' is pending, since the asymmetry term
+        then contributes 0 rather than its true value.
+        """
+        return self.score >= threshold
+
+    def __repr__(self) -> str:
+        pending = ",".join(self.pending) or "none"
+        return (
+            f"AmarzguiouiResult(score={self.score}, motif_score={self.motif_score}, "
+            f"end_asymmetry={self.end_asymmetry}, pending={pending})"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Amarzguioui evaluation
+# --------------------------------------------------------------------------- #
+
+
+def amarzguioui(
+    candidate: SiRNACandidate,
+    end_asymmetry: int | None = None,
+) -> AmarzguiouiResult:
+    """Evaluate the Amarzguioui & Prydz criteria for a candidate (sense strand).
+
+    The five motif criteria are computed here. The duplex-end asymmetry term is
+    not: pass 'end_asymmetry' once the differential->points mapping is confirmed
+    from the paper. Left as None it is reported as pending and excluded from the
+    score.
+
+    Args:
+        candidate: the siRNA candidate to score.
+        end_asymmetry: the paper's asymmetry points in [-2, 3], or None if not
+            yet assessed.
+
+    Raises:
+        ValueError: if the sense strand is shorter than AMARZGUIOUI_MIN_LENGTH,
+            or if 'end_asymmetry' is outside the tabulated [-2, 3] range.
+    """
+    sense = candidate.sense.seq
+    if len(sense) < AMARZGUIOUI_MIN_LENGTH:
+        raise ValueError(
+            f"Amarzguioui criteria need a core of at least "
+            f"{AMARZGUIOUI_MIN_LENGTH} nt; got {len(sense)} nt."
+        )
+    if end_asymmetry is not None and not (
+        AMARZGUIOUI_ASYMMETRY_MIN <= end_asymmetry <= AMARZGUIOUI_ASYMMETRY_MAX
+    ):
+        raise ValueError(
+            f"end_asymmetry {end_asymmetry} is outside the tabulated range "
+            f"[{AMARZGUIOUI_ASYMMETRY_MIN}, {AMARZGUIOUI_ASYMMETRY_MAX}]."
+        )
+
+    pos1 = _base_at(sense, AMARZGUIOUI_POS_S1)
+    pos6 = _base_at(sense, AMARZGUIOUI_POS_A6)
+    pos19 = _base_at(sense, AMARZGUIOUI_POS_W19)
+
+    s1_gc = pos1 in _GC
+    a6_a = pos6 == "A"
+    w19_au = pos19 in _AU
+    u1 = pos1 == "U"
+    g19 = pos19 == "G"
+
+    au_5p = sum(base in _AU for base in sense[:AMARZGUIOUI_TERMINAL_BP])
+    au_3p = sum(base in _AU for base in sense[-AMARZGUIOUI_TERMINAL_BP:])
+    end_au_differential = au_5p - au_3p
+
+    return AmarzguiouiResult(
+        end_au_differential=end_au_differential,
+        end_asymmetry=end_asymmetry,
+        s1_gc=s1_gc,
+        a6_a=a6_a,
+        w19_au=w19_au,
+        u1=u1,
+        g19=g19,
     )
