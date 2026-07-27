@@ -16,7 +16,11 @@ import typer
 
 from core.errors import HushError
 from core.inputs import build_design_input, load_sequences
+from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
+from core.seed import SEED_TM_THRESHOLD_C
+from core.selection import RuleMode, SelectionCriteria, evaluate_all
 from core.sequence import BioSequence, DesignInput
+from core.sirna import enumerate_candidates
 
 app = typer.Typer(
     add_completion=False,
@@ -147,6 +151,270 @@ def inspect_cmd(
     typer.echo(f"{len(seqs)} sequence(s) in {path.name}:")
     for i, seq in enumerate(seqs):
         _echo_sequence(seq, index=i)
+
+
+# --------------------------------------------------------------------------- #
+# design command
+# --------------------------------------------------------------------------- #
+
+_RULE_ALIASES = {
+    "ui-tei": "ui_tei",
+    "uitei": "ui_tei",
+    "ui_tei": "ui_tei",
+    "reynolds": "reynolds",
+    "amarzguioui": "amarzguioui",
+    "amarz": "amarzguioui",
+}
+
+
+def _parse_rules(spec: str) -> tuple[bool, bool, bool]:
+    """Turn a --rules spec into (use_ui_tei, use_reynolds, use_amarzguioui)."""
+    text = spec.strip().lower()
+    if text in ("", "all"):
+        return True, True, True
+    if text == "none":
+        return False, False, False
+    flags = {"ui_tei": False, "reynolds": False, "amarzguioui": False}
+    for token in (t.strip() for t in text.split(",")):
+        if not token:
+            continue
+        key = _RULE_ALIASES.get(token)
+        if key is None:
+            raise typer.BadParameter(
+                f"unknown rule {token!r}; choose from ui-tei, reynolds, "
+                "amarzguioui (comma-separated), or 'all'/'none'.",
+                param_hint="--rules",
+            )
+        flags[key] = True
+    return flags["ui_tei"], flags["reynolds"], flags["amarzguioui"]
+
+
+def _parse_mode(spec: str) -> RuleMode:
+    try:
+        return RuleMode(spec.strip().lower())
+    except ValueError:
+        raise typer.BadParameter(
+            f"unknown mode {spec!r}; choose 'all' or 'any'.", param_hint="--mode"
+        )
+
+
+def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
+    """Compact per-rule pass code, e.g. 'UR-' (Ui-Tei + Reynolds pass, Amarz fails)."""
+    parts = []
+    if evaluation.ui_tei is not None:
+        parts.append("U" if evaluation.ui_tei.satisfied else "-")
+    if evaluation.reynolds is not None:
+        passed = evaluation.reynolds.meets_threshold(criteria.reynolds_threshold)
+        parts.append("R" if passed else "-")
+    if evaluation.amarzguioui is not None:
+        passed = evaluation.amarzguioui.meets_threshold(criteria.amarzguioui_threshold)
+        parts.append("A" if passed else "-")
+    return "".join(parts) or "-"
+
+
+def _print_criteria(criteria: SelectionCriteria) -> None:
+    typer.echo(typer.style("Criteria", bold=True))
+    if criteria.enabled_rule_names:
+        names = ", ".join(n.replace("_", "-") for n in criteria.enabled_rule_names)
+        typer.echo(f"  rules:      {names}  (mode: {criteria.rule_mode.value.upper()})")
+    else:
+        typer.echo("  rules:      none")
+    seed = (
+        f"< {criteria.seed_tm_threshold:.1f} C (both strands)"
+        if criteria.use_seed_filter
+        else "off"
+    )
+    typer.echo(f"  seed Tm:    {seed}")
+    gc = (
+        f"{criteria.gc_min * 100:.0f}-{criteria.gc_max * 100:.0f}%"
+        if criteria.use_gc_filter
+        else "off"
+    )
+    typer.echo(f"  GC filter:  {gc}")
+    typer.echo(
+        f"  asymmetry:  {'favour guide' if criteria.use_asymmetry_filter else 'off'}"
+    )
+
+
+def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list) -> None:
+    def row(label: str, count: int) -> str:
+        return f"  {label:<16}{count}"
+
+    typer.echo(typer.style("Passing each enabled gate", bold=True))
+    typer.echo(
+        row(f"rules ({criteria.rule_mode.value}):", sum(1 for e in evaluations if e.rule_pass))
+    )
+    if criteria.use_gc_filter:
+        typer.echo(row("GC window:", sum(1 for e in evaluations if e.gc_pass)))
+    if criteria.use_seed_filter:
+        typer.echo(row("seed Tm:", sum(1 for e in evaluations if e.seed_pass)))
+    if criteria.use_asymmetry_filter:
+        typer.echo(row("asymmetry:", sum(1 for e in evaluations if e.asymmetry_pass)))
+    typer.echo(typer.style(row("selected:", len(selected)), fg=typer.colors.GREEN, bold=True))
+
+
+def _print_table(
+    selected: list, criteria: SelectionCriteria, length: int, limit: int
+) -> None:
+    seq_w = max(length + 1, 14)
+    header = (
+        f"  {'region':<11} {'guide 5->3':<{seq_w}} {'passenger 5->3':<{seq_w}} {'GC%':>4}"
+    )
+    if criteria.enabled_rule_names:
+        header += f" {'rules':<5}"
+    if criteria.use_seed_filter:
+        header += f" {'seedTm':>7}"
+    typer.echo(typer.style(header, bold=True))
+
+    shown = selected if limit == 0 else selected[:limit]
+    for e in shown:
+        c = e.candidate
+        row = (
+            f"  {c.region:<11} {c.guide.seq:<{seq_w}} {c.passenger.seq:<{seq_w}} "
+            f"{c.gc_content * 100:>4.0f}"
+        )
+        if criteria.enabled_rule_names:
+            row += f" {_rules_code(e, criteria):<5}"
+        if criteria.use_seed_filter:
+            row += f" {e.seed.max_tm:>7.1f}"
+        typer.echo(row)
+    if limit and len(selected) > limit:
+        typer.echo(
+            f"  ... {len(selected) - limit} more "
+            "(use --limit 0 to show all, or -o file.tsv)"
+        )
+
+
+def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -> None:
+    lines = [
+        "region\tstart\tend\tguide_5to3\tpassenger_5to3\tgc_percent\t"
+        "rules_passed\tseed_max_tm_c"
+    ]
+    for e in selected:
+        c = e.candidate
+        seed_tm_val = f"{e.seed.max_tm:.2f}" if e.seed is not None else ""
+        lines.append(
+            "\t".join(
+                [
+                    c.region,
+                    str(c.position + 1),
+                    str(c.end),
+                    c.guide.seq,
+                    c.passenger.seq,
+                    f"{c.gc_content * 100:.1f}",
+                    _rules_code(e, criteria),
+                    seed_tm_val,
+                ]
+            )
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="ascii")
+
+
+@app.command("design")
+def design_cmd(
+    target: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True,
+        help="Target mRNA/CDS file (FASTA or PDB).",
+    ),
+    length: int = typer.Option(
+        19, "--length", "-l", help="siRNA core length (19-24)."
+    ),
+    rules: str = typer.Option(
+        "all", "--rules",
+        help="Rule sets: comma list of ui-tei,reynolds,amarzguioui, or all/none.",
+    ),
+    mode: str = typer.Option(
+        "all", "--mode",
+        help="Combine enabled rules by 'all' (intersection) or 'any' (union).",
+    ),
+    reynolds_threshold: int = typer.Option(
+        REYNOLDS_DEFAULT_THRESHOLD, "--reynolds-threshold",
+        help="Reynolds score cut-off.",
+    ),
+    amarzguioui_threshold: int = typer.Option(
+        AMARZGUIOUI_DEFAULT_THRESHOLD, "--amarzguioui-threshold",
+        help="Amarzguioui score cut-off.",
+    ),
+    seed: bool = typer.Option(
+        True, "--seed/--no-seed",
+        help="Apply the seed-duplex off-target Tm filter (both strands).",
+    ),
+    seed_tm: float = typer.Option(
+        SEED_TM_THRESHOLD_C, "--seed-tm", help="Seed-duplex Tm cut-off in C."
+    ),
+    gc: bool = typer.Option(
+        False, "--gc/--no-gc", help="Apply a standalone GC-content window filter."
+    ),
+    gc_min: float = typer.Option(
+        30.0, "--gc-min", help="GC window lower bound (percent)."
+    ),
+    gc_max: float = typer.Option(
+        52.0, "--gc-max", help="GC window upper bound (percent)."
+    ),
+    asymmetry: bool = typer.Option(
+        False, "--asymmetry/--no-asymmetry",
+        help="Require duplex-end asymmetry to favour the guide strand.",
+    ),
+    limit: int = typer.Option(
+        20, "--limit", "-n", help="Max candidates to print (0 = all)."
+    ),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Write all selected candidates to a TSV file."
+    ),
+) -> None:
+    """Enumerate siRNA candidates for a target and filter them by chosen criteria.
+
+    The three classical rule sets toggle independently and combine by --mode;
+    the seed-Tm, GC and asymmetry filters are applied on top. Nothing is ranked:
+    selected candidates are reported in target-position order.
+    """
+    use_ut, use_rey, use_amz = _parse_rules(rules)
+    rule_mode = _parse_mode(mode)
+    try:
+        criteria = SelectionCriteria(
+            use_ui_tei=use_ut,
+            use_reynolds=use_rey,
+            use_amarzguioui=use_amz,
+            rule_mode=rule_mode,
+            reynolds_threshold=reynolds_threshold,
+            amarzguioui_threshold=amarzguioui_threshold,
+            use_seed_filter=seed,
+            seed_tm_threshold=seed_tm,
+            use_gc_filter=gc,
+            gc_min=gc_min / 100.0,
+            gc_max=gc_max / 100.0,
+            use_asymmetry_filter=asymmetry,
+        )
+        design_input = build_design_input(target)
+        mrna = design_input.require_nucleotide_target()
+        candidates = list(enumerate_candidates(mrna, length=length))
+        evaluations = list(evaluate_all(candidates, criteria))
+    except (HushError, ValueError) as exc:
+        typer.secho(f"Design error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    selected = [e for e in evaluations if e.selected]
+
+    typer.echo(typer.style(f"Target: {mrna.id or '<unnamed>'}", fg=typer.colors.CYAN, bold=True))
+    typer.echo(f"  {len(mrna)} nt  |  {len(evaluations)} candidate {length}-mer(s)")
+    typer.echo("")
+    _print_criteria(criteria)
+    typer.echo("")
+    _print_funnel(criteria, evaluations, selected)
+    typer.echo("")
+
+    if not selected:
+        typer.secho(
+            "No candidates selected. Try relaxing: --mode any, --no-seed, "
+            "or a wider --gc range.",
+            fg=typer.colors.YELLOW,
+        )
+    else:
+        _print_table(selected, criteria, length, limit)
+
+    if output is not None:
+        _write_design_tsv(output, selected, criteria)
+        typer.echo(f"\nWrote {len(selected)} selected candidate(s) to {output}")
 
 
 if __name__ == "__main__":

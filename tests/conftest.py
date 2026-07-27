@@ -30,5 +30,34 @@ def panel_fasta() -> Path:
 
 
 @pytest.fixture
+def hla_a01_fasta() -> Path:
+    """A real HLA-A*01:01 coding sequence (IPD-IMGT/HLA HLA00001)."""
+    return EXAMPLES_DIR / "hla_a01.fasta"
+
+
+@pytest.fixture(scope="session")
+def amarzguioui_table3() -> list[dict]:
+    """Table 3 of Amarzguioui & Prydz (2004): 46 siRNAs scored by the authors."""
+    path = TEST_DATA_DIR / "amarzguioui_table3.tsv"
+    rows = []
+    with path.open(encoding="ascii") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("name\t"):
+                continue
+            name, sense, functional, dt3, score = line.split("\t")
+            rows.append(
+                {
+                    "name": name,
+                    "sense": sense,
+                    "functional": functional,
+                    "dt3": int(dt3),
+                    "score": int(score),
+                }
+            )
+    return rows
+
+
+@pytest.fixture
 def mini_pdb() -> Path:
     return TEST_DATA_DIR / "mini_protein.pdb"
