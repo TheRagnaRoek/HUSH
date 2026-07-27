@@ -4,6 +4,8 @@ import pytest
 
 from core.rules import (
     AMARZGUIOUI_DEFAULT_THRESHOLD,
+    AMARZGUIOUI_DIFFERENTIAL_MAX,
+    AMARZGUIOUI_DIFFERENTIAL_MIN,
     REYNOLDS_DEFAULT_THRESHOLD,
     UI_TEI_MAX_GC_RUN,
     _longest_run,
@@ -117,10 +119,11 @@ class TestIntegrationWithEnumerator:
 # Reynolds
 # --------------------------------------------------------------------------- #
 
-# A 19-mer satisfying all seven assessable Reynolds criteria (III is deferred):
-#   idx2='A' (V), idx9='U' (VI), idx12='C' (VIII not G), idx18='A' (IV, VII),
-#   3'-terminal 5 = UAUGA has 4 A/U (II), GC content 6/19 = 32% (I).
-REY_ALL_PASS = "CAAUGACAUUAGCAUAUGA"
+# A 19-mer that maximises the assessable Reynolds score (internal repeat is
+# deferred). By 1-based position: pos3='A', pos10='U', pos13='A' (no penalty),
+# pos19='A' (+1 and A/U, no G/C penalty), positions 15-19 all A/U (+5), and
+# GC = 8/19 = 42% (in range). Positive points 5+1+1+1+1 = 9, no penalty.
+REY_ALL_PASS = "CAAGCGCGCUUCAAAUAUA"
 
 
 def rey_candidate(sense: str):
@@ -134,77 +137,133 @@ def mutate(seq: str, index: int, base: str) -> str:
 
 
 class TestReynoldsBaseline:
-    def test_all_assessable_pass_and_iii_pending(self):
-        r = reynolds(rey_candidate(REY_ALL_PASS))
-        assert r.score == 7
-        assert r.max_possible == 7
-        assert r.low_internal_structure is None
-        assert r.pending == ["low_internal_structure"]
+    # The arithmetic tests fix the internal-repeat term (False) so they isolate
+    # the motif/penalty scoring from the hairpin model, which is exercised
+    # separately below and in test_hairpin.py.
+    def test_all_positive_no_penalty(self):
+        r = reynolds(rey_candidate(REY_ALL_PASS), no_internal_repeat=False)
+        assert r.au_count_3p == 5
+        assert (r.gc_in_range, r.a_at_pos19, r.a_at_pos3, r.u_at_pos10) == (
+            True,
+            True,
+            True,
+            True,
+        )
+        assert (r.g_at_pos13, r.gc_at_pos19) == (False, False)
+        assert r.penalty == 0
+        assert r.score == 9  # internal-repeat term fixed False
+        assert r.max_possible == 10
         assert r.meets_threshold(REYNOLDS_DEFAULT_THRESHOLD) is True
 
 
-class TestReynoldsCriterionIIIDeferral:
-    def test_supplying_true_adds_the_point(self):
-        r = reynolds(rey_candidate(REY_ALL_PASS), low_internal_structure=True)
-        assert r.max_possible == 8
-        assert r.score == 8
-        assert r.pending == []
+class TestReynoldsInternalRepeat:
+    def test_computed_by_default(self):
+        # The baseline can only fold a marginal stem (Tm well below 20 C), so
+        # the internal-repeat point is earned and the score reaches its ceiling.
+        r = reynolds(rey_candidate(REY_ALL_PASS))
+        assert r.no_internal_repeat is True
+        assert r.score == 10
+        assert r.max_possible == 10
 
-    def test_supplying_false_counts_as_assessed_but_no_point(self):
-        r = reynolds(rey_candidate(REY_ALL_PASS), low_internal_structure=False)
-        assert r.max_possible == 8
-        assert r.score == 7
-        assert r.pending == []
+    def test_override_true_adds_a_point_over_false(self):
+        no = reynolds(rey_candidate(REY_ALL_PASS), no_internal_repeat=False)
+        yes = reynolds(rey_candidate(REY_ALL_PASS), no_internal_repeat=True)
+        assert yes.score == no.score + 1
+
+    def test_strong_internal_hairpin_loses_the_point(self):
+        # A 7-bp G/C stem closing a 3-nt loop melts far above 20 C, so this
+        # candidate has internal structure and forfeits the point by default.
+        r = reynolds(rey_candidate("GGGGGGGAAACCCCCCCAU"))
+        assert r.no_internal_repeat is False
+
+
+class TestReynoldsAdditive3pWindow:
+    """Positions 15-19 contribute +1 PER A/U base, not a single threshold point."""
+
+    def test_no_au_in_tail_is_zero(self):
+        assert reynolds(rey_candidate("C" * 14 + "GCGCG")).au_count_3p == 0
+
+    def test_all_five_au(self):
+        assert reynolds(rey_candidate("C" * 14 + "AUAUA")).au_count_3p == 5
+
+    def test_partial_count(self):
+        # last five 'GAUCG' -> A and U only.
+        assert reynolds(rey_candidate("C" * 14 + "GAUCG")).au_count_3p == 2
+
+
+class TestReynoldsPosition19Gradient:
+    """Position 19 is A(+2) / U(+1) / G,C(-1), the whole point of the model.
+
+    'A' scores twice (the A-at-19 point and an A/U-window point); 'U' scores the
+    window point only; 'G'/'C' loses the window point and takes the penalty.
+    """
+
+    def test_a_at_19_scores_two_over_g(self):
+        a19 = reynolds(rey_candidate(REY_ALL_PASS), no_internal_repeat=False)
+        g19 = reynolds(
+            rey_candidate(mutate(REY_ALL_PASS, 18, "G")), no_internal_repeat=False
+        )
+        assert a19.a_at_pos19 is True and a19.gc_at_pos19 is False
+        assert g19.gc_at_pos19 is True and g19.a_at_pos19 is False
+        assert a19.au_count_3p == 5 and g19.au_count_3p == 4
+        # A -> 9, G -> 6: the promised three-point spread at this position.
+        assert a19.score == 9
+        assert g19.score == 6
+
+    def test_u_at_19_is_one_below_a(self):
+        u19 = reynolds(
+            rey_candidate(mutate(REY_ALL_PASS, 18, "U")), no_internal_repeat=False
+        )
+        assert (u19.a_at_pos19, u19.gc_at_pos19) == (False, False)
+        assert u19.au_count_3p == 5  # U still counts toward the window
+        assert u19.score == 8
+
+
+class TestReynoldsPenalties:
+    def test_g_at_pos13_deducts_a_point(self):
+        r = reynolds(
+            rey_candidate(mutate(REY_ALL_PASS, 12, "G")), no_internal_repeat=False
+        )
+        assert r.g_at_pos13 is True
+        assert r.gc_in_range is True  # baseline has GC headroom for the swap
+        assert r.penalty == 1
+        assert r.score == 8
+
+    def test_gc_at_pos19_deducts_a_point(self):
+        r = reynolds(rey_candidate(mutate(REY_ALL_PASS, 18, "C")))
+        assert r.gc_at_pos19 is True
+        assert r.a_at_pos19 is False
 
 
 class TestReynoldsCriterionIsolation:
-    def test_i_gc_below_range_fails(self):
+    def test_gc_below_range_fails(self):
         r = reynolds(rey_candidate("UAAUAAUAAUAAUAAUAAU"))  # 0% GC
         assert r.gc_in_range is False
 
-    def test_i_gc_above_range_fails(self):
+    def test_gc_above_range_fails(self):
         r = reynolds(rey_candidate("GCGCGCGCGCGCGCGCGAU"))  # ~89% GC
         assert r.gc_in_range is False
 
-    def test_ii_au_poor_tail_fails(self):
-        r = reynolds(rey_candidate(REY_ALL_PASS[:14] + "GCGCG"))  # tail 0 A/U
-        assert r.au_rich_3p is False
-
-    def test_iv_non_a_3p_end_fails_but_vii_independent(self):
-        r = reynolds(rey_candidate(mutate(REY_ALL_PASS, 18, "U")))
-        assert r.a_at_3p_end is False
-        assert r.not_gc_at_3p_end is True  # U is not G/C
-
-    def test_v_non_a_at_pos3_fails(self):
+    def test_non_a_at_pos3_fails(self):
         r = reynolds(rey_candidate(mutate(REY_ALL_PASS, 2, "C")))
         assert r.a_at_pos3 is False
 
-    def test_vi_non_u_at_pos10_fails(self):
+    def test_non_u_at_pos10_fails(self):
         r = reynolds(rey_candidate(mutate(REY_ALL_PASS, 9, "A")))
         assert r.u_at_pos10 is False
-
-    def test_vii_gc_3p_end_fails(self):
-        r = reynolds(rey_candidate(mutate(REY_ALL_PASS, 18, "C")))
-        assert r.not_gc_at_3p_end is False
-        assert r.a_at_3p_end is False
-
-    def test_viii_g_at_pos13_fails(self):
-        r = reynolds(rey_candidate(mutate(REY_ALL_PASS, 12, "G")))
-        assert r.not_g_at_pos13 is False
 
 
 class TestReynoldsLongerCoreAnchoring:
     def test_3p_rules_anchor_to_actual_terminus_not_position_19(self):
         # 24-mer: index 18 is 'A' but the true 3' end (index 23) is 'G'.
-        ends_in_g = "A" * 23 + "G"
-        r = reynolds(rey_candidate(ends_in_g))
-        assert r.a_at_3p_end is False
-        assert r.not_gc_at_3p_end is False
+        r = reynolds(rey_candidate("A" * 23 + "G"))
+        assert r.a_at_pos19 is False
+        assert r.gc_at_pos19 is True
 
-    def test_24mer_ending_in_a_passes_3p_rules(self):
+    def test_24mer_ending_in_a_scores_the_terminus(self):
         r = reynolds(rey_candidate("A" * 24))
-        assert r.a_at_3p_end is True
-        assert r.not_gc_at_3p_end is True
+        assert r.a_at_pos19 is True
+        assert r.gc_at_pos19 is False
 
 
 class TestReynoldsLengthGuard:
@@ -220,8 +279,8 @@ class TestReynoldsIntegration:
         results = [reynolds(c) for c in enumerate_candidates(target, length=19)]
         assert results  # non-empty
         for r in results:
-            assert 0 <= r.score <= r.max_possible == 7
-            assert r.pending == ["low_internal_structure"]
+            assert -2 <= r.score <= r.max_possible == 10
+            assert isinstance(r.no_internal_repeat, bool)
 
 
 # --------------------------------------------------------------------------- #
@@ -240,14 +299,11 @@ def amarz_candidate(sense: str):
 
 
 class TestAmarzguiouiMotifs:
-    def test_all_positive_motifs_score_three_asymmetry_pending(self):
+    def test_all_positive_motifs_score_three(self):
         r = amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE))
         assert (r.s1_gc, r.a6_a, r.w19_au) == (True, True, True)
         assert (r.u1, r.g19) == (False, False)
         assert r.motif_score == 3
-        assert r.end_asymmetry is None
-        assert r.pending == ["end_asymmetry"]
-        assert r.is_complete is False
         # Motif points alone already reach the threshold of 3.
         assert r.meets_threshold(AMARZGUIOUI_DEFAULT_THRESHOLD) is True
 
@@ -267,36 +323,78 @@ class TestAmarzguiouiMotifs:
 
 
 class TestAmarzguiouiEndDifferential:
-    def test_differential_5p_minus_3p(self):
-        # 5' triplet AAA (3 A/U), 3' triplet GGG (0) -> differential +3.
-        r = amarzguioui(amarz_candidate("AAA" + "C" * 13 + "GGG"))
+    """DT3 is measured 3' end MINUS 5' end - the sign is easy to invert."""
+
+    def test_au_rich_3p_end_is_positive(self):
+        # 5' triplet GGG (0 A/U), 3' triplet AAA (3) -> differential +3. This is
+        # the functional orientation: the sense 3' end is the guide's 5' end.
+        r = amarzguioui(amarz_candidate("GGG" + "C" * 13 + "AAA"))
         assert r.end_au_differential == 3
 
-    def test_differential_can_be_negative(self):
-        # 5' triplet GGG (0), 3' triplet AAA (3) -> differential -3.
-        r = amarzguioui(amarz_candidate("GGG" + "C" * 13 + "AAA"))
+    def test_au_rich_5p_end_is_negative(self):
+        # 5' triplet AAA (3 A/U), 3' triplet GGG (0) -> differential -3.
+        r = amarzguioui(amarz_candidate("AAA" + "C" * 13 + "GGG"))
         assert r.end_au_differential == -3
 
+    def test_symmetric_ends_give_zero(self):
+        r = amarzguioui(amarz_candidate("AAC" + "C" * 13 + "CAA"))
+        assert r.end_au_differential == 0
 
-class TestAmarzguiouiAsymmetryTerm:
-    def test_supplying_asymmetry_completes_and_adds_to_score(self):
-        r = amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE), end_asymmetry=3)
-        assert r.is_complete is True
-        assert r.pending == []
-        assert r.score == 6  # motif 3 + asymmetry 3
+    def test_differential_enters_score_directly(self):
+        r = amarzguioui(amarz_candidate("GGG" + "C" * 13 + "AAA"))
+        assert r.score == r.motif_score + r.end_au_differential
 
-    def test_negative_asymmetry_can_drop_below_threshold(self):
-        r = amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE), end_asymmetry=-2)
-        assert r.score == 1
-        assert r.meets_threshold() is False
+    def test_stays_within_published_bounds(self):
+        target = BioSequence(
+            "ATGGCTACGTTAGCCATTGCACGTAACGGCATATGCC", id="t", moltype=MolType.DNA
+        )
+        for r in (amarzguioui(c) for c in enumerate_candidates(target, length=19)):
+            assert (
+                AMARZGUIOUI_DIFFERENTIAL_MIN
+                <= r.end_au_differential
+                <= AMARZGUIOUI_DIFFERENTIAL_MAX
+            )
 
-    def test_asymmetry_above_range_raises(self):
-        with pytest.raises(ValueError):
-            amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE), end_asymmetry=4)
 
-    def test_asymmetry_below_range_raises(self):
-        with pytest.raises(ValueError):
-            amarzguioui(amarz_candidate(AMARZ_ALL_POSITIVE), end_asymmetry=-3)
+class TestAmarzguiouiPublishedTable3:
+    """Reproduce the paper's own scored test set (Table 3), all 46 siRNAs.
+
+    Amarzguioui & Prydz (2004) publish DT3 and the total algorithm score for
+    every siRNA in their test set. Matching all 46 pins down the differential's
+    sign convention, its window, the motif definitions and how the two combine -
+    the sign in particular cannot be inferred from the prose alone.
+    """
+
+    def test_every_row_reproduces(self, amarzguioui_table3):
+        assert len(amarzguioui_table3) == 46
+        for row in amarzguioui_table3:
+            r = amarzguioui(amarz_candidate(row["sense"]))
+            assert r.end_au_differential == row["dt3"], row["name"]
+            assert r.score == row["score"], row["name"]
+
+    def test_class_means_match_the_paper(self, amarzguioui_table3):
+        # The paper reports mean scores of 2.6 (functional) and 0 (not).
+        def mean(functional: bool) -> float:
+            scores = [
+                amarzguioui(amarz_candidate(r["sense"])).score
+                for r in amarzguioui_table3
+                if (r["functional"] == "yes") is functional
+            ]
+            return sum(scores) / len(scores)
+
+        assert mean(True) == pytest.approx(2.6, abs=0.05)
+        assert mean(False) == pytest.approx(0.0, abs=0.05)
+
+    def test_threshold_enriches_for_functional_sirnas(self, amarzguioui_table3):
+        selected = [
+            r
+            for r in amarzguioui_table3
+            if amarzguioui(amarz_candidate(r["sense"])).meets_threshold()
+        ]
+        functional = [r for r in selected if r["functional"] == "yes"]
+        # The paper: 11 of 14 selected from the test set are functional.
+        assert len(selected) == 14
+        assert len(functional) == 11
 
 
 class TestAmarzguiouiLengthGuard:
@@ -306,11 +404,11 @@ class TestAmarzguiouiLengthGuard:
 
 
 class TestAmarzguiouiIntegration:
-    def test_over_real_candidates_asymmetry_pending(self):
+    def test_over_real_candidates(self):
         target = BioSequence("ATGGCTACGTTAGCCATTGCACGTAACGGCATATGCC", id="t",
                              moltype=MolType.DNA)
         results = [amarzguioui(c) for c in enumerate_candidates(target, length=19)]
         assert results
         for r in results:
             assert -2 <= r.motif_score <= 3
-            assert r.pending == ["end_asymmetry"]
+            assert -5 <= r.score <= 6

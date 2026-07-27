@@ -1,35 +1,29 @@
-"""Classical siRNA design rules (pipeline stage 2, rule pre-screen).
+"""Classical siRNA design rules (stage 2 rule pre-screen).
 
-Three empirical rule sets from 2004 form the backbone of rational siRNA design.
-They all encode thermodynamic asymmetry - the duplex should unwind more easily
-at the guide (antisense) 5' end so RISC loads the guide rather than the
-passenger - but express it differently:
+Three empirical 2004 rule sets, each encoding the same thermodynamic-asymmetry
+insight (the duplex should unwind more easily at the guide 5' end) differently:
 
-* Ui-Tei    - a strict 4-rule pass/fail filter.
-* Reynolds  - an 8-point additive checklist.
-* Amarzguioui - a criterion-based additive score; the five motif criteria are
-  implemented, the duplex-end asymmetry term is deferred pending confirmation of
-  its differential->points mapping (see the Amarzguioui section below).
+* Ui-Tei      - a strict 4-rule pass/fail filter.
+* Reynolds    - an additive score out of 10 (binary criteria, an additive
+  3'-terminal A/U count, and two penalties).
+* Amarzguioui - an additive criterion score: five motifs plus the duplex-end A/U
+  differential.
 
-Strand conventions match core.sirna: sense/passenger and antisense/guide are
-both stored 5'->3'. Rules are evaluated on whichever strand they are naturally
-defined for and documented per rule.
+Strand conventions match core.sirna: sense/passenger and antisense/guide are both
+stored 5'->3'; each rule is evaluated on whichever strand it is naturally defined
+for. The exact scoring of each set - and where Reynolds and Amarzguioui differ
+from the common simplifications, plus the Table-3 validation - is in
+docs/design_notes.md (rules section).
 
-References:
-    Ui-Tei, K. et al. (2004). Guidelines for the selection of highly effective
-    siRNA sequences for mammalian and chick RNA interference.
-    Nucleic Acids Research 32(3), 936-948.
-    Reynolds, A. et al. (2004). Rational siRNA design for RNA interference.
-    Nature Biotechnology 22, 326-330.
-    Amarzguioui, M. & Prydz, H. (2004). An algorithm for selection of functional
-    siRNA sequences. Biochem Biophys Res Commun 316(4), 1050-1058.
-    doi:10.1016/j.bbrc.2004.02.157
+Primary sources: Ui-Tei et al. 2004; Reynolds et al. 2004; Amarzguioui & Prydz
+2004.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from core.hairpin import has_no_internal_repeat
 from core.sirna import SiRNACandidate
 
 # --------------------------------------------------------------------------- #
@@ -159,28 +153,31 @@ def ui_tei(candidate: SiRNACandidate) -> UiTeiResult:
 # Reynolds constants
 # --------------------------------------------------------------------------- #
 
-# All Reynolds criteria are evaluated on the sense strand, 5'->3'. The original
-# criteria are defined for a 19-mer; for a longer core (20-24 nt) we anchor the
-# 3'-end rules (II, IV, VII) to the actual 3' terminus and keep the internal
-# rules (V, VI, VIII) at their absolute 1-based positions from the 5' end.
+# Reynolds is scored OUT OF 10 (not eight equal binary criteria), on the sense
+# strand 5'->3': five +1 binary criteria, +1 per A/U base at positions 15-19
+# (additive), and -1 for 'G' at 13 and for 'G'/'C' at 19; score runs -2..+10,
+# and >= 6 predicts functional. Longer cores anchor the 3' parts to the actual
+# terminus and keep the internal ones at absolute positions. Full scoring and the
+# position-19 gradient: docs/design_notes.md (rules section).
 REYNOLDS_MIN_LENGTH = 19
 
-# Criterion I: GC content window (fraction, inclusive bounds).
+# GC content window (fraction, inclusive bounds).
 REYNOLDS_GC_MIN = 0.30
 REYNOLDS_GC_MAX = 0.52
 
-# Criterion II: at least this many A/U in the 3'-terminal window.
+# 3'-terminal A/U: +1 per A/U base across the 3'-terminal 5 nt (positions 15-19
+# on a 19-mer). Additive, not a threshold.
 REYNOLDS_AU_3P_WINDOW = 5
-REYNOLDS_MIN_AU_3P = 3
 
-# Internal positional criteria (1-based positions from the 5' end).
-REYNOLDS_POS_A_INTERNAL = 3   # V:    'A' at position 3
-REYNOLDS_POS_U = 10           # VI:   'U' at position 10
-REYNOLDS_POS_NOT_G = 13       # VIII: not 'G' at position 13
+# Positional parts, 1-based. The internal ones are counted from the 5' end.
+REYNOLDS_POS_A_INTERNAL = 3   # 'A' at position 3   (+1)
+REYNOLDS_POS_U = 10           # 'U' at position 10  (+1)
+REYNOLDS_POS_G_PENALTY = 13   # 'G' at position 13  (-1)
+# Position 19 is handled as the 3' terminus: 'A' -> +1, 'G'/'C' -> -1.
 
-# Score at or above which Reynolds predicts a functional siRNA. The classic
-# cutoff is 6 (out of 8). While criterion III is deferred the effective maximum
-# is 7 (see ReynoldsResult.max_possible); the cutoff itself is unchanged.
+# Score at or above which Reynolds predicts a functional siRNA: 6 of a possible
+# 10. The cutoff is unchanged whether the internal-repeat criterion is computed
+# by HUSH (the default) or supplied from an external folder.
 REYNOLDS_DEFAULT_THRESHOLD = 6
 
 
@@ -196,74 +193,73 @@ def _base_at(seq: str, pos_1based: int) -> str:
 
 @dataclass(frozen=True)
 class ReynoldsResult:
-    """Outcome of the eight Reynolds criteria for one candidate.
+    """Outcome of the Reynolds (2004) scoring for one candidate.
 
-    Unlike Ui-Tei this is a graded checklist, not a gate: each satisfied
-    criterion contributes one point and a total of at least
-    REYNOLDS_DEFAULT_THRESHOLD predicts a functional siRNA.
+    Unlike Ui-Tei this is a graded score, not a gate, and it runs from -2 to
+    +10: five +1 binary criteria, an additive 3'-terminal A/U count worth up to
+    +5, and two -1 penalties. A total of at least REYNOLDS_DEFAULT_THRESHOLD
+    predicts a functional siRNA.
 
-    Criterion III (low internal secondary structure) needs a folding/Tm
-    calculation that lives in the later thermodynamics unit. Until it is
-    supplied it is left as None ("not assessed") rather than assumed pass or
-    fail: it is excluded from 'score' and 'max_possible' and named in 'pending',
-    so the checklist never silently under- or over-counts.
+    The 'absence of internal repeat' criterion is a hairpin-Tm calculation
+    (core.hairpin); reynolds() computes it by default but it can be supplied from
+    an external folder instead.
 
-    Fields (Roman numerals are the original Reynolds criteria):
-        gc_in_range:      I    GC content within [30%, 52%].
-        au_rich_3p:       II   >= 3 A/U in the sense 3'-terminal 5 nt.
-        low_internal_structure: III  low internal secondary structure (deferred).
-        a_at_3p_end:      IV   'A' at the sense 3' terminus.
-        a_at_pos3:        V    'A' at position 3.
-        u_at_pos10:       VI   'U' at position 10.
-        not_gc_at_3p_end: VII  sense 3' terminus is not G/C.
-        not_g_at_pos13:   VIII position 13 is not 'G'.
+    Fields:
+        gc_in_range:       GC content within [30%, 52%]                    (+1).
+        no_internal_repeat: no stable internal hairpin (Tm <= 20 C)        (+1).
+        a_at_pos19:        'A' at the sense 3' terminus (position 19)      (+1).
+        a_at_pos3:         'A' at position 3                               (+1).
+        u_at_pos10:        'U' at position 10                              (+1).
+        au_count_3p:       number of A/U bases in the 3'-terminal 5 nt  (0..+5).
+        g_at_pos13:        'G' at position 13 (penalty, -1 when True).
+        gc_at_pos19:       'G'/'C' at the 3' terminus (penalty, -1 when True).
     """
 
     gc_in_range: bool
-    au_rich_3p: bool
-    low_internal_structure: bool | None
-    a_at_3p_end: bool
+    no_internal_repeat: bool
+    a_at_pos19: bool
     a_at_pos3: bool
     u_at_pos10: bool
-    not_gc_at_3p_end: bool
-    not_g_at_pos13: bool
-
-    def _criteria(self) -> list[tuple[str, bool | None]]:
-        return [
-            ("gc_in_range", self.gc_in_range),
-            ("au_rich_3p", self.au_rich_3p),
-            ("low_internal_structure", self.low_internal_structure),
-            ("a_at_3p_end", self.a_at_3p_end),
-            ("a_at_pos3", self.a_at_pos3),
-            ("u_at_pos10", self.u_at_pos10),
-            ("not_gc_at_3p_end", self.not_gc_at_3p_end),
-            ("not_g_at_pos13", self.not_g_at_pos13),
-        ]
+    au_count_3p: int
+    g_at_pos13: bool
+    gc_at_pos19: bool
 
     @property
-    def pending(self) -> list[str]:
-        """Names of criteria not yet assessed (value is None)."""
-        return [name for name, value in self._criteria() if value is None]
+    def positive_score(self) -> int:
+        """Points earned from the positive criteria (excludes penalties)."""
+        return (
+            self.au_count_3p
+            + (1 if self.gc_in_range else 0)
+            + (1 if self.a_at_pos19 else 0)
+            + (1 if self.a_at_pos3 else 0)
+            + (1 if self.u_at_pos10 else 0)
+            + (1 if self.no_internal_repeat else 0)
+        )
+
+    @property
+    def penalty(self) -> int:
+        """Points deducted by the two negative criteria (0, 1 or 2)."""
+        return (1 if self.g_at_pos13 else 0) + (1 if self.gc_at_pos19 else 0)
 
     @property
     def score(self) -> int:
-        """Points earned among the assessed criteria."""
-        return sum(1 for _, value in self._criteria() if value is True)
+        """Net Reynolds score: positive points minus penalties."""
+        return self.positive_score - self.penalty
 
     @property
     def max_possible(self) -> int:
-        """Number of criteria actually assessed (excludes pending ones)."""
-        return sum(1 for _, value in self._criteria() if value is not None)
+        """Best attainable score: the additive 3' window (5) plus five binary
+        positives; penalties never raise the ceiling."""
+        return REYNOLDS_AU_3P_WINDOW + 5
 
     def meets_threshold(self, threshold: int = REYNOLDS_DEFAULT_THRESHOLD) -> bool:
         """True when 'score' reaches 'threshold' (default 6)."""
         return self.score >= threshold
 
     def __repr__(self) -> str:
-        pending = ",".join(self.pending) or "none"
         return (
             f"ReynoldsResult(score={self.score}/{self.max_possible}, "
-            f"meets_threshold={self.meets_threshold()}, pending={pending})"
+            f"meets_threshold={self.meets_threshold()})"
         )
 
 
@@ -274,13 +270,14 @@ class ReynoldsResult:
 
 def reynolds(
     candidate: SiRNACandidate,
-    low_internal_structure: bool | None = None,
+    no_internal_repeat: bool | None = None,
 ) -> ReynoldsResult:
-    """Evaluate the Reynolds criteria for a candidate (sense strand, 5'->3').
+    """Evaluate the Reynolds score for a candidate (sense strand, 5'->3').
 
-    Criterion III (low internal secondary structure) is not computed here; pass
-    'low_internal_structure' once the thermodynamics unit can assess it. Left as
-    None it is reported as pending and excluded from the score.
+    The 'absence of internal repeat' criterion is computed from the sense strand
+    via core.hairpin (most stable internal hairpin melting at Tm <= 20 C). Pass
+    'no_internal_repeat' explicitly to override that with an external folder's
+    verdict.
 
     Raises:
         ValueError: if the sense strand is shorter than REYNOLDS_MIN_LENGTH; the
@@ -293,29 +290,32 @@ def reynolds(
             f"got {len(sense)} nt."
         )
 
+    if no_internal_repeat is None:
+        no_internal_repeat = has_no_internal_repeat(sense)
+
     gc = candidate.gc_content
     gc_in_range = REYNOLDS_GC_MIN <= gc <= REYNOLDS_GC_MAX
 
     tail = sense[-REYNOLDS_AU_3P_WINDOW:]
-    au_rich_3p = sum(base in _AU for base in tail) >= REYNOLDS_MIN_AU_3P
+    au_count_3p = sum(base in _AU for base in tail)
 
     three_prime = sense[-1]
-    a_at_3p_end = three_prime == "A"
-    not_gc_at_3p_end = three_prime not in _GC
+    a_at_pos19 = three_prime == "A"
+    gc_at_pos19 = three_prime in _GC
 
     a_at_pos3 = _base_at(sense, REYNOLDS_POS_A_INTERNAL) == "A"
     u_at_pos10 = _base_at(sense, REYNOLDS_POS_U) == "U"
-    not_g_at_pos13 = _base_at(sense, REYNOLDS_POS_NOT_G) != "G"
+    g_at_pos13 = _base_at(sense, REYNOLDS_POS_G_PENALTY) == "G"
 
     return ReynoldsResult(
         gc_in_range=gc_in_range,
-        au_rich_3p=au_rich_3p,
-        low_internal_structure=low_internal_structure,
-        a_at_3p_end=a_at_3p_end,
+        no_internal_repeat=no_internal_repeat,
+        a_at_pos19=a_at_pos19,
         a_at_pos3=a_at_pos3,
         u_at_pos10=u_at_pos10,
-        not_gc_at_3p_end=not_gc_at_3p_end,
-        not_g_at_pos13=not_g_at_pos13,
+        au_count_3p=au_count_3p,
+        g_at_pos13=g_at_pos13,
+        gc_at_pos19=gc_at_pos19,
     )
 
 
@@ -323,31 +323,14 @@ def reynolds(
 # Amarzguioui constants
 # --------------------------------------------------------------------------- #
 #
-# Amarzguioui & Prydz (2004) use a simple additive, criterion-based score (like
-# Reynolds), NOT a weighted regression. Each position-specific motif contributes
-# a fixed +1 (positive) or -1 (negative); the duplex-end A/U asymmetry adds a
-# separate integer term. A total at or above the threshold marks a functional
-# siRNA. Positions are 1-based on the SENSE strand, 5'->3' (confirmed).
-#
-#   Positive motifs (+1 when present):
-#     S1  = G/C at position 1
-#     A6  = A   at position 6
-#     W19 = A/U at position 19
-#   Negative motifs (-1 when present):
-#     U1  = U   at position 1
-#     G19 = G   at position 19
-#
-# The duplex-end asymmetry term is tabulated in the paper as an integer in the
-# range [-2, 3], but the exact mapping from the terminal-triplet A/U differential
-# to that integer is not clearly described and is NOT yet confirmed. It is
-# therefore handled like Reynolds criterion III: passed in explicitly and, until
-# confirmed, left as None (excluded from the score, reported in .pending). No
-# differential->points mapping is guessed here.
-#
-# Open question to resolve when the asymmetry mapping is confirmed: how the
-# position-19 motifs and the 3' terminal triplet anchor for cores longer than
-# the 19 nt the model was fit on. This implementation uses absolute 1-based
-# positions for the motifs and the actual 3' terminus for the triplet.
+# Additive criterion score (sense strand, 1-based): positive motifs S1 (G/C at 1),
+# A6 (A at 6), W19 (A/U at 19) each +1; negative motifs U1 (U at 1), G19 (G at 19)
+# each -1; plus the raw duplex-end A/U differential ("DT3"), so
+# score = motif points + differential. DT3 is measured 3' END MINUS 5' END over
+# the three terminal base pairs - the sign is easy to invert; functional siRNAs
+# score POSITIVE. All 46 siRNAs of the paper's Table 3 reproduce exactly (DT3,
+# motifs, total). Derivation, sign rationale and validation: docs/design_notes.md
+# (rules section).
 
 AMARZGUIOUI_MIN_LENGTH = 19
 AMARZGUIOUI_TERMINAL_BP = 3
@@ -357,13 +340,14 @@ AMARZGUIOUI_POS_S1 = 1
 AMARZGUIOUI_POS_A6 = 6
 AMARZGUIOUI_POS_W19 = 19
 
-# Verifiable bounds of the asymmetry term as tabulated (inclusive). The exact
-# differential->points mapping within these bounds is still to be confirmed.
-AMARZGUIOUI_ASYMMETRY_MIN = -2
-AMARZGUIOUI_ASYMMETRY_MAX = 3
+# Bounds of the differential: each end contributes 0-3 A/U, so the difference
+# spans -3 to +3 inclusive.
+AMARZGUIOUI_DIFFERENTIAL_MIN = -AMARZGUIOUI_TERMINAL_BP
+AMARZGUIOUI_DIFFERENTIAL_MAX = AMARZGUIOUI_TERMINAL_BP
 
-# Score at or above which the paper calls an siRNA functional (inclusive). The
-# authors note this cut-off may be over-conservative.
+# Score at or above which the paper calls an siRNA functional (inclusive). It
+# reads as a minimally positive differential (+1) plus two of the three positive
+# motifs. The authors call this cut-off deliberately conservative.
 AMARZGUIOUI_DEFAULT_THRESHOLD = 3
 
 
@@ -376,19 +360,14 @@ AMARZGUIOUI_DEFAULT_THRESHOLD = 3
 class AmarzguiouiResult:
     """Outcome of the Amarzguioui & Prydz (2004) criterion-based score.
 
-    The five motif criteria are fully evaluated. The duplex-end asymmetry term
-    is supplied via 'end_asymmetry'; until its differential->points mapping is
-    confirmed it is left as None, excluded from 'score', and named in 'pending'
-    (mirroring how Reynolds defers criterion III), so the score is never inflated
-    or deflated by a guessed asymmetry value.
+    Complete: the five motif criteria and the duplex-end differential are all
+    evaluated here, and 'score' is their sum.
 
     Fields:
-        end_au_differential: raw feature - A/U count in the sense 5'-terminal 3
-            nt minus that in the 3'-terminal 3 nt. Well-defined arithmetic; the
-            sign convention the paper's table uses (and how it maps to points) is
-            part of the unconfirmed mapping, so this is informational only.
-        end_asymmetry: the paper's integer asymmetry points in [-2, 3], or None
-            when not yet assessed.
+        end_au_differential: the paper's DT3 - A/U count among the three
+            terminal base pairs at the sense 3' end MINUS that at the 5' end.
+            Spans -3 to +3; positive favours functionality, and the value enters
+            'score' directly rather than through a lookup.
         s1_gc:  G/C at sense position 1   (positive motif S1, +1).
         a6_a:   A at sense position 6     (positive motif A6, +1).
         w19_au: A/U at sense position 19  (positive motif W19, +1).
@@ -397,7 +376,6 @@ class AmarzguiouiResult:
     """
 
     end_au_differential: int
-    end_asymmetry: int | None
     s1_gc: bool
     a6_a: bool
     w19_au: bool
@@ -416,36 +394,21 @@ class AmarzguiouiResult:
         )
 
     @property
-    def is_complete(self) -> bool:
-        """True once the asymmetry term has been supplied."""
-        return self.end_asymmetry is not None
-
-    @property
-    def pending(self) -> list[str]:
-        """Names of components not yet assessed."""
-        return [] if self.is_complete else ["end_asymmetry"]
-
-    @property
     def score(self) -> int:
-        """Total score: motif points plus the asymmetry term (0 while pending)."""
-        asymmetry = 0 if self.end_asymmetry is None else self.end_asymmetry
-        return self.motif_score + asymmetry
+        """Total score: motif points plus the duplex-end differential."""
+        return self.motif_score + self.end_au_differential
 
     def meets_threshold(
         self, threshold: int = AMARZGUIOUI_DEFAULT_THRESHOLD
     ) -> bool:
-        """True when 'score' reaches 'threshold' (default 3, inclusive).
-
-        Provisional while 'end_asymmetry' is pending, since the asymmetry term
-        then contributes 0 rather than its true value.
-        """
+        """True when 'score' reaches 'threshold' (default 3, inclusive)."""
         return self.score >= threshold
 
     def __repr__(self) -> str:
-        pending = ",".join(self.pending) or "none"
         return (
-            f"AmarzguiouiResult(score={self.score}, motif_score={self.motif_score}, "
-            f"end_asymmetry={self.end_asymmetry}, pending={pending})"
+            f"AmarzguiouiResult(score={self.score}, "
+            f"motif_score={self.motif_score}, "
+            f"end_au_differential={self.end_au_differential:+d})"
         )
 
 
@@ -454,38 +417,23 @@ class AmarzguiouiResult:
 # --------------------------------------------------------------------------- #
 
 
-def amarzguioui(
-    candidate: SiRNACandidate,
-    end_asymmetry: int | None = None,
-) -> AmarzguiouiResult:
+def amarzguioui(candidate: SiRNACandidate) -> AmarzguiouiResult:
     """Evaluate the Amarzguioui & Prydz criteria for a candidate (sense strand).
 
-    The five motif criteria are computed here. The duplex-end asymmetry term is
-    not: pass 'end_asymmetry' once the differential->points mapping is confirmed
-    from the paper. Left as None it is reported as pending and excluded from the
-    score.
+    Computes the five motif criteria and the duplex-end A/U differential, and
+    sums them into 'score'. Nothing is deferred.
 
     Args:
         candidate: the siRNA candidate to score.
-        end_asymmetry: the paper's asymmetry points in [-2, 3], or None if not
-            yet assessed.
 
     Raises:
-        ValueError: if the sense strand is shorter than AMARZGUIOUI_MIN_LENGTH,
-            or if 'end_asymmetry' is outside the tabulated [-2, 3] range.
+        ValueError: if the sense strand is shorter than AMARZGUIOUI_MIN_LENGTH.
     """
     sense = candidate.sense.seq
     if len(sense) < AMARZGUIOUI_MIN_LENGTH:
         raise ValueError(
             f"Amarzguioui criteria need a core of at least "
             f"{AMARZGUIOUI_MIN_LENGTH} nt; got {len(sense)} nt."
-        )
-    if end_asymmetry is not None and not (
-        AMARZGUIOUI_ASYMMETRY_MIN <= end_asymmetry <= AMARZGUIOUI_ASYMMETRY_MAX
-    ):
-        raise ValueError(
-            f"end_asymmetry {end_asymmetry} is outside the tabulated range "
-            f"[{AMARZGUIOUI_ASYMMETRY_MIN}, {AMARZGUIOUI_ASYMMETRY_MAX}]."
         )
 
     pos1 = _base_at(sense, AMARZGUIOUI_POS_S1)
@@ -498,13 +446,13 @@ def amarzguioui(
     u1 = pos1 == "U"
     g19 = pos19 == "G"
 
+    # DT3: 3' end minus 5' end, three terminal base pairs at each end.
     au_5p = sum(base in _AU for base in sense[:AMARZGUIOUI_TERMINAL_BP])
     au_3p = sum(base in _AU for base in sense[-AMARZGUIOUI_TERMINAL_BP:])
-    end_au_differential = au_5p - au_3p
+    end_au_differential = au_3p - au_5p
 
     return AmarzguiouiResult(
         end_au_differential=end_au_differential,
-        end_asymmetry=end_asymmetry,
         s1_gc=s1_gc,
         a6_a=a6_a,
         w19_au=w19_au,
