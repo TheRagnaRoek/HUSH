@@ -128,23 +128,6 @@ for candidate in enumerate_candidates(target, length=19):
         print(candidate.region, candidate.guide.seq, r.score, a.motif_score)
 ```
 
-Amarzguioui is complete, including its duplex-end A/U differential (the paper's
-`DT3`), which is measured **3' end minus 5' end** over the three terminal base
-pairs of the sense strand and enters the score directly. All 46 siRNAs of the
-paper's own Table 3 reproduce exactly - every `DT3`, every motif and every total
-score - which is what pins the sign convention down.
-
-Reynolds is scored **out of 10**, following the original algorithm rather than
-the common "8 equal criteria" simplification: five +1 binary criteria, an
-**additive** 3'-terminal A/U count (0 to +5 across positions 15-19), and two
--1 penalties ('G' at 13, 'G'/'C' at 19). Position 19 carries three of these at
-once, giving a clean A(+2) / U(+1) / G,C(-1) gradient. A score of 6 predicts a
-functional siRNA. Its "absence of internal repeat" criterion is computed from
-the sense strand by `core.hairpin` (see below); pass
-`reynolds(candidate, no_internal_repeat=...)` to override it with an external
-folder's verdict. All three 2004 rule sets are now fully evaluated - nothing is
-deferred.
-
 ## Thermodynamics (stage 2)
 
 `core.thermo` is the nearest-neighbor engine every thermodynamic step builds on:
