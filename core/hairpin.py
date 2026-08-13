@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 from core.sequence import BioSequence
 from core.thermo import (
+    NN_PARAMS,
     REFERENCE_TEMPERATURE_C,
     ZERO_CELSIUS_K,
     gibbs_free_energy,
@@ -155,8 +156,14 @@ def _arms_pair(arm5: str, arm3: str) -> bool:
     return True
 
 
-def _fold(rna: str, stem_start: int, stem_length: int, loop: str) -> HairpinFold:
-    dh, ds_stem = stacking_terms(rna[stem_start : stem_start + stem_length])
+def _fold(
+    rna: str,
+    stem_start: int,
+    stem_length: int,
+    loop: str,
+    params: dict[str, tuple[float, float]] = NN_PARAMS,
+) -> HairpinFold:
+    dh, ds_stem = stacking_terms(rna[stem_start : stem_start + stem_length], params)
     loop_dg37 = loop_penalty_dg37(loop)
     # Loop entropic penalty: dG37 = -T * dS  (dH_loop = 0), dS in cal/(mol*K).
     ds_loop = -loop_dg37 * 1000.0 / _T37_K
@@ -178,13 +185,15 @@ def most_stable_hairpin(
     seq: BioSequence | str,
     min_stem: int = MIN_STEM,
     min_loop: int = MIN_LOOP,
+    params: dict[str, tuple[float, float]] = NN_PARAMS,
 ) -> HairpinFold | None:
     """Return the minimum-dG37 simple hairpin foldable within 'seq', or None.
 
     Searches every perfect Watson-Crick stem (>= min_stem bp) closing a single
     loop (>= min_loop nt) and returns the most stable one by free energy at 37 C.
     None means no such hairpin exists - the sequence has no internal structure of
-    the kind the criterion looks for.
+    the kind the criterion looks for. 'params' is the stem's nearest-neighbor
+    table (default Xia 1998; the loop penalty is table-independent).
     """
     rna = _normalize(seq)
     n = len(rna)
@@ -199,7 +208,9 @@ def most_stable_hairpin(
                 arm3 = rna[arm3_start : arm3_start + stem_length]
                 if not _arms_pair(arm5, arm3):
                     continue
-                fold = _fold(rna, stem_start, stem_length, rna[loop_start:arm3_start])
+                fold = _fold(
+                    rna, stem_start, stem_length, rna[loop_start:arm3_start], params
+                )
                 if best is None or fold.dg37 < best.dg37:
                     best = fold
     return best
@@ -209,12 +220,15 @@ def internal_structure_tm(
     seq: BioSequence | str,
     min_stem: int = MIN_STEM,
     min_loop: int = MIN_LOOP,
+    params: dict[str, tuple[float, float]] = NN_PARAMS,
 ) -> float | None:
     """Melting temperature (degrees C) of the most stable internal hairpin.
 
     None when no hairpin can form, i.e. there is no internal structure to melt.
     """
-    fold = most_stable_hairpin(seq, min_stem=min_stem, min_loop=min_loop)
+    fold = most_stable_hairpin(
+        seq, min_stem=min_stem, min_loop=min_loop, params=params
+    )
     return None if fold is None else fold.tm
 
 
@@ -223,11 +237,14 @@ def has_no_internal_repeat(
     threshold_c: float = DEFAULT_INTERNAL_TM_THRESHOLD_C,
     min_stem: int = MIN_STEM,
     min_loop: int = MIN_LOOP,
+    params: dict[str, tuple[float, float]] = NN_PARAMS,
 ) -> bool:
     """True when 'seq' has no stable internal structure (Reynolds criterion).
 
     The most stable internal hairpin must melt at or below 'threshold_c' (20 C by
     default). A sequence that folds into nothing trivially satisfies this.
     """
-    tm = internal_structure_tm(seq, min_stem=min_stem, min_loop=min_loop)
+    tm = internal_structure_tm(
+        seq, min_stem=min_stem, min_loop=min_loop, params=params
+    )
     return tm is None or tm <= threshold_c

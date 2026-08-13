@@ -15,6 +15,7 @@ from core.hairpin import (
 from core.inputs import load_sequences
 from core.sequence import BioSequence, MolType
 from core.sirna import enumerate_candidates
+from core.thermo import NN_PARAMS_FREIER_1986, NN_PARAMS_XIA_1998
 
 
 class TestLoopPenalty:
@@ -82,6 +83,14 @@ class TestHairpinTm:
 
     def test_none_when_nothing_folds(self):
         assert internal_structure_tm("A" * 19) is None
+
+    def test_stem_parameter_set_defaults_to_xia_and_freier_differs(self):
+        seq = "GCAUGCGAAACGCAUGC"
+        default = internal_structure_tm(seq)
+        xia = internal_structure_tm(seq, params=NN_PARAMS_XIA_1998)
+        freier = internal_structure_tm(seq, params=NN_PARAMS_FREIER_1986)
+        assert default is not None and default == pytest.approx(xia)
+        assert freier != pytest.approx(xia)
 
 
 class TestAbsenceOfInternalRepeat:

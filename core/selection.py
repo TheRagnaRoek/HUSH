@@ -28,7 +28,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Iterable, Iterator
 
-from core.asymmetry import EndAsymmetry, end_asymmetry
+from core.asymmetry import DEFAULT_WINDOW_BP, EndAsymmetry, end_asymmetry
+from core.hairpin import DEFAULT_INTERNAL_TM_THRESHOLD_C, internal_structure_tm
 from core.rules import (
     AMARZGUIOUI_DEFAULT_THRESHOLD,
     REYNOLDS_DEFAULT_THRESHOLD,
@@ -41,6 +42,7 @@ from core.rules import (
 )
 from core.seed import SEED_TM_THRESHOLD_C, SeedTmResult, seed_tm
 from core.sirna import SiRNACandidate
+from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
 
 # --------------------------------------------------------------------------- #
 # Rule combination mode
@@ -89,8 +91,19 @@ class SelectionCriteria:
             from Reynolds criterion I (which stays at the published 30-52%).
         use_seed_filter, seed_tm_threshold: the siDirect seed-duplex off-target
             Tm filter, applied to both strands.
+        use_hairpin_filter, hairpin_tm_max: a standalone internal-structure gate -
+            reject a candidate whose most stable self-hairpin melts above
+            hairpin_tm_max. Distinct from Reynolds criterion (its internal-repeat
+            sub-criterion stays Xia-pinned at 20 C); this is the tunable one.
         use_asymmetry_filter: require the duplex end asymmetry to favour loading
-            the guide strand.
+            the guide strand (sign only - no magnitude threshold).
+
+    Advanced thermodynamic knobs (safe to leave at their defaults):
+        asymmetry_window: terminal base pairs compared at each duplex end.
+        asymmetry_temp_c: temperature the asymmetry dG is evaluated at.
+        thermo_params: nearest-neighbor parameter set for the asymmetry and
+            hairpin readouts ONLY. It never touches the seed filter (pinned to
+            Freier, on which its 21.5 C threshold is calibrated) or the rule sets.
     """
 
     use_ui_tei: bool = True
@@ -107,12 +120,24 @@ class SelectionCriteria:
     use_seed_filter: bool = True
     seed_tm_threshold: float = SEED_TM_THRESHOLD_C
 
+    use_hairpin_filter: bool = False
+    hairpin_tm_max: float = DEFAULT_INTERNAL_TM_THRESHOLD_C
+
     use_asymmetry_filter: bool = False
+
+    asymmetry_window: int = DEFAULT_WINDOW_BP
+    asymmetry_temp_c: float = REFERENCE_TEMPERATURE_C
+    thermo_params: ThermoParams = ThermoParams.XIA_1998
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule_mode, RuleMode):
             raise TypeError(
                 f"rule_mode must be a RuleMode, got {type(self.rule_mode).__name__}"
+            )
+        if not isinstance(self.thermo_params, ThermoParams):
+            raise TypeError(
+                "thermo_params must be a ThermoParams, got "
+                f"{type(self.thermo_params).__name__}"
             )
         if self.use_gc_filter and not (0.0 <= self.gc_min <= self.gc_max <= 1.0):
             raise ValueError(
@@ -157,10 +182,12 @@ class CandidateEvaluation:
     amarzguioui: AmarzguiouiResult | None
     seed: SeedTmResult | None
     asymmetry: EndAsymmetry | None
+    hairpin_tm: float | None
     gc_content: float
     rule_pass: bool
     gc_pass: bool | None
     seed_pass: bool | None
+    hairpin_pass: bool | None
     asymmetry_pass: bool | None
     selected: bool
     reasons: tuple[str, ...] = field(default_factory=tuple)
@@ -219,15 +246,36 @@ def evaluate(
     )
     seed_pass = seed.passes if seed is not None else None
 
-    asym = end_asymmetry(candidate) if criteria.use_asymmetry_filter else None
+    if criteria.use_hairpin_filter:
+        hairpin_tm = internal_structure_tm(
+            candidate.sense, params=criteria.thermo_params.table
+        )
+        hairpin_pass = hairpin_tm is None or hairpin_tm <= criteria.hairpin_tm_max
+    else:
+        hairpin_tm = None
+        hairpin_pass = None
+
+    asym = (
+        end_asymmetry(
+            candidate,
+            window=criteria.asymmetry_window,
+            temperature_c=criteria.asymmetry_temp_c,
+            params=criteria.thermo_params.table,
+        )
+        if criteria.use_asymmetry_filter
+        else None
+    )
     asymmetry_pass = asym.favours_guide if asym is not None else None
 
     gates = [rule_pass]
-    gates += [p for p in (gc_pass, seed_pass, asymmetry_pass) if p is not None]
+    gates += [
+        p for p in (gc_pass, seed_pass, hairpin_pass, asymmetry_pass) if p is not None
+    ]
     selected = all(gates)
 
     reasons = () if selected else _reasons(
-        criteria, rule_pass, gc, gc_pass, seed, seed_pass, asym, asymmetry_pass
+        criteria, rule_pass, gc, gc_pass, seed, seed_pass,
+        hairpin_tm, hairpin_pass, asym, asymmetry_pass,
     )
 
     return CandidateEvaluation(
@@ -237,10 +285,12 @@ def evaluate(
         amarzguioui=amz,
         seed=seed,
         asymmetry=asym,
+        hairpin_tm=hairpin_tm,
         gc_content=gc,
         rule_pass=rule_pass,
         gc_pass=gc_pass,
         seed_pass=seed_pass,
+        hairpin_pass=hairpin_pass,
         asymmetry_pass=asymmetry_pass,
         selected=selected,
         reasons=reasons,
@@ -254,6 +304,8 @@ def _reasons(
     gc_pass: bool | None,
     seed: SeedTmResult | None,
     seed_pass: bool | None,
+    hairpin_tm: float | None,
+    hairpin_pass: bool | None,
     asym: EndAsymmetry | None,
     asymmetry_pass: bool | None,
 ) -> tuple[str, ...]:
@@ -269,6 +321,10 @@ def _reasons(
     if seed_pass is False and seed is not None:
         out.append(
             f"seed off-target Tm {seed.max_tm:.1f}C >= {seed.threshold:.1f}C"
+        )
+    if hairpin_pass is False and hairpin_tm is not None:
+        out.append(
+            f"internal structure Tm {hairpin_tm:.1f}C > {criteria.hairpin_tm_max:.1f}C"
         )
     if asymmetry_pass is False and asym is not None:
         out.append(f"{asym.preferred_strand}-favoured loading")

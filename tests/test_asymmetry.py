@@ -14,7 +14,12 @@ from core.inputs import load_sequences
 from core.rules import amarzguioui
 from core.sequence import BioSequence, MolType
 from core.sirna import SiRNACandidate, enumerate_candidates
-from core.thermo import gibbs_free_energy, stacking_terms
+from core.thermo import (
+    NN_PARAMS_FREIER_1986,
+    NN_PARAMS_XIA_1998,
+    gibbs_free_energy,
+    stacking_terms,
+)
 
 
 def make_candidate(sense: str) -> SiRNACandidate:
@@ -62,6 +67,14 @@ class TestTerminalStackingDg:
         assert terminal_stacking_dg(strand, window=6) < terminal_stacking_dg(
             strand, window=4
         )
+
+    def test_parameter_set_defaults_to_xia_and_freier_differs(self):
+        strand = "GCAUGCAUGCAUGCAUGCA"
+        default = terminal_stacking_dg(strand, window=4)
+        xia = terminal_stacking_dg(strand, window=4, params=NN_PARAMS_XIA_1998)
+        freier = terminal_stacking_dg(strand, window=4, params=NN_PARAMS_FREIER_1986)
+        assert default == pytest.approx(xia)   # default is Xia
+        assert freier != pytest.approx(xia)    # the choice actually bites
 
 
 class TestSignConvention:
@@ -181,6 +194,16 @@ class TestTemperature:
         cold = end_asymmetry(make_candidate(GUIDE_FAVOURED), temperature_c=25.0)
         warm = end_asymmetry(make_candidate(GUIDE_FAVOURED), temperature_c=50.0)
         assert cold.guide_5p_dg < warm.guide_5p_dg
+
+
+class TestParameterSet:
+    def test_params_flow_through_and_default_is_xia(self):
+        c = make_candidate("GCAUGCAUGCAUGCAUGCA")
+        default = end_asymmetry(c).differential
+        xia = end_asymmetry(c, params=NN_PARAMS_XIA_1998).differential
+        freier = end_asymmetry(c, params=NN_PARAMS_FREIER_1986).differential
+        assert default == pytest.approx(xia)
+        assert freier != pytest.approx(xia)
 
 
 class TestInputValidation:

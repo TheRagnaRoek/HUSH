@@ -14,13 +14,19 @@ from typing import Optional
 
 import typer
 
+from core.asymmetry import DEFAULT_WINDOW_BP
 from core.errors import HushError
+from core.hairpin import DEFAULT_INTERNAL_TM_THRESHOLD_C
 from core.inputs import build_design_input, load_sequences
 from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
 from core.seed import SEED_TM_THRESHOLD_C
 from core.selection import RuleMode, SelectionCriteria, evaluate_all
 from core.sequence import BioSequence, DesignInput
 from core.sirna import enumerate_candidates
+from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
+
+# Help-panel label that groups the expert thermodynamic knobs in `design --help`.
+_ADVANCED = "Advanced (thermodynamic internals)"
 
 app = typer.Typer(
     add_completion=False,
@@ -198,6 +204,24 @@ def _parse_mode(spec: str) -> RuleMode:
         )
 
 
+_PARAMS_ALIASES = {
+    "xia": ThermoParams.XIA_1998,
+    "xia1998": ThermoParams.XIA_1998,
+    "freier": ThermoParams.FREIER_1986,
+    "freier1986": ThermoParams.FREIER_1986,
+}
+
+
+def _parse_params(spec: str) -> ThermoParams:
+    key = _PARAMS_ALIASES.get(spec.strip().lower())
+    if key is None:
+        raise typer.BadParameter(
+            f"unknown parameter set {spec!r}; choose 'xia' or 'freier'.",
+            param_hint="--params",
+        )
+    return key
+
+
 def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
     """Compact per-rule pass code, e.g. 'UR-' (Ui-Tei + Reynolds pass, Amarz fails)."""
     parts = []
@@ -231,9 +255,20 @@ def _print_criteria(criteria: SelectionCriteria) -> None:
         else "off"
     )
     typer.echo(f"  GC filter:  {gc}")
-    typer.echo(
-        f"  asymmetry:  {'favour guide' if criteria.use_asymmetry_filter else 'off'}"
+    hairpin = (
+        f"Tm <= {criteria.hairpin_tm_max:.1f} C"
+        if criteria.use_hairpin_filter
+        else "off"
     )
+    typer.echo(f"  hairpin:    {hairpin}")
+    asym = (
+        f"favour guide ({criteria.asymmetry_window} bp @ {criteria.asymmetry_temp_c:.0f} C)"
+        if criteria.use_asymmetry_filter
+        else "off"
+    )
+    typer.echo(f"  asymmetry:  {asym}")
+    if criteria.use_asymmetry_filter or criteria.use_hairpin_filter:
+        typer.echo(f"  params:     {criteria.thermo_params.value}")
 
 
 def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list) -> None:
@@ -248,6 +283,8 @@ def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list
         typer.echo(row("GC window:", sum(1 for e in evaluations if e.gc_pass)))
     if criteria.use_seed_filter:
         typer.echo(row("seed Tm:", sum(1 for e in evaluations if e.seed_pass)))
+    if criteria.use_hairpin_filter:
+        typer.echo(row("hairpin:", sum(1 for e in evaluations if e.hairpin_pass)))
     if criteria.use_asymmetry_filter:
         typer.echo(row("asymmetry:", sum(1 for e in evaluations if e.asymmetry_pass)))
     typer.echo(typer.style(row("selected:", len(selected)), fg=typer.colors.GREEN, bold=True))
@@ -264,6 +301,8 @@ def _print_table(
         header += f" {'rules':<5}"
     if criteria.use_seed_filter:
         header += f" {'seedTm':>7}"
+    if criteria.use_hairpin_filter:
+        header += f" {'hpTm':>6}"
     typer.echo(typer.style(header, bold=True))
 
     shown = selected if limit == 0 else selected[:limit]
@@ -277,6 +316,8 @@ def _print_table(
             row += f" {_rules_code(e, criteria):<5}"
         if criteria.use_seed_filter:
             row += f" {e.seed.max_tm:>7.1f}"
+        if criteria.use_hairpin_filter:
+            row += f" {('  none' if e.hairpin_tm is None else f'{e.hairpin_tm:.1f}'):>6}"
         typer.echo(row)
     if limit and len(selected) > limit:
         typer.echo(
@@ -288,11 +329,12 @@ def _print_table(
 def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -> None:
     lines = [
         "region\tstart\tend\tguide_5to3\tpassenger_5to3\tgc_percent\t"
-        "rules_passed\tseed_max_tm_c"
+        "rules_passed\tseed_max_tm_c\thairpin_tm_c"
     ]
     for e in selected:
         c = e.candidate
         seed_tm_val = f"{e.seed.max_tm:.2f}" if e.seed is not None else ""
+        hairpin_val = "" if e.hairpin_tm is None else f"{e.hairpin_tm:.2f}"
         lines.append(
             "\t".join(
                 [
@@ -304,6 +346,7 @@ def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -
                     f"{c.gc_content * 100:.1f}",
                     _rules_code(e, criteria),
                     seed_tm_val,
+                    hairpin_val,
                 ]
             )
         )
@@ -355,6 +398,33 @@ def design_cmd(
         False, "--asymmetry/--no-asymmetry",
         help="Require duplex-end asymmetry to favour the guide strand.",
     ),
+    hairpin: bool = typer.Option(
+        False, "--hairpin/--no-hairpin",
+        help="Reject candidates with stable internal (self-hairpin) structure.",
+        rich_help_panel=_ADVANCED,
+    ),
+    hairpin_tm: float = typer.Option(
+        DEFAULT_INTERNAL_TM_THRESHOLD_C, "--hairpin-tm",
+        help="Internal-structure Tm cut-off in C (reject if the most stable "
+        "self-hairpin melts above this).",
+        rich_help_panel=_ADVANCED,
+    ),
+    asym_window: int = typer.Option(
+        DEFAULT_WINDOW_BP, "--asym-window",
+        help="Terminal base pairs compared at each duplex end for asymmetry.",
+        rich_help_panel=_ADVANCED,
+    ),
+    asym_temp: float = typer.Option(
+        REFERENCE_TEMPERATURE_C, "--asym-temp",
+        help="Temperature in C for the asymmetry free energy.",
+        rich_help_panel=_ADVANCED,
+    ),
+    params: str = typer.Option(
+        "xia", "--params",
+        help="Nearest-neighbor parameter set for the asymmetry and hairpin "
+        "readouts only (never the seed filter): xia | freier.",
+        rich_help_panel=_ADVANCED,
+    ),
     limit: int = typer.Option(
         20, "--limit", "-n", help="Max candidates to print (0 = all)."
     ),
@@ -365,11 +435,13 @@ def design_cmd(
     """Enumerate siRNA candidates for a target and filter them by chosen criteria.
 
     The three classical rule sets toggle independently and combine by --mode;
-    the seed-Tm, GC and asymmetry filters are applied on top. Nothing is ranked:
-    selected candidates are reported in target-position order.
+    the seed-Tm, GC, hairpin and asymmetry filters are applied on top. Nothing is
+    ranked: selected candidates are reported in target-position order. Expert
+    thermodynamic knobs live in the Advanced option group (see --help).
     """
     use_ut, use_rey, use_amz = _parse_rules(rules)
     rule_mode = _parse_mode(mode)
+    thermo_params = _parse_params(params)
     try:
         criteria = SelectionCriteria(
             use_ui_tei=use_ut,
@@ -383,7 +455,12 @@ def design_cmd(
             use_gc_filter=gc,
             gc_min=gc_min / 100.0,
             gc_max=gc_max / 100.0,
+            use_hairpin_filter=hairpin,
+            hairpin_tm_max=hairpin_tm,
             use_asymmetry_filter=asymmetry,
+            asymmetry_window=asym_window,
+            asymmetry_temp_c=asym_temp,
+            thermo_params=thermo_params,
         )
         design_input = build_design_input(target)
         mrna = design_input.require_nucleotide_target()

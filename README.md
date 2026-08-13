@@ -227,19 +227,30 @@ breakdown so the reason for any verdict is visible.
   by `RuleMode.ALL` (must satisfy every enabled set) or `RuleMode.ANY` (kept if
   any enabled set passes). No rule enabled means the rule step adds no constraint.
 - **Independent filters**, ANDed on top, each optional with tunable values: a GC
-  window, the seed-duplex off-target Tm, and the loading asymmetry. The GC filter
-  is separate from Reynolds' internal criterion I, which stays at the published
-  30-52%.
+  window, the seed-duplex off-target Tm, a standalone internal-structure
+  (self-hairpin) gate, and the loading asymmetry. The GC filter is separate from
+  Reynolds' internal criterion I (fixed at the published 30-52%), and the hairpin
+  gate is separate from Reynolds' internal-repeat sub-criterion (Xia-pinned at
+  20 C) - both here are the tunable versions.
+- **Advanced thermodynamic knobs**, correct by default and safe to ignore: the
+  asymmetry window (default 4 bp) and temperature, and the nearest-neighbor
+  parameter set (Xia 1998 / Freier 1986) for the asymmetry and hairpin readouts.
+  The parameter set never touches the seed filter, whose 21.5 C threshold is only
+  valid against its own pinned Freier internals.
 
 ```python
 from core.sirna import enumerate_candidates
 from core.selection import SelectionCriteria, RuleMode, select
+from core.thermo import ThermoParams
 
 criteria = SelectionCriteria(
     use_ui_tei=True, use_reynolds=True, use_amarzguioui=False,
     rule_mode=RuleMode.ANY,          # union of the enabled rule sets
     use_seed_filter=True, seed_tm_threshold=21.5,
     use_gc_filter=True, gc_min=0.30, gc_max=0.52,
+    use_hairpin_filter=True, hairpin_tm_max=20.0,
+    use_asymmetry_filter=True,       # advanced knobs below keep their defaults
+    asymmetry_window=4, thermo_params=ThermoParams.XIA_1998,
 )
 for ev in select(enumerate_candidates(target), criteria):
     print(ev.candidate.region, ev.candidate.guide.seq)
@@ -254,16 +265,19 @@ The same options drive the `hush design` command:
 
 ```bash
 hush design data/examples/hla_a01.fasta --rules ui-tei,reynolds --mode any \
-  --seed-tm 21.5 --gc --gc-min 30 --gc-max 52 -o selected.tsv
+  --seed-tm 21.5 --gc --gc-min 30 --gc-max 52 --hairpin -o selected.tsv
 ```
 
 It prints the chosen criteria, a funnel of how many candidates clear each enabled
 gate, and the selected candidates (guide + passenger 5'->3', GC%, which rules
-passed, seed Tm); `-o` writes them all to a TSV. Run `hush design --help` for the
-full option list.
+passed, seed Tm, internal-structure Tm); `-o` writes them all to a TSV. The
+expert thermodynamic knobs (`--hairpin-tm`, `--asym-window`, `--asym-temp`,
+`--params`) live in an "Advanced" group; run `hush design --help` for the full
+option list, or see [`docs/design_options.md`](docs/design_options.md) for a
+one-page reference to every option, its default, and what it does.
 
 ## Development
 
 ```bash
-pytest            # run the test suite (261 tests)
+pytest            # run the test suite (272 tests)
 ```
