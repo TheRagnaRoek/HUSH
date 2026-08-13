@@ -12,6 +12,8 @@ Related documents:
   prior-art landscape.
 - [`seed_offtarget_design_note.md`](seed_offtarget_design_note.md) - the specific
   critique of the seed-Tm filter and the proposed replacement.
+- [`design_options.md`](design_options.md) - a one-page user reference to every
+  `hush design` / `SelectionCriteria` option, its default and effect.
 - The `README.md` - user-facing usage.
 
 Contents:
@@ -397,15 +399,37 @@ reason for any verdict is visible.
   selected algorithms would each select). With no rule set enabled, the rule step
   imposes no constraint.
 - **Independent filters**, each optional, ANDed on top: a GC-content window, the
-  seed-duplex off-target Tm, and the loading asymmetry.
+  seed-duplex off-target Tm, a standalone internal-structure (self-hairpin) gate,
+  and the loading asymmetry.
 
 ### Customisable values are options, not rule edits
 
-The GC range, seed-Tm threshold, and rule score thresholds are options here, not
-edits to the rules themselves. In particular the standalone GC filter is separate
-from Reynolds' internal GC criterion, which stays fixed at the published 30-52% -
-parameterising the published rule would break its fidelity to the source. The GC
-filter is the tunable one.
+The GC range, seed-Tm threshold, hairpin-Tm cut-off, and rule score thresholds are
+options here, not edits to the rules themselves. Two of them shadow a criterion
+that lives fixed inside a published rule, and the split is deliberate:
+
+- the standalone GC filter is separate from Reynolds' internal GC criterion, which
+  stays fixed at the published 30-52%;
+- the standalone hairpin gate is separate from Reynolds' internal-repeat
+  sub-criterion, which stays pinned to Xia 1998 at Tm <= 20 C.
+
+In both cases the rule keeps its published form (fidelity to the source), and the
+standalone filter is the tunable one. `core.hairpin` and `core.asymmetry` both now
+take a `params` argument so the standalone gates can be scored with either
+nearest-neighbor set, while `reynolds()` keeps calling them at their Xia defaults.
+
+### Advanced thermodynamic knobs, and where the parameter set may not go
+
+Three options are "advanced": the asymmetry window (default 4 bp; an empirical
+range, not a single canonical value) and temperature, and the nearest-neighbor
+parameter set (`ThermoParams`, Xia 1998 / Freier 1986). The parameter set is
+scoped to the asymmetry and hairpin readouts **only**. It is deliberately not
+wired into the seed filter: siDirect's 21.5 C cut-off is calibrated on Freier
+numbers and is meaningful only in combination with the seed module's own pinned
+internals (see the seed section), so exposing a parameter-set switch there would
+let a caller silently invalidate the threshold. Same reasoning as the pinned rule
+criteria above - a published threshold travels with the parameter set it was fit
+on.
 
 ### Ordering
 

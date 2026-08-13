@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from enum import Enum
 
 from core.errors import SequenceValidationError
 from core.sequence import BioSequence
@@ -124,6 +125,30 @@ NN_PARAMS_FREIER_1986 = _expand_by_symmetry(_FREIER_1986_PUBLISHED)
 
 #: The default parameter set for general-purpose stability work.
 NN_PARAMS = NN_PARAMS_XIA_1998
+
+
+class ThermoParams(str, Enum):
+    """A nearest-neighbor parameter set, selectable by name.
+
+    A hashable stand-in for the raw tables above, so callers (e.g. a frozen
+    SelectionCriteria) can carry a choice of parameter set without embedding an
+    unhashable dict. Resolve to the actual table with `.table`.
+
+    XIA_1998 is the modern default. FREIER_1986 exists because published
+    thresholds calibrated on it (siDirect's seed Tm) are only valid against it -
+    swapping tables silently shifts every number relative to such a cut-off, so
+    the set is named explicitly rather than chosen for the caller.
+    """
+
+    XIA_1998 = "xia"
+    FREIER_1986 = "freier"
+
+    @property
+    def table(self) -> dict[str, tuple[float, float]]:
+        """The nearest-neighbor table this name selects."""
+        if self is ThermoParams.FREIER_1986:
+            return NN_PARAMS_FREIER_1986
+        return NN_PARAMS_XIA_1998
 
 
 # --------------------------------------------------------------------------- #

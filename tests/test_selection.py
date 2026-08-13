@@ -15,6 +15,7 @@ from core.selection import (
     evaluate_all,
     select,
 )
+from core.thermo import ThermoParams
 
 
 def one_candidate(sense: str):
@@ -42,6 +43,10 @@ class TestCriteriaValidation:
             use_ui_tei=True, use_reynolds=False, use_amarzguioui=True
         )
         assert c.enabled_rule_names == ("ui_tei", "amarzguioui")
+
+    def test_rejects_non_thermoparams(self):
+        with pytest.raises(TypeError, match="thermo_params"):
+            SelectionCriteria(thermo_params="xia")  # type: ignore[arg-type]
 
 
 class TestOnlyEnabledCriteriaAreComputed:
@@ -174,6 +179,99 @@ class TestIndependentFilters:
         assert ev.rule_pass is True
         assert ev.seed_pass is False
         assert ev.selected is False
+
+
+class TestHairpinFilter:
+    # A sense strand whose two GC arms fold into a stable stem; and one with no
+    # complementary stem, so nothing folds.
+    SELF_FOLDER = "GCGCGCAUUUUGCGCGCUU"
+    NON_FOLDER = "A" * 19
+
+    def _base(self, **kw):
+        return SelectionCriteria(
+            use_ui_tei=False, use_reynolds=False, use_amarzguioui=False,
+            use_seed_filter=False, **kw,
+        )
+
+    def test_default_off_does_not_constrain(self):
+        ev = evaluate(one_candidate(self.SELF_FOLDER), self._base())
+        assert ev.hairpin_pass is None
+        assert ev.hairpin_tm is None
+
+    def test_rejects_stable_internal_structure(self):
+        ev = evaluate(
+            one_candidate(self.SELF_FOLDER),
+            self._base(use_hairpin_filter=True, hairpin_tm_max=20.0),
+        )
+        assert ev.hairpin_tm is not None and ev.hairpin_tm > 20.0
+        assert ev.hairpin_pass is False
+        assert ev.selected is False
+        assert any("internal structure" in r for r in ev.reasons)
+
+    def test_passes_when_nothing_folds(self):
+        ev = evaluate(
+            one_candidate(self.NON_FOLDER),
+            self._base(use_hairpin_filter=True),
+        )
+        assert ev.hairpin_tm is None
+        assert ev.hairpin_pass is True
+        assert ev.selected is True
+
+    def test_threshold_is_customisable(self):
+        c = one_candidate(self.SELF_FOLDER)
+        lax = evaluate(c, self._base(use_hairpin_filter=True, hairpin_tm_max=200.0))
+        strict = evaluate(c, self._base(use_hairpin_filter=True, hairpin_tm_max=0.0))
+        assert lax.hairpin_pass is True
+        assert strict.hairpin_pass is False
+
+
+class TestAdvancedThermoKnobs:
+    SENSE = "GCAUGCAUGCAUGCAUGCA"
+
+    def _base(self, **kw):
+        return SelectionCriteria(
+            use_ui_tei=False, use_reynolds=False, use_amarzguioui=False, **kw
+        )
+
+    def test_params_change_asymmetry_but_not_seed(self):
+        # The parameter set is scoped to asymmetry/hairpin; the seed filter stays
+        # pinned to its own (Freier) internals regardless of this choice.
+        c = one_candidate(self.SENSE)
+        xia = evaluate(c, self._base(
+            use_seed_filter=True, use_asymmetry_filter=True,
+            thermo_params=ThermoParams.XIA_1998,
+        ))
+        freier = evaluate(c, self._base(
+            use_seed_filter=True, use_asymmetry_filter=True,
+            thermo_params=ThermoParams.FREIER_1986,
+        ))
+        assert xia.asymmetry.differential != pytest.approx(
+            freier.asymmetry.differential
+        )
+        assert xia.seed.max_tm == pytest.approx(freier.seed.max_tm)
+
+    def test_asymmetry_window_flows_through(self):
+        c = one_candidate(self.SENSE)
+        w4 = evaluate(c, self._base(
+            use_seed_filter=False, use_asymmetry_filter=True, asymmetry_window=4
+        ))
+        w6 = evaluate(c, self._base(
+            use_seed_filter=False, use_asymmetry_filter=True, asymmetry_window=6
+        ))
+        assert w4.asymmetry.window == 4
+        assert w6.asymmetry.window == 6
+
+    def test_hairpin_uses_selected_parameter_set(self):
+        c = one_candidate("GCGCGCAUUUUGCGCGCUU")
+        xia = evaluate(c, self._base(
+            use_seed_filter=False, use_hairpin_filter=True,
+            hairpin_tm_max=500.0, thermo_params=ThermoParams.XIA_1998,
+        ))
+        freier = evaluate(c, self._base(
+            use_seed_filter=False, use_hairpin_filter=True,
+            hairpin_tm_max=500.0, thermo_params=ThermoParams.FREIER_1986,
+        ))
+        assert xia.hairpin_tm != pytest.approx(freier.hairpin_tm)
 
 
 class TestSelectPreservesOrderAndDropsNothingSilently:

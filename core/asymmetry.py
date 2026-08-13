@@ -27,6 +27,7 @@ from dataclasses import dataclass
 
 from core.sirna import SiRNACandidate
 from core.thermo import (
+    NN_PARAMS,
     REFERENCE_TEMPERATURE_C,
     gibbs_free_energy,
     stacking_terms,
@@ -124,13 +125,15 @@ def terminal_stacking_dg(
     strand: str,
     window: int = DEFAULT_WINDOW_BP,
     temperature_c: float = REFERENCE_TEMPERATURE_C,
+    params: dict[str, tuple[float, float]] = NN_PARAMS,
 ) -> float:
     """Stacking free energy (kcal/mol) of the 5'-terminal 'window' bases.
 
     Stacking terms only - no initiation, no terminal A-U penalty - because this
-    window is the end of a longer helix, not a duplex in its own right.
+    window is the end of a longer helix, not a duplex in its own right. 'params'
+    is the nearest-neighbor table (default Xia 1998).
     """
-    dh, ds = stacking_terms(strand[:window])
+    dh, ds = stacking_terms(strand[:window], params)
     return gibbs_free_energy(dh, ds, temperature_c)
 
 
@@ -138,6 +141,7 @@ def end_asymmetry(
     candidate: SiRNACandidate,
     window: int = DEFAULT_WINDOW_BP,
     temperature_c: float = REFERENCE_TEMPERATURE_C,
+    params: dict[str, tuple[float, float]] = NN_PARAMS,
 ) -> EndAsymmetry:
     """Measure the duplex-end thermodynamic asymmetry of a candidate.
 
@@ -150,6 +154,7 @@ def end_asymmetry(
         candidate: the siRNA candidate to measure.
         window: terminal base pairs to compare at each end (default 4).
         temperature_c: temperature for dG (default 37 C).
+        params: nearest-neighbor table for the stacking dG (default Xia 1998).
 
     Returns:
         An EndAsymmetry whose 'differential' is positive when the guide's 5' end
@@ -163,9 +168,11 @@ def end_asymmetry(
     _validate_window(window, candidate.length)
 
     guide_5p_dg = terminal_stacking_dg(
-        candidate.antisense.seq, window, temperature_c
+        candidate.antisense.seq, window, temperature_c, params
     )
-    sense_5p_dg = terminal_stacking_dg(candidate.sense.seq, window, temperature_c)
+    sense_5p_dg = terminal_stacking_dg(
+        candidate.sense.seq, window, temperature_c, params
+    )
 
     return EndAsymmetry(
         window=window,
