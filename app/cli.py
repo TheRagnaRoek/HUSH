@@ -1,8 +1,8 @@
 """HUSH command-line interface.
 
-CLI-first entry point for the pipeline. Currently exposes the Input Layer via
-'hush input'; siRNA design, MSA/allele, and shRNA conversion commands are
-added as those stages come online.
+CLI-first entry point for the pipeline. Exposes the Input Layer via
+'hush input'/'hush inspect' and siRNA candidate design via 'hush design';
+MSA/allele and shRNA conversion commands are added as those stages come online.
 
 Run 'hush --help' (after 'pip install -e .') or 'python -m app.cli --help'.
 """
@@ -20,9 +20,14 @@ from core.hairpin import DEFAULT_INTERNAL_TM_THRESHOLD_C
 from core.inputs import build_design_input, load_sequences
 from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
 from core.seed import SEED_TM_THRESHOLD_C
-from core.selection import RuleMode, SelectionCriteria, evaluate_all
+from core.selection import (
+    DEFAULT_MAX_HOMOPOLYMER_RUN,
+    RuleMode,
+    SelectionCriteria,
+    evaluate_all,
+)
 from core.sequence import BioSequence, DesignInput
-from core.sirna import enumerate_candidates
+from core.sirna import OverhangPolicy, enumerate_candidates
 from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
 
 # Help-panel label that groups the expert thermodynamic knobs in `design --help`.
@@ -222,6 +227,25 @@ def _parse_params(spec: str) -> ThermoParams:
     return key
 
 
+_OVERHANG_ALIASES = {
+    "natural": OverhangPolicy.NATURAL,
+    "mrna": OverhangPolicy.NATURAL,
+    "dtdt": OverhangPolicy.DTDT,
+    "tt": OverhangPolicy.DTDT,
+    "uu": OverhangPolicy.UU,
+}
+
+
+def _parse_overhang(spec: str) -> OverhangPolicy:
+    key = _OVERHANG_ALIASES.get(spec.strip().lower())
+    if key is None:
+        raise typer.BadParameter(
+            f"unknown overhang {spec!r}; choose 'natural', 'dtdt', or 'uu'.",
+            param_hint="--overhang",
+        )
+    return key
+
+
 def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
     """Compact per-rule pass code, e.g. 'UR-' (Ui-Tei + Reynolds pass, Amarz fails)."""
     parts = []
@@ -261,6 +285,12 @@ def _print_criteria(criteria: SelectionCriteria) -> None:
         else "off"
     )
     typer.echo(f"  hairpin:    {hairpin}")
+    homopolymer = (
+        f"reject runs > {criteria.max_homopolymer_run} nt"
+        if criteria.use_homopolymer_filter
+        else "off"
+    )
+    typer.echo(f"  homopolymer:{homopolymer}")
     asym = (
         f"favour guide ({criteria.asymmetry_window} bp @ {criteria.asymmetry_temp_c:.0f} C)"
         if criteria.use_asymmetry_filter
@@ -285,6 +315,8 @@ def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list
         typer.echo(row("seed Tm:", sum(1 for e in evaluations if e.seed_pass)))
     if criteria.use_hairpin_filter:
         typer.echo(row("hairpin:", sum(1 for e in evaluations if e.hairpin_pass)))
+    if criteria.use_homopolymer_filter:
+        typer.echo(row("homopolymer:", sum(1 for e in evaluations if e.homopolymer_pass)))
     if criteria.use_asymmetry_filter:
         typer.echo(row("asymmetry:", sum(1 for e in evaluations if e.asymmetry_pass)))
     typer.echo(typer.style(row("selected:", len(selected)), fg=typer.colors.GREEN, bold=True))
@@ -293,7 +325,8 @@ def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list
 def _print_table(
     selected: list, criteria: SelectionCriteria, length: int, limit: int
 ) -> None:
-    seq_w = max(length + 1, 14)
+    # Strands are shown as ordered: paired core plus the 2-nt 3' overhang.
+    seq_w = max(length + 3, 14)
     header = (
         f"  {'region':<11} {'guide 5->3':<{seq_w}} {'passenger 5->3':<{seq_w}} {'GC%':>4}"
     )
@@ -303,13 +336,15 @@ def _print_table(
         header += f" {'seedTm':>7}"
     if criteria.use_hairpin_filter:
         header += f" {'hpTm':>6}"
+    if criteria.use_homopolymer_filter:
+        header += f" {'run':>4}"
     typer.echo(typer.style(header, bold=True))
 
     shown = selected if limit == 0 else selected[:limit]
     for e in shown:
         c = e.candidate
         row = (
-            f"  {c.region:<11} {c.guide.seq:<{seq_w}} {c.passenger.seq:<{seq_w}} "
+            f"  {c.region:<11} {c.guide_full:<{seq_w}} {c.passenger_full:<{seq_w}} "
             f"{c.gc_content * 100:>4.0f}"
         )
         if criteria.enabled_rule_names:
@@ -318,6 +353,8 @@ def _print_table(
             row += f" {e.seed.max_tm:>7.1f}"
         if criteria.use_hairpin_filter:
             row += f" {('  none' if e.hairpin_tm is None else f'{e.hairpin_tm:.1f}'):>6}"
+        if criteria.use_homopolymer_filter:
+            row += f" {e.homopolymer_run:>4}"
         typer.echo(row)
     if limit and len(selected) > limit:
         typer.echo(
@@ -327,26 +364,34 @@ def _print_table(
 
 
 def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -> None:
+    # guide_5to3 / passenger_5to3 are the full ordered strands (core + 3'
+    # overhang); the *_overhang columns name the trailing overhang explicitly.
+    # start/end are the paired-core coordinates on the target.
     lines = [
-        "region\tstart\tend\tguide_5to3\tpassenger_5to3\tgc_percent\t"
-        "rules_passed\tseed_max_tm_c\thairpin_tm_c"
+        "region\tstart\tend\tguide_5to3\tguide_overhang\tpassenger_5to3\t"
+        "passenger_overhang\tgc_percent\trules_passed\tseed_max_tm_c\t"
+        "hairpin_tm_c\thomopolymer_max_run"
     ]
     for e in selected:
         c = e.candidate
         seed_tm_val = f"{e.seed.max_tm:.2f}" if e.seed is not None else ""
         hairpin_val = "" if e.hairpin_tm is None else f"{e.hairpin_tm:.2f}"
+        run_val = "" if e.homopolymer_run is None else str(e.homopolymer_run)
         lines.append(
             "\t".join(
                 [
                     c.region,
                     str(c.position + 1),
                     str(c.end),
-                    c.guide.seq,
-                    c.passenger.seq,
+                    c.guide_full,
+                    c.guide_overhang,
+                    c.passenger_full,
+                    c.sense_overhang,
                     f"{c.gc_content * 100:.1f}",
                     _rules_code(e, criteria),
                     seed_tm_val,
                     hairpin_val,
+                    run_val,
                 ]
             )
         )
@@ -361,6 +406,10 @@ def design_cmd(
     ),
     length: int = typer.Option(
         19, "--length", "-l", help="siRNA core length (19-24)."
+    ),
+    overhang: str = typer.Option(
+        "natural", "--overhang",
+        help="3' overhang on each strand: natural (mRNA-derived) | dtdt | uu.",
     ),
     rules: str = typer.Option(
         "all", "--rules",
@@ -393,6 +442,14 @@ def design_cmd(
     ),
     gc_max: float = typer.Option(
         52.0, "--gc-max", help="GC window upper bound (percent)."
+    ),
+    homopolymer: bool = typer.Option(
+        False, "--homopolymer/--no-homopolymer",
+        help="Reject candidates with a single-nucleotide run over --max-run.",
+    ),
+    max_run: int = typer.Option(
+        DEFAULT_MAX_HOMOPOLYMER_RUN, "--max-run",
+        help="Longest tolerated single-nucleotide run in the core (e.g. 3).",
     ),
     asymmetry: bool = typer.Option(
         False, "--asymmetry/--no-asymmetry",
@@ -442,6 +499,7 @@ def design_cmd(
     use_ut, use_rey, use_amz = _parse_rules(rules)
     rule_mode = _parse_mode(mode)
     thermo_params = _parse_params(params)
+    overhang_policy = _parse_overhang(overhang)
     try:
         criteria = SelectionCriteria(
             use_ui_tei=use_ut,
@@ -457,6 +515,8 @@ def design_cmd(
             gc_max=gc_max / 100.0,
             use_hairpin_filter=hairpin,
             hairpin_tm_max=hairpin_tm,
+            use_homopolymer_filter=homopolymer,
+            max_homopolymer_run=max_run,
             use_asymmetry_filter=asymmetry,
             asymmetry_window=asym_window,
             asymmetry_temp_c=asym_temp,
@@ -464,7 +524,9 @@ def design_cmd(
         )
         design_input = build_design_input(target)
         mrna = design_input.require_nucleotide_target()
-        candidates = list(enumerate_candidates(mrna, length=length))
+        candidates = list(
+            enumerate_candidates(mrna, length=length, overhang=overhang_policy)
+        )
         evaluations = list(evaluate_all(candidates, criteria))
     except (HushError, ValueError) as exc:
         typer.secho(f"Design error: {exc}", fg=typer.colors.RED, err=True)
@@ -473,7 +535,10 @@ def design_cmd(
     selected = [e for e in evaluations if e.selected]
 
     typer.echo(typer.style(f"Target: {mrna.id or '<unnamed>'}", fg=typer.colors.CYAN, bold=True))
-    typer.echo(f"  {len(mrna)} nt  |  {len(evaluations)} candidate {length}-mer(s)")
+    typer.echo(
+        f"  {len(mrna)} nt  |  {len(evaluations)} candidate {length}-mer(s)  "
+        f"|  {overhang_policy.value} 3' overhang"
+    )
     typer.echo("")
     _print_criteria(criteria)
     typer.echo("")

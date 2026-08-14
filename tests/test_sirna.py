@@ -6,6 +6,8 @@ from core.errors import MolTypeError
 from core.sequence import BioSequence, MolType
 from core.sirna import (
     DEFAULT_LENGTH,
+    OVERHANG_LENGTH,
+    OverhangPolicy,
     SiRNACandidate,
     enumerate_candidates,
 )
@@ -77,6 +79,73 @@ class TestCandidateProperties:
     def test_gc_content_matches_sense(self):
         c = self._first()
         assert c.gc_content == c.sense.gc_content
+
+
+class TestOverhangs:
+    # A target with distinct flanks so overhang provenance is unambiguous.
+    TARGET = BioSequence(
+        "AUGGCUACGUUAGCCAUUGCAUGCAUGCAUGC", id="t", moltype=MolType.RNA
+    )
+
+    def _interior(self, length=19):
+        # Second candidate (position 1) still lacks a 2-nt upstream flank; take a
+        # position with both flanks present.
+        return list(enumerate_candidates(self.TARGET, length=length))
+
+    def test_overhang_lengths_are_two(self):
+        for c in enumerate_candidates(self.TARGET, length=19):
+            assert len(c.sense_overhang) == OVERHANG_LENGTH
+            assert len(c.guide_overhang) == OVERHANG_LENGTH
+
+    def test_natural_passenger_overhang_is_downstream_flank(self):
+        cands = self._interior()
+        # First interior candidate whose downstream flank exists.
+        c = cands[0]
+        expected = self.TARGET.seq[c.end : c.end + OVERHANG_LENGTH]
+        assert c.sense_overhang == expected
+
+    def test_natural_guide_overhang_is_revcomp_of_upstream_flank(self):
+        cands = self._interior()
+        c = cands[2]  # position 2: a full 2-nt upstream flank is available
+        upstream = self.TARGET.subseq(c.position - OVERHANG_LENGTH, c.position)
+        assert c.guide_overhang == upstream.reverse_complement().seq
+
+    def test_full_strands_are_core_plus_overhang(self):
+        c = self._interior()[2]
+        assert c.guide_full == c.antisense.seq + c.guide_overhang
+        assert c.passenger_full == c.sense.seq + c.sense_overhang
+        assert len(c.guide_full) == c.length + OVERHANG_LENGTH
+
+    def test_guide_full_equals_full_window_reverse_complement(self):
+        # Natural guide overhang comes from upstream, so guide_full is the
+        # reverse-complement of the core-plus-upstream window (siDirect's 21-mer).
+        c = self._interior()[2]
+        window = self.TARGET.subseq(c.position - OVERHANG_LENGTH, c.end)
+        assert c.guide_full == window.reverse_complement().seq
+
+    def test_5prime_edge_candidate_falls_back_to_dtdt_guide(self):
+        first = next(enumerate_candidates(self.TARGET, length=19))
+        assert first.position == 0
+        assert first.guide_overhang == "tt"
+
+    def test_3prime_edge_candidate_falls_back_to_dtdt_passenger(self):
+        cands = list(enumerate_candidates(self.TARGET, length=19))
+        assert cands[-1].sense_overhang == "tt"
+
+    def test_dtdt_policy_sets_both_overhangs(self):
+        c = next(enumerate_candidates(self.TARGET, length=19, overhang=OverhangPolicy.DTDT))
+        assert c.sense_overhang == "tt"
+        assert c.guide_overhang == "tt"
+
+    def test_uu_policy_sets_both_overhangs(self):
+        c = next(enumerate_candidates(self.TARGET, length=19, overhang=OverhangPolicy.UU))
+        assert c.sense_overhang == "UU"
+        assert c.guide_overhang == "UU"
+
+    def test_fixed_policies_ignore_position(self):
+        # Fixed overhangs are identical regardless of edge vs interior position.
+        cands = list(enumerate_candidates(self.TARGET, length=19, overhang=OverhangPolicy.UU))
+        assert all(c.sense_overhang == "UU" and c.guide_overhang == "UU" for c in cands)
 
 
 class TestValidation:

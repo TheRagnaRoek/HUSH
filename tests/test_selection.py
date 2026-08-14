@@ -13,6 +13,7 @@ from core.selection import (
     SelectionCriteria,
     evaluate,
     evaluate_all,
+    longest_homopolymer_run,
     select,
 )
 from core.thermo import ThermoParams
@@ -47,6 +48,62 @@ class TestCriteriaValidation:
     def test_rejects_non_thermoparams(self):
         with pytest.raises(TypeError, match="thermo_params"):
             SelectionCriteria(thermo_params="xia")  # type: ignore[arg-type]
+
+    def test_rejects_non_positive_max_run(self):
+        with pytest.raises(ValueError, match="max_homopolymer_run"):
+            SelectionCriteria(use_homopolymer_filter=True, max_homopolymer_run=0)
+
+
+class TestLongestHomopolymerRun:
+    def test_counts_longest_run_and_reports_base(self):
+        assert longest_homopolymer_run("ACGGGGUA") == (4, "G")
+
+    def test_single_run_spanning_whole_string(self):
+        assert longest_homopolymer_run("AAAA") == (4, "A")
+
+    def test_no_repeats_gives_run_of_one(self):
+        # All runs are length 1; the first base seen wins the tie.
+        assert longest_homopolymer_run("ACGU") == (1, "A")
+
+    def test_empty_string_is_zero(self):
+        assert longest_homopolymer_run("") == (0, "")
+
+
+class TestHomopolymerFilter:
+    def _criteria(self, **kw):
+        # Isolate the homopolymer gate from every other criterion.
+        base = dict(
+            use_ui_tei=False, use_reynolds=False, use_amarzguioui=False,
+            use_seed_filter=False, use_homopolymer_filter=True,
+        )
+        base.update(kw)
+        return SelectionCriteria(**base)
+
+    def test_disabled_leaves_fields_none(self):
+        criteria = SelectionCriteria(use_seed_filter=False)
+        ev = evaluate(one_candidate("ACGUACGUACGUACGUACG"), criteria)
+        assert ev.homopolymer_pass is None
+        assert ev.homopolymer_run is None
+
+    def test_run_over_limit_is_rejected(self):
+        # A GGGG run (4) exceeds the default max of 3.
+        ev = evaluate(one_candidate("ACGGGGUACGUACGUACGU"), self._criteria())
+        assert ev.homopolymer_run == 4
+        assert ev.homopolymer_pass is False
+        assert ev.selected is False
+        assert any("homopolymer" in r for r in ev.reasons)
+
+    def test_run_at_limit_passes(self):
+        # A GGG run (3) is exactly at the default max and is allowed.
+        ev = evaluate(one_candidate("ACGGGUACGUACGUACGUA"), self._criteria())
+        assert ev.homopolymer_run == 3
+        assert ev.homopolymer_pass is True
+        assert ev.selected is True
+
+    def test_max_run_is_tunable(self):
+        seq = "ACGGGUACGUACGUACGUA"  # longest run 3
+        assert evaluate(seq_c := one_candidate(seq), self._criteria(max_homopolymer_run=2)).homopolymer_pass is False
+        assert evaluate(seq_c, self._criteria(max_homopolymer_run=3)).homopolymer_pass is True
 
 
 class TestOnlyEnabledCriteriaAreComputed:

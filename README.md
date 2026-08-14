@@ -26,7 +26,7 @@ of the wider **Project HIDE** (HLA Interference through Disguise and Erasure).
 | Stage | Module | Status |
 |---|---|---|
 | 1. Input Layer | `core.inputs` + `core.sequence` | implemented |
-| 2. siRNA Design | `core.sirna` + `core.rules` + `core.thermo` / `core.seed` / `core.asymmetry` / `core.hairpin` + `core.selection` | in progress - enumeration, the classical rule pre-screen, the thermodynamics stage and the option-rich selection filter and a CLI (hush design) are implemented; the output layer is next |
+| 2. siRNA Design | `core.sirna` + `core.rules` + `core.thermo` / `core.seed` / `core.asymmetry` / `core.hairpin` + `core.selection` | nearly complete - enumeration (with 3' overhangs), the classical rule pre-screen, the thermodynamics stage, the option-rich selection filter (incl. a homopolymer gate) and a CLI (`hush design`) are implemented and validated against siDirect. Remaining: a transcriptome off-target filter (WIP - see below) |
 | 3. MSA / Allele | `msa` | planned |
 | 4. shRNA Conversion | `shrna` | planned |
 | 5. Output Layer | `core` / `app` | planned |
@@ -48,7 +48,9 @@ core/          Shared domain model + the siRNA design engine
 msa/           MSA / allele module (stage 3, placeholder)
 shrna/         shRNA conversion module (stage 4, placeholder)
 app/           CLI (app.cli) - the CLI-first interface
-data/examples/ Runnable example inputs (synthetic; not real genes)
+data/examples/ Runnable example inputs (synthetic panels plus real gene fixtures
+               such as PDCD1/PD-1 for siDirect benchmarking)
+tools/         Developer utilities (e.g. compare_sidirect.py, HUSH-vs-siDirect diff)
 tests/         pytest suite
 docs/          Concept dossier and design notes
 ```
@@ -101,8 +103,10 @@ mrna = target.as_rna()                         # target mRNA for siRNA design
 `core.sirna` slides a window along the target mRNA and yields every candidate
 site as an `SiRNACandidate` (sense/passenger and antisense/guide strands as
 validated RNA sequences, plus its coordinates). The duplex core length is
-tunable - default 19 nt, canonical range 19-24 - and the 2-nt 3' overhangs are
-treated as a later design choice rather than baked into candidates.
+tunable - default 19 nt, canonical range 19-24 - and each candidate carries a
+2-nt 3' overhang on each strand, tracked apart from the paired core so no filter
+sees it. Overhangs default to the target's natural flanks (`--overhang natural`;
+the offset Tuschl duplex) and can be switched to `dtdt` or `uu`.
 
 `core.rules` then applies the three classical 2004 rule sets, each reported
 separately so no verdict is a black box:
@@ -211,10 +215,11 @@ breakdown so the reason for any verdict is visible.
   any enabled set passes). No rule enabled means the rule step adds no constraint.
 - **Independent filters**, ANDed on top, each optional with tunable values: a GC
   window, the seed-duplex off-target Tm, a standalone internal-structure
-  (self-hairpin) gate, and the loading asymmetry. The GC filter is separate from
-  Reynolds' internal criterion I (fixed at the published 30-52%), and the hairpin
-  gate is separate from Reynolds' internal-repeat sub-criterion (Xia-pinned at
-  20 C) - both here are the tunable versions.
+  (self-hairpin) gate, a homopolymer-run gate (reject a single-nucleotide run
+  over `max_homopolymer_run`, e.g. `GGGG`), and the loading asymmetry. The GC
+  filter is separate from Reynolds' internal criterion I (fixed at the published
+  30-52%), and the hairpin gate is separate from Reynolds' internal-repeat
+  sub-criterion (Xia-pinned at 20 C) - both here are the tunable versions.
 - **Advanced thermodynamic knobs**, correct by default and safe to ignore: the
   asymmetry window (default 4 bp) and temperature, and the nearest-neighbor
   parameter set (Xia 1998 / Freier 1986) for the asymmetry and hairpin readouts.
@@ -248,7 +253,8 @@ The same options drive the `hush design` command:
 
 ```bash
 hush design data/examples/hla_a01.fasta --rules ui-tei,reynolds --mode any \
-  --seed-tm 21.5 --gc --gc-min 30 --gc-max 52 --hairpin -o selected.tsv
+  --seed-tm 21.5 --gc --gc-min 30 --gc-max 52 --hairpin --homopolymer \
+  --overhang natural -o selected.tsv
 ```
 
 It prints the chosen criteria, a funnel of how many candidates clear each enabled
@@ -259,8 +265,29 @@ expert thermodynamic knobs (`--hairpin-tm`, `--asym-window`, `--asym-temp`,
 option list, or see [`docs/design_options.md`](docs/design_options.md) for a
 one-page reference to every option, its default, and what it does.
 
+## Benchmarking against siDirect, and the off-target gap (WIP)
+
+siDirect is HUSH's gold-standard reference. On matched settings the functional
+rule pre-screen reproduces siDirect's picks exactly (validated candidate-for-
+candidate on the siDirect sample sequence). `tools/compare_sidirect.py` aligns a
+HUSH design TSV against a siDirect result export and reports the difference:
+
+```bash
+python tools/compare_sidirect.py \
+  --sidirect data/siDirect_PDCD1-CDS.ods --hush data/pdcd1_hush_relaxed.tsv
+```
+
+> **Transcriptome off-target filtering is not yet implemented (WIP).** siDirect
+> BLASTs each guide against the human transcriptome and drops candidates with a
+> near-perfect (0-1 mismatch) off-target. HUSH has no transcriptome search yet,
+> so on real targets it selects a superset of siDirect's candidates - the extras
+> are exactly those siDirect removed for off-target reasons. This is the next
+> task after the siRNA design core is finalised. Note this is distinct from the
+> seed-duplex Tm filter (`core.seed`), which is a *seed-mediated* off-target
+> proxy and is already implemented.
+
 ## Development
 
 ```bash
-pytest            # run the test suite (272 tests)
+pytest            # run the test suite (295 tests)
 ```

@@ -70,6 +70,23 @@ class RuleMode(str, Enum):
 DEFAULT_GC_MIN = 0.30
 DEFAULT_GC_MAX = 0.52
 
+# Longest run of one nucleotide the homopolymer filter tolerates; a run longer
+# than this (>= 4 by default) is rejected. Guards against synthesis-troublesome
+# and G-quadruplex-prone stretches (e.g. GGGG). Off by default.
+DEFAULT_MAX_HOMOPOLYMER_RUN = 3
+
+
+def longest_homopolymer_run(seq: str) -> tuple[int, str]:
+    """Return (length, base) of the longest single-nucleotide run in a strand."""
+    best_len, best_base = 0, ""
+    run_len, prev = 0, ""
+    for base in seq:
+        run_len = run_len + 1 if base == prev else 1
+        prev = base
+        if run_len > best_len:
+            best_len, best_base = run_len, base
+    return best_len, best_base
+
 
 # --------------------------------------------------------------------------- #
 # Criteria
@@ -95,6 +112,9 @@ class SelectionCriteria:
             reject a candidate whose most stable self-hairpin melts above
             hairpin_tm_max. Distinct from Reynolds criterion (its internal-repeat
             sub-criterion stays Xia-pinned at 20 C); this is the tunable one.
+        use_homopolymer_filter, max_homopolymer_run: reject a candidate whose
+            core contains a single-nucleotide run longer than max_homopolymer_run
+            (e.g. GGGG). Judged on the core only; overhangs are not counted.
         use_asymmetry_filter: require the duplex end asymmetry to favour loading
             the guide strand (sign only - no magnitude threshold).
 
@@ -123,6 +143,9 @@ class SelectionCriteria:
     use_hairpin_filter: bool = False
     hairpin_tm_max: float = DEFAULT_INTERNAL_TM_THRESHOLD_C
 
+    use_homopolymer_filter: bool = False
+    max_homopolymer_run: int = DEFAULT_MAX_HOMOPOLYMER_RUN
+
     use_asymmetry_filter: bool = False
 
     asymmetry_window: int = DEFAULT_WINDOW_BP
@@ -143,6 +166,10 @@ class SelectionCriteria:
             raise ValueError(
                 f"GC window must satisfy 0 <= gc_min <= gc_max <= 1; got "
                 f"[{self.gc_min}, {self.gc_max}]."
+            )
+        if self.use_homopolymer_filter and self.max_homopolymer_run < 1:
+            raise ValueError(
+                f"max_homopolymer_run must be >= 1; got {self.max_homopolymer_run}."
             )
 
     @property
@@ -183,11 +210,13 @@ class CandidateEvaluation:
     seed: SeedTmResult | None
     asymmetry: EndAsymmetry | None
     hairpin_tm: float | None
+    homopolymer_run: int | None
     gc_content: float
     rule_pass: bool
     gc_pass: bool | None
     seed_pass: bool | None
     hairpin_pass: bool | None
+    homopolymer_pass: bool | None
     asymmetry_pass: bool | None
     selected: bool
     reasons: tuple[str, ...] = field(default_factory=tuple)
@@ -255,6 +284,13 @@ def evaluate(
         hairpin_tm = None
         hairpin_pass = None
 
+    if criteria.use_homopolymer_filter:
+        homopolymer_run, homopolymer_base = longest_homopolymer_run(candidate.sense.seq)
+        homopolymer_pass = homopolymer_run <= criteria.max_homopolymer_run
+    else:
+        homopolymer_run, homopolymer_base = None, ""
+        homopolymer_pass = None
+
     asym = (
         end_asymmetry(
             candidate,
@@ -269,13 +305,16 @@ def evaluate(
 
     gates = [rule_pass]
     gates += [
-        p for p in (gc_pass, seed_pass, hairpin_pass, asymmetry_pass) if p is not None
+        p
+        for p in (gc_pass, seed_pass, hairpin_pass, homopolymer_pass, asymmetry_pass)
+        if p is not None
     ]
     selected = all(gates)
 
     reasons = () if selected else _reasons(
         criteria, rule_pass, gc, gc_pass, seed, seed_pass,
-        hairpin_tm, hairpin_pass, asym, asymmetry_pass,
+        hairpin_tm, hairpin_pass, homopolymer_run, homopolymer_base,
+        homopolymer_pass, asym, asymmetry_pass,
     )
 
     return CandidateEvaluation(
@@ -286,11 +325,13 @@ def evaluate(
         seed=seed,
         asymmetry=asym,
         hairpin_tm=hairpin_tm,
+        homopolymer_run=homopolymer_run,
         gc_content=gc,
         rule_pass=rule_pass,
         gc_pass=gc_pass,
         seed_pass=seed_pass,
         hairpin_pass=hairpin_pass,
+        homopolymer_pass=homopolymer_pass,
         asymmetry_pass=asymmetry_pass,
         selected=selected,
         reasons=reasons,
@@ -306,6 +347,9 @@ def _reasons(
     seed_pass: bool | None,
     hairpin_tm: float | None,
     hairpin_pass: bool | None,
+    homopolymer_run: int | None,
+    homopolymer_base: str,
+    homopolymer_pass: bool | None,
     asym: EndAsymmetry | None,
     asymmetry_pass: bool | None,
 ) -> tuple[str, ...]:
@@ -325,6 +369,11 @@ def _reasons(
     if hairpin_pass is False and hairpin_tm is not None:
         out.append(
             f"internal structure Tm {hairpin_tm:.1f}C > {criteria.hairpin_tm_max:.1f}C"
+        )
+    if homopolymer_pass is False and homopolymer_run is not None:
+        out.append(
+            f"homopolymer run of {homopolymer_run} {homopolymer_base} "
+            f"(> {criteria.max_homopolymer_run})"
         )
     if asymmetry_pass is False and asym is not None:
         out.append(f"{asym.preferred_strand}-favoured loading")

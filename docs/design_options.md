@@ -18,7 +18,8 @@ The everyday design surface - what a normal run turns.
 
 | CLI flag | `SelectionCriteria` field | Default | What it does |
 |---|---|---|---|
-| `--length` / `-l` | (enumeration arg) | `19` | siRNA core length, 19-24 nt. |
+| `--length` / `-l` | (enumeration arg) | `19` | siRNA **core** length, 19-24 nt (the paired region; overhangs are added on top). |
+| `--overhang` | (enumeration arg) | `natural` | 3' overhang on each strand: `natural` (mRNA-derived flanks), `dtdt` (2'-deoxythymidine, shown lowercase `tt`), or `uu`. |
 | `--rules` | `use_ui_tei`, `use_reynolds`, `use_amarzguioui` | `all` | Which of the three 2004 rule sets to apply (comma list, or `all`/`none`). |
 | `--mode` | `rule_mode` | `all` | Combine enabled rule sets by `all` (intersection) or `any` (union). |
 | `--reynolds-threshold` | `reynolds_threshold` | `6` | Reynolds score cut-off (out of 10). |
@@ -27,7 +28,28 @@ The everyday design surface - what a normal run turns.
 | `--seed-tm` | `seed_tm_threshold` | `21.5` | Seed-duplex Tm cut-off in C. |
 | `--gc` / `--no-gc` | `use_gc_filter` | off | Apply a standalone GC-content window (separate from Reynolds' internal GC criterion). |
 | `--gc-min` / `--gc-max` | `gc_min` / `gc_max` | `30` / `52` | GC window bounds, in percent. |
+| `--homopolymer` / `--no-homopolymer` | `use_homopolymer_filter` | off | Reject candidates whose core has a single-nucleotide run longer than `--max-run` (e.g. `GGGG`). |
+| `--max-run` | `max_homopolymer_run` | `3` | Longest tolerated single-nucleotide run in the core; a run over this is rejected. |
 | `--asymmetry` / `--no-asymmetry` | `use_asymmetry_filter` | off | Require duplex-end asymmetry to favour loading the guide (sign only, no magnitude threshold). |
+
+### Duplex length and overhangs
+
+HUSH's canonical duplex is a **19-nt paired core with symmetric 2-nt 3' overhangs**,
+i.e. 21-nt strands (Elbashir et al. 2001, *EMBO J* 20:6877). `--length` sets the
+**core**, not the strand: the three rule sets (Ui-Tei, Reynolds, Amarzguioui) are all
+defined on the 19-nt core, so scoring stays faithful to the source papers regardless of
+overhang. Overhangs are tracked apart from the core and never reach a filter.
+
+The `natural` default draws each 3' overhang from the target's own flanks (the guide's
+overhang is the reverse-complement of the 2 nt upstream of the core - the true offset
+Tuschl duplex). A candidate whose flank runs past a transcript end falls back to `dtdt`
+there. In the TSV, `guide_5to3` / `passenger_5to3` are the full ordered strands and the
+`*_overhang` columns name the overhang explicitly; `start`/`end` are core coordinates.
+
+Note for benchmarking against siDirect: in `natural` mode the **guide** strand still
+equals siDirect's listed guide (core + upstream overhang = reverse-complement of the
+full window), but the **passenger** is offset (its overhang is the downstream flank), so
+compare on the guide or the target position, not the passenger.
 
 ## Advanced options (thermodynamic internals)
 
@@ -77,3 +99,19 @@ hush design data/examples/hla_a01.fasta --rules all --mode any \
 
 Every run prints the chosen criteria and a funnel of how many candidates clear
 each enabled gate, so an empty result shows exactly which gate removed them.
+
+## Planned / deferred
+
+- **Transcriptome off-target filter (WIP, next task).** siDirect BLASTs each
+  guide against the human transcriptome and rejects candidates with a near-perfect
+  (0-1 mismatch) off-target. HUSH does not yet do a database search, so on real
+  targets it selects a superset of siDirect's candidates - the extras are the ones
+  siDirect removed for off-target reasons. This is distinct from the already-
+  implemented seed-duplex Tm filter (`--seed`), which is a seed-mediated off-target
+  *proxy*, not a database search. Use `tools/compare_sidirect.py` to see the gap on
+  a given target.
+- **Sequence-motif constraint** (e.g. force a `G` at core position 3 via an
+  `NNGNN...`-style pattern). This is primarily a loop-grafting requirement for
+  shRNA, where a specific base at the graft junction improves hairpin folding, so
+  it will land in the shRNA module rather than the siRNA `design` step. Tracked
+  here so the requirement is not lost.
