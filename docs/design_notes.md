@@ -24,6 +24,7 @@ Contents:
 - [Intramolecular hairpin Tm (`core.hairpin`)](#intramolecular-hairpin-tm-corehairpin)
 - [Classical rule sets (`core.rules`)](#classical-rule-sets-corerules)
 - [Candidate selection (`core.selection`)](#candidate-selection-coreselection)
+- [Duplex geometry: core length and 3' overhangs (`core.sirna`)](#duplex-geometry-core-length-and-3-overhangs-coresirna)
 
 ---
 
@@ -400,7 +401,8 @@ reason for any verdict is visible.
   imposes no constraint.
 - **Independent filters**, each optional, ANDed on top: a GC-content window, the
   seed-duplex off-target Tm, a standalone internal-structure (self-hairpin) gate,
-  and the loading asymmetry.
+  a homopolymer-run gate (reject a single-nucleotide run over `max_homopolymer_run`,
+  default 3, e.g. `GGGG` - judged on the core only), and the loading asymmetry.
 
 ### Customisable values are options, not rule edits
 
@@ -436,3 +438,63 @@ on.
 Nothing is ranked or reordered: selected candidates are returned in target-position
 order, exactly as enumerated. Ordering by any single criterion is left to the
 caller.
+
+---
+
+## Duplex geometry: core length and 3' overhangs (`core.sirna`)
+
+### The standard: a 19-nt core with symmetric 2-nt 3' overhangs
+
+HUSH's canonical duplex is a **19-nt fully paired core carrying a 2-nt 3' overhang on
+each strand** - 21-nt synthesized strands, the Elbashir/Tuschl design. Two numbers get
+conflated in the literature and it is worth separating them: **19** is the paired core
+(the RISC-relevant, thermodynamically active region), **21** is the strand a vendor
+synthesizes (core + overhang), and **23** is a different measurement again (an mRNA
+target-site footprint, or a Dicer-substrate design). `--length` sets the **core** and
+defaults to 19.
+
+Keeping the core at 19 is not just convention: the three rule sets (Ui-Tei, Reynolds,
+Amarzguioui) are all *defined and validated on the 19-nt duplex*, with position-specific
+criteria indexed against it. Enlarging the core would feed those scorers inputs their
+authors never specified. So the overhang is modelled as a separate 2-nt feature, tracked
+apart from the core, and **no filter (rules, GC, seed, hairpin, homopolymer) ever sees
+it** - the seed keys off guide positions 2-8 from the 5' end, which the 3' overhang does
+not touch.
+
+### Overhang policy
+
+`OverhangPolicy` offers three choices (`--overhang`):
+
+- **`natural`** (default): the overhang is the target's own flanking sequence. The
+  passenger's 3' overhang is the 2 nt immediately 3' of the core on the mRNA; the guide's
+  3' overhang is the reverse-complement of the 2 nt immediately 5' of the core. This is
+  the true *offset* Tuschl duplex - the two strands share the 19-nt core but their
+  overhangs come from opposite flanks, so they are not a blunt reverse-complement pair.
+- **`dtdt`**: two 2'-deoxythymidines on both strands (the common synthetic overhang),
+  rendered lowercase `tt` to flag the DNA residues in an otherwise-RNA strand.
+- **`uu`**: two ribo-uridines on both strands.
+
+A candidate whose natural flank runs past a transcript end (the first/last couple of
+sliding-window positions) has no flank to draw from and falls back to `dtdt` there.
+Downstream, the MSA/allele module restricts candidates to conserved interior windows, so
+this edge fallback is a rare safety net rather than a common path.
+
+### Consequence for siDirect benchmarking
+
+In `natural` mode the guide strand as ordered (`guide_full` = core + upstream-derived
+overhang) equals the reverse-complement of the full core-plus-upstream window - i.e.
+exactly siDirect's listed guide. So adding the correct offset geometry leaves the
+functionally decisive strand reproducing siDirect. The passenger, by contrast, is offset
+(its overhang is the downstream flank) and no longer matches siDirect's blunt-listed
+passenger, which is the intended physical duplex, not a defect. Benchmarks should compare
+on the guide or the target position.
+
+### References
+
+- Elbashir SM, Harborth J, Lendeckel W, Yalcin A, Weber K, Tuschl T. Duplexes of
+  21-nucleotide RNAs mediate RNA interference in cultured mammalian cells. *Nature* 411,
+  494-498 (2001). doi:10.1038/35078107
+- Elbashir SM, Martinez J, Patkaniowska A, Lendeckel W, Tuschl T. Functional anatomy of
+  siRNAs for mediating efficient RNAi in Drosophila melanogaster embryo lysate. *EMBO J*
+  20, 6877-6888 (2001). doi:10.1093/emboj/20.23.6877 - establishes the 2-nt 3' overhang
+  as most efficient and that 2'-deoxy (dTdT) is tolerated at the 3' end.
