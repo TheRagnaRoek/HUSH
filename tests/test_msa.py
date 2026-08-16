@@ -1,4 +1,4 @@
-"""Tests for the MSA / allele module (msa.targeting, msa.errors)."""
+"""Tests for the MSA / allele module (msa.targeting, msa.msa_errors)."""
 
 from dataclasses import fields
 
@@ -6,7 +6,7 @@ import pytest
 
 from core.errors import HushError
 from core.sequence import BioSequence, MolType, SequencePanel
-from msa.errors import MsaError, PanelError, TargetingError
+from msa.msa_errors import MsaError, PanelError, TargetingError
 from msa.targeting import AlleleTargeting, TargetingMode
 
 A2 = "HLA-A*02:01"

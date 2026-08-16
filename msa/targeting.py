@@ -32,7 +32,7 @@ from enum import Enum
 from typing import Iterable
 
 from core.sequence import SequencePanel
-from msa.errors import PanelError, TargetingError
+from msa.msa_errors import PanelError, TargetingError
 
 # --------------------------------------------------------------------------- #
 # Mode
