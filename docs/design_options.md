@@ -1,0 +1,117 @@
+# HUSH `design` options - quick reference
+
+A one-page orientation to the optional parameters of the selection step, as
+exposed by the `hush design` command and the `SelectionCriteria` dataclass. Each
+row lists the CLI flag, the matching `SelectionCriteria` field, its default, and
+what it does. The *why* behind each choice lives in
+[`design_notes.md`](design_notes.md) (selection, seed, asymmetry and hairpin
+sections); this file is just the map.
+
+Selection is a **filter, not a ranking**: every criterion below is an independent,
+optional gate, and a candidate is selected only if it clears every enabled one.
+Nothing is scored into a single number, and selected candidates come back in
+target-position order.
+
+## Standard options
+
+The everyday design surface - what a normal run turns.
+
+| CLI flag | `SelectionCriteria` field | Default | What it does |
+|---|---|---|---|
+| `--length` / `-l` | (enumeration arg) | `19` | siRNA **core** length, 19-24 nt (the paired region; overhangs are added on top). |
+| `--overhang` | (enumeration arg) | `natural` | 3' overhang on each strand: `natural` (mRNA-derived flanks), `dtdt` (2'-deoxythymidine, shown lowercase `tt`), or `uu`. |
+| `--rules` | `use_ui_tei`, `use_reynolds`, `use_amarzguioui` | `all` | Which of the three 2004 rule sets to apply (comma list, or `all`/`none`). |
+| `--mode` | `rule_mode` | `all` | Combine enabled rule sets by `all` (intersection) or `any` (union). |
+| `--reynolds-threshold` | `reynolds_threshold` | `6` | Reynolds score cut-off (out of 10). |
+| `--amarzguioui-threshold` | `amarzguioui_threshold` | `3` | Amarzguioui score cut-off. |
+| `--seed` / `--no-seed` | `use_seed_filter` | on | Apply the siDirect seed-duplex off-target Tm filter (both strands). |
+| `--seed-tm` | `seed_tm_threshold` | `21.5` | Seed-duplex Tm cut-off in C. |
+| `--gc` / `--no-gc` | `use_gc_filter` | off | Apply a standalone GC-content window (separate from Reynolds' internal GC criterion). |
+| `--gc-min` / `--gc-max` | `gc_min` / `gc_max` | `30` / `52` | GC window bounds, in percent. |
+| `--homopolymer` / `--no-homopolymer` | `use_homopolymer_filter` | off | Reject candidates whose core has a single-nucleotide run longer than `--max-run` (e.g. `GGGG`). |
+| `--max-run` | `max_homopolymer_run` | `3` | Longest tolerated single-nucleotide run in the core; a run over this is rejected. |
+| `--asymmetry` / `--no-asymmetry` | `use_asymmetry_filter` | off | Require duplex-end asymmetry to favour loading the guide (sign only, no magnitude threshold). |
+
+### Duplex length and overhangs
+
+HUSH's canonical duplex is a **19-nt paired core with symmetric 2-nt 3' overhangs**,
+i.e. 21-nt strands (Elbashir et al. 2001, *EMBO J* 20:6877). `--length` sets the
+**core**, not the strand: the three rule sets (Ui-Tei, Reynolds, Amarzguioui) are all
+defined on the 19-nt core, so scoring stays faithful to the source papers regardless of
+overhang. Overhangs are tracked apart from the core and never reach a filter.
+
+The `natural` default draws each 3' overhang from the target's own flanks (the guide's
+overhang is the reverse-complement of the 2 nt upstream of the core - the true offset
+Tuschl duplex). A candidate whose flank runs past a transcript end falls back to `dtdt`
+there. In the TSV, `guide_5to3` / `passenger_5to3` are the full ordered strands and the
+`*_overhang` columns name the overhang explicitly; `start`/`end` are core coordinates.
+
+Note for benchmarking against siDirect: in `natural` mode the **guide** strand still
+equals siDirect's listed guide (core + upstream overhang = reverse-complement of the
+full window), but the **passenger** is offset (its overhang is the downstream flank), so
+compare on the guide or the target position, not the passenger.
+
+## Advanced options (thermodynamic internals)
+
+Correct by default and safe to ignore. These sit in the "Advanced" group of
+`hush design --help`.
+
+| CLI flag | `SelectionCriteria` field | Default | What it does |
+|---|---|---|---|
+| `--hairpin` / `--no-hairpin` | `use_hairpin_filter` | off | Reject candidates whose sense strand folds into a stable internal hairpin. Standalone version of Reynolds' internal-repeat criterion. |
+| `--hairpin-tm` | `hairpin_tm_max` | `20.0` | Internal-structure Tm cut-off in C; reject if the most stable self-hairpin melts above this. |
+| `--asym-window` | `asymmetry_window` | `4` | Terminal base pairs compared at each duplex end for the asymmetry measurement. |
+| `--asym-temp` | `asymmetry_temp_c` | `37.0` | Temperature in C for the asymmetry free energy. |
+| `--params` | `thermo_params` | `xia` | Nearest-neighbor parameter set (`xia` / `freier`) for the asymmetry and hairpin readouts **only**. |
+
+## What is deliberately not tunable
+
+Some values are pinned so a published calibration stays valid - exposing them
+would let a run silently invalidate a threshold:
+
+- **The seed filter's internals** (Freier parameters, initiation constant,
+  concentration, salt). Only the seed *threshold* (`--seed-tm`) is tunable; its
+  machinery is fixed, and `--params` never reaches it. siDirect's 21.5 C cut-off
+  is only meaningful against exactly these numbers.
+- **Reynolds' internal GC criterion** (30-52%) and **internal-repeat criterion**
+  (Xia 1998, Tm <= 20 C). The standalone `--gc` and `--hairpin` filters are the
+  tunable counterparts; the rule keeps its published form.
+- **The asymmetry magnitude threshold** - there is none. The filter uses the sign
+  of the differential only; turning kcal/mol into a cut-off needs calibration data
+  HUSH does not have.
+
+## Two example runs
+
+Strict default (all three rules, seed filter on) - very selective on a GC-rich
+target:
+
+```bash
+hush design data/examples/hla_a01.fasta
+```
+
+Relaxed, with the standalone structure and GC gates added and the union of rule
+sets:
+
+```bash
+hush design data/examples/hla_a01.fasta --rules all --mode any \
+  --no-seed --gc --hairpin -o selected.tsv
+```
+
+Every run prints the chosen criteria and a funnel of how many candidates clear
+each enabled gate, so an empty result shows exactly which gate removed them.
+
+## Planned / deferred
+
+- **Transcriptome off-target filter (WIP, next task).** siDirect BLASTs each
+  guide against the human transcriptome and rejects candidates with a near-perfect
+  (0-1 mismatch) off-target. HUSH does not yet do a database search, so on real
+  targets it selects a superset of siDirect's candidates - the extras are the ones
+  siDirect removed for off-target reasons. This is distinct from the already-
+  implemented seed-duplex Tm filter (`--seed`), which is a seed-mediated off-target
+  *proxy*, not a database search. Use `tools/compare_sidirect.py` to see the gap on
+  a given target.
+- **Sequence-motif constraint** (e.g. force a `G` at core position 3 via an
+  `NNGNN...`-style pattern). This is primarily a loop-grafting requirement for
+  shRNA, where a specific base at the graft junction improves hairpin folding, so
+  it will land in the shRNA module rather than the siRNA `design` step. Tracked
+  here so the requirement is not lost.
