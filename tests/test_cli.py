@@ -7,24 +7,22 @@ from app.cli import app
 runner = CliRunner()
 
 
-def test_input_target_only(target_fasta):
-    result = runner.invoke(app, ["input", str(target_fasta)])
+def test_inspect_with_panel_target_readiness(target_fasta, panel_fasta):
+    # --panel switches inspect into design-input preview mode.
+    result = runner.invoke(
+        app, ["inspect", str(target_fasta), "--panel", str(panel_fasta)]
+    )
     assert result.exit_code == 0
     assert "HUSH_demo_target" in result.stdout
     assert "ready for siRNA design" in result.stdout
-
-
-def test_input_with_panel(target_fasta, panel_fasta):
-    result = runner.invoke(
-        app, ["input", str(target_fasta), "--panel", str(panel_fasta)]
-    )
-    assert result.exit_code == 0
     assert "Panel" in result.stdout
     assert "3 sequences" in result.stdout
 
 
-def test_input_protein_pdb_warns(mini_pdb):
-    result = runner.invoke(app, ["input", str(mini_pdb)])
+def test_inspect_panel_protein_pdb_warns(mini_pdb, panel_fasta):
+    result = runner.invoke(
+        app, ["inspect", str(mini_pdb), "--panel", str(panel_fasta)]
+    )
     assert result.exit_code == 0
     # Protein target should trigger the nucleotide-required warning, not crash.
     assert "needs the coding transcript" in result.stdout
@@ -36,10 +34,22 @@ def test_inspect_lists_sequences(panel_fasta):
     assert "3 sequence(s)" in result.stdout
 
 
-def test_input_bad_file_exits_nonzero(tmp_path):
+def test_inspect_listing_shows_readiness(target_fasta):
+    result = runner.invoke(app, ["inspect", str(target_fasta)])
+    assert result.exit_code == 0
+    assert "ready for siRNA design" in result.stdout
+
+
+def test_inspect_listing_protein_flags_transcript_needed(mini_pdb):
+    result = runner.invoke(app, ["inspect", str(mini_pdb)])
+    assert result.exit_code == 0
+    assert "coding transcript" in result.stdout
+
+
+def test_inspect_bad_file_exits_nonzero(tmp_path):
     bad = tmp_path / "bad.txt"
     bad.write_text("not a sequence file")
-    result = runner.invoke(app, ["input", str(bad)])
+    result = runner.invoke(app, ["inspect", str(bad)])
     assert result.exit_code != 0
 
 

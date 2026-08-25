@@ -64,19 +64,32 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-## Usage (Input Layer)
+### Running without activating the venv
 
-Load and inspect a target, with an optional related-sequence panel:
+Once installed, you do not have to activate the venv every time. The repo ships
+thin launchers that call the venv's interpreter directly, so `hush` works from
+the project folder (or by full path from anywhere):
 
 ```bash
-hush input data/examples/target_example.fasta \
-  --panel data/examples/hla_panel_example.fasta
+# Windows:  .\hush inspect data/examples/hla_panel_example.fasta
+# POSIX:    ./hush  inspect data/examples/hla_panel_example.fasta
 ```
+
+## Usage (Input Layer)
 
 List every sequence in any FASTA/PDB/mmCIF file:
 
 ```bash
 hush inspect data/examples/hla_panel_example.fasta
+```
+
+Add `--panel` to treat the file as the design target and preview what the
+pipeline will receive - target/panel roles, molecule types, and a readiness
+check:
+
+```bash
+hush inspect data/examples/target_example.fasta \
+  --panel data/examples/hla_panel_example.fasta
 ```
 
 The Input Layer parses FASTA and PDB/mmCIF, validates residues against the
@@ -289,5 +302,5 @@ python tools/compare_sidirect.py \
 ## Development
 
 ```bash
-pytest            # run the test suite (295 tests)
+pytest            # run the test suite (296 tests)
 ```
