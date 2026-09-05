@@ -20,6 +20,7 @@ Contents:
 
 - [Nearest-neighbor duplex thermodynamics (`core.thermo`)](#nearest-neighbor-duplex-thermodynamics-corethermo)
 - [Seed-duplex Tm off-target filter (`core.seed`)](#seed-duplex-tm-off-target-filter-coreseed)
+- [Transcriptome homology off-target filter (`core.offtarget`)](#transcriptome-homology-off-target-filter-coreofftarget)
 - [Duplex-end asymmetry (`core.asymmetry`)](#duplex-end-asymmetry-coreasymmetry)
 - [Intramolecular hairpin Tm (`core.hairpin`)](#intramolecular-hairpin-tm-corehairpin)
 - [Classical rule sets (`core.rules`)](#classical-rule-sets-corerules)
@@ -186,6 +187,116 @@ step.
   in the seed duplex... *Nucleic Acids Research* 36(22), 7100-7109.
   doi:10.1093/nar/gkn902
 - Freier, S.M. et al. (1986). *PNAS* 83(24), 9373-9377.
+
+---
+
+## Transcriptome homology off-target filter (`core.offtarget`)
+
+### What it is, and how it differs from the seed filter
+
+siDirect's third selection step is a *homology* search: it looks each guide up
+against the human transcriptome and drops candidates that have a near-perfect
+match somewhere other than the intended target. This is a different question from
+`core.seed`. The seed filter asks a sequence-intrinsic question ("does this seed
+pair too stably?") and never looks at any transcript; this module asks a database
+question ("where else in the transcriptome could this guide bind, and how well?").
+The two are orthogonal and compose: a candidate can be seed-clean yet have a
+near-perfect full-length off-target, or vice versa.
+
+The motivating gap: benchmarked on the PDCD1 CDS with matched functional rules,
+HUSH kept a **superset** of siDirect's picks. The extras were exactly the
+candidates siDirect had removed for near-perfect off-targets - decisively, a
+candidate at CDS 650-668 that clears every functional rule and composition gate,
+so no rule difference could explain the disagreement. Only a transcriptome search
+closes it.
+
+### The search: bowtie1 `-v`, the open equivalent of GGGenome
+
+siDirect relies on GGGenome, a fast k-mismatch full-text search that is not open.
+The open, offline counterpart is **bowtie1 in `-v` mode**: end-to-end alignment
+allowing at most N mismatches, reporting every hit. It is *not* BLAST - BLAST is a
+local heuristic that can miss short near-matches and reports HSPs rather than a
+clean full-guide mismatch count, so it cannot reproduce siDirect's "minimum number
+of mismatches" column reliably. bowtie1 (Artistic License) is also lighter than
+bowtie2 (GPLv3) and, unlike bowtie2, keeps the fixed-mismatch `-v` mode (capped at
+3) this needs. The reference is **RefSeq human mRNA**, pinned per build; its NM_/NR_
+accessions match HUSH's benchmark fixtures, so on-target exclusion by accession is
+exact. Build the index with `tools/build_offtarget_db.py`, which records a manifest
+(release, source URLs, checksums, bowtie version) for reproducibility.
+
+### Two backends behind one protocol
+
+An `OffTargetSearcher` protocol has two real implementations. `BruteForceSearcher`
+is a pure-Python Hamming scan - correct by construction, no external tool - for
+small references (a curated allele panel, and the tests); it is the oracle the
+bowtie backend is checked against. `BowtieSearcher` shells out to bowtie (via
+stdlib `subprocess`, so importing the module never needs the binary) and, through
+`precompute()`, aligns every strand of every candidate in a **single** bowtie run,
+returning a lookup-backed `PrecomputedSearcher` so the per-candidate selection loop
+pays no process cost. Both engines are ungapped, Hamming-distance and
+forward-orientation, so their results agree exactly.
+
+### Strand semantics and on-target exclusion
+
+A guide silences transcripts complementary to it, i.e. those carrying its target
+site (the **sense** core); the passenger, if mis-loaded, silences those carrying
+the **antisense** core. So each candidate contributes two reads - the guide side
+searches the sense core, the passenger side the antisense core - forward strand
+only (`--norc`), because transcripts are single-stranded sense mRNA. The
+candidate's own source transcript is excluded by accession (version aside),
+matching siDirect; it is auto-detected from the target FASTA header and
+overridable.
+
+### The gate, and its calibration
+
+The gate rejects a candidate whose nearest non-self off-target (on either strand)
+has **fewer than** `offtarget_min_mismatch` mismatches. The default is **2**:
+on the PDCD1 benchmark siDirect keeps candidates whose nearest off-target is >= 2
+mismatches away and drops only the near-perfect (0/1) ones, so a threshold of 2
+reproduces its decision - a threshold of 3 would wrongly drop siDirect's own
+2-mismatch picks. The search depth defaults to 3, deeper than the gate needs, so
+the reported nearest-mismatch and per-level counts line up with siDirect's own
+columns (which reach 3). The gate is **flat**, not position-weighted: seed-region
+weighting is already `core.seed`'s job, so the two off-target angles stay separate.
+
+### Relevance to allele-aware design
+
+For a polymorphic family like HLA the generic framing is only partly right:
+cross-reactivity *within* the intended allele family may be the design goal
+(pan-allele knockdown), not a hazard, so a single global gate that treats every
+non-source hit as off-target cannot express it. v1 excludes only the source
+accession; a later `msa/` integration is where "intended vs unintended
+cross-reactivity" belongs (the same distinction the seed design note raises). The
+`BruteForceSearcher` over a small curated panel is the natural tool for that
+targeted question.
+
+### Validation
+
+Unit tests plant off-targets at known mismatch levels in a tiny synthetic
+reference and check the mismatch counts, on-target exclusion (version-insensitive),
+both-strand detection, the threshold boundary, and the bowtie output parser; a
+skipped-if-absent parity test asserts `BowtieSearcher` and `BruteForceSearcher`
+agree on a freshly built index. Enforced in `tests/test_offtarget.py`. The
+transcriptome-scale acceptance check (HUSH-only candidates drop to zero against
+siDirect on PDCD1) is run with a built index via `tools/compare_sidirect.py`.
+
+### Scope and deferrals
+
+Genomic (non-transcript) off-targets are out of scope, as is any expression-weighted
+off-target model (the proposal in `seed_offtarget_design_note.md` is a separate,
+later research task). The full decision record - bowtie1 vs BLAST, RefSeq pinning,
+strand semantics, the HLA caveat - is in
+[`offtarget_design_note.md`](offtarget_design_note.md).
+
+### References
+
+- Primary: Naito, Y. et al. (2009). siDirect 2.0. *BMC Bioinformatics* 10, 392.
+  doi:10.1186/1471-2105-10-392 (the transcriptome off-target selection step).
+- Langmead, B., Trapnell, C., Pop, M., Salzberg, S.L. (2009). Ultrafast and
+  memory-efficient alignment of short DNA sequences to the human genome. *Genome
+  Biology* 10, R25. doi:10.1186/gb-2009-10-3-r25 (bowtie).
+- RefSeq: O'Leary, N.A. et al. (2016). Reference sequence (RefSeq) database at
+  NCBI. *Nucleic Acids Research* 44(D1), D733-D745. doi:10.1093/nar/gkv1189
 
 ---
 
@@ -400,9 +511,11 @@ reason for any verdict is visible.
   selected algorithms would each select). With no rule set enabled, the rule step
   imposes no constraint.
 - **Independent filters**, each optional, ANDed on top: a GC-content window, the
-  seed-duplex off-target Tm, a standalone internal-structure (self-hairpin) gate,
-  a homopolymer-run gate (reject a single-nucleotide run over `max_homopolymer_run`,
-  default 3, e.g. `GGGG` - judged on the core only), and the loading asymmetry.
+  seed-duplex off-target Tm, the transcriptome homology off-target filter
+  (`core.offtarget`, which needs a reference database handle), a standalone
+  internal-structure (self-hairpin) gate, a homopolymer-run gate (reject a
+  single-nucleotide run over `max_homopolymer_run`, default 3, e.g. `GGGG` - judged
+  on the core only), and the loading asymmetry.
 
 ### Customisable values are options, not rule edits
 
