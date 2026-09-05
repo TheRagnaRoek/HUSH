@@ -26,7 +26,7 @@ of the wider **Project HIDE** (HLA Interference through Disguise and Erasure).
 | Stage | Module | Status |
 |---|---|---|
 | 1. Input Layer | `core.inputs` + `core.sequence` | implemented |
-| 2. siRNA Design | `core.sirna` + `core.rules` + `core.thermo` / `core.seed` / `core.asymmetry` / `core.hairpin` + `core.selection` | nearly complete - enumeration (with 3' overhangs), the classical rule pre-screen, the thermodynamics stage, the option-rich selection filter (incl. a homopolymer gate) and a CLI (`hush design`) are implemented and validated against siDirect. Remaining: a transcriptome off-target filter (WIP - see below) |
+| 2. siRNA Design | `core.sirna` + `core.rules` + `core.thermo` / `core.seed` / `core.offtarget` / `core.asymmetry` / `core.hairpin` + `core.selection` | complete - enumeration (with 3' overhangs), the classical rule pre-screen, the thermodynamics stage, the seed and transcriptome off-target filters, the option-rich selection filter (incl. a homopolymer gate) and a CLI (`hush design`) are implemented and validated against siDirect |
 | 3. MSA / Allele | `msa` | planned |
 | 4. shRNA Conversion | `shrna` | planned |
 | 5. Output Layer | `core` / `app` | planned |
@@ -41,6 +41,7 @@ core/          Shared domain model + the siRNA design engine
   rules.py       Classical rule pre-screen (Ui-Tei / Reynolds / Amarzguioui)
   thermo.py      Nearest-neighbor duplex thermodynamics (dH/dS -> dG, Tm)
   seed.py        siDirect seed-duplex Tm off-target filter
+  offtarget.py   Transcriptome homology off-target filter (bowtie1 / brute force)
   asymmetry.py   Duplex-end thermodynamic asymmetry (RISC strand loading)
   hairpin.py     Intramolecular hairpin Tm (Reynolds internal-structure rule)
   selection.py   Option-rich candidate filter (which rules + filters to apply)
@@ -64,6 +65,13 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
+HUSH is pure-pip and needs no external binaries for its core. The one optional
+dependency is **bowtie1** (a separate binary, e.g. via bioconda or your package
+manager), needed only for transcriptome-scale off-target search (`hush design
+--offtarget`); everything else, including small-panel off-target search, runs
+without it.
+
+## Usage (Input Layer)
 ### Running without activating the venv
 
 Once installed, you do not have to activate the venv every time. The repo ships
@@ -278,7 +286,42 @@ expert thermodynamic knobs (`--hairpin-tm`, `--asym-window`, `--asym-temp`,
 option list, or see [`docs/design_options.md`](docs/design_options.md) for a
 one-page reference to every option, its default, and what it does.
 
-## Benchmarking against siDirect, and the off-target gap (WIP)
+## Transcriptome off-target filter (stage 2)
+
+`core.offtarget` is HUSH's homology off-target search - the open, offline
+counterpart of siDirect's transcriptome step. For each candidate it searches a
+reference transcriptome for near-complementary sites (0-3 mismatches, both
+strands, the intended transcript excluded) and gates out candidates whose nearest
+off-target is too close. This is **distinct** from `core.seed`: the seed filter is
+a sequence-intrinsic proxy that never looks at a transcript, while this is a
+database search. The two are orthogonal and compose.
+
+The search runs on **bowtie1** in `-v` mode - the open equivalent of the GGGenome
+k-mismatch search siDirect relies on, and the right tool for exact full-length
+mismatch counting (not BLAST, a local heuristic). A pure-Python `BruteForceSearcher`
+covers small references (a curated allele panel, and the tests) with no external
+tool; `BowtieSearcher` scales to the whole transcriptome. Build a reference index
+first (a large, one-off download):
+
+```bash
+python tools/build_offtarget_db.py          # RefSeq human mRNA -> data/reference/
+```
+
+```python
+from core.offtarget import BowtieSearcher, evaluate_offtarget
+
+searcher = BowtieSearcher("data/reference/refseq_human_mrna", max_mismatch=3)
+profile = evaluate_offtarget(candidate, searcher, threshold=2,
+                             self_accession="NM_005018.3")
+profile.min_mismatch      # nearest off-target, or None if none within depth
+profile.passes            # True unless a nearer-than-threshold off-target exists
+```
+
+Rationale (why bowtie1 and not BLAST, the RefSeq pinning, strand semantics, the
+allele-aware caveat) is in
+[`docs/offtarget_design_note.md`](docs/offtarget_design_note.md).
+
+## Benchmarking against siDirect
 
 siDirect is HUSH's gold-standard reference. On matched settings the functional
 rule pre-screen reproduces siDirect's picks exactly (validated candidate-for-
@@ -290,17 +333,13 @@ python tools/compare_sidirect.py \
   --sidirect data/siDirect_PDCD1-CDS.ods --hush data/pdcd1_hush_relaxed.tsv
 ```
 
-> **Transcriptome off-target filtering is not yet implemented (WIP).** siDirect
-> BLASTs each guide against the human transcriptome and drops candidates with a
-> near-perfect (0-1 mismatch) off-target. HUSH has no transcriptome search yet,
-> so on real targets it selects a superset of siDirect's candidates - the extras
-> are exactly those siDirect removed for off-target reasons. This is the next
-> task after the siRNA design core is finalised. Note this is distinct from the
-> seed-duplex Tm filter (`core.seed`), which is a *seed-mediated* off-target
-> proxy and is already implemented.
+Without the off-target filter, HUSH selects a **superset** of siDirect's
+candidates - the extras are exactly those siDirect removed for near-perfect
+off-targets. Enabling `hush design --offtarget` (with a built index) closes that
+gap, dropping the extra candidates so the two tools agree.
 
 ## Development
 
 ```bash
-pytest            # run the test suite (296 tests)
+pytest            # run the test suite (321 tests)
 ```

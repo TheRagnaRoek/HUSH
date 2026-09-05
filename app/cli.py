@@ -9,6 +9,7 @@ Run 'hush --help' (after 'pip install -e .') or 'python -m app.cli --help'.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,11 @@ from core.asymmetry import DEFAULT_WINDOW_BP
 from core.errors import HushError
 from core.hairpin import DEFAULT_INTERNAL_TM_THRESHOLD_C
 from core.inputs import build_design_input, load_sequences
+from core.offtarget import (
+    DEFAULT_OFFTARGET_MAX_MISMATCH,
+    DEFAULT_OFFTARGET_MIN_MISMATCH,
+    BowtieSearcher,
+)
 from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
 from core.seed import SEED_TM_THRESHOLD_C
 from core.selection import (
@@ -247,6 +253,21 @@ def _parse_overhang(spec: str) -> OverhangPolicy:
     return key
 
 
+# RefSeq accession, e.g. NM_005018.3 / NR_ / XM_ / XR_, with optional version.
+_REFSEQ_ACCESSION = re.compile(r"\b([NX][MR]_\d+(?:\.\d+)?)\b")
+
+
+def _detect_accession(seq: BioSequence) -> str | None:
+    """Best-effort RefSeq accession from a target's id/description, for self-exclusion.
+
+    The off-target search must drop hits to the candidate's own transcript. The
+    accession usually sits in the FASTA header (e.g. 'NM_005018.3' in the PDCD1
+    fixture); pass --offtarget-self-accession to override when it does not.
+    """
+    match = _REFSEQ_ACCESSION.search(f"{seq.id} {seq.description}")
+    return match.group(1) if match else None
+
+
 def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
     """Compact per-rule pass code, e.g. 'UR-' (Ui-Tei + Reynolds pass, Amarz fails)."""
     parts = []
@@ -274,6 +295,13 @@ def _print_criteria(criteria: SelectionCriteria) -> None:
         else "off"
     )
     typer.echo(f"  seed Tm:    {seed}")
+    if criteria.use_offtarget_filter:
+        off = f"reject nearest < {criteria.offtarget_min_mismatch} mismatch(es)"
+        if criteria.offtarget_self_accession:
+            off += f" (self: {criteria.offtarget_self_accession})"
+    else:
+        off = "off"
+    typer.echo(f"  off-target: {off}")
     gc = (
         f"{criteria.gc_min * 100:.0f}-{criteria.gc_max * 100:.0f}%"
         if criteria.use_gc_filter
@@ -314,6 +342,8 @@ def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list
         typer.echo(row("GC window:", sum(1 for e in evaluations if e.gc_pass)))
     if criteria.use_seed_filter:
         typer.echo(row("seed Tm:", sum(1 for e in evaluations if e.seed_pass)))
+    if criteria.use_offtarget_filter:
+        typer.echo(row("off-target:", sum(1 for e in evaluations if e.offtarget_pass)))
     if criteria.use_hairpin_filter:
         typer.echo(row("hairpin:", sum(1 for e in evaluations if e.hairpin_pass)))
     if criteria.use_homopolymer_filter:
@@ -335,6 +365,8 @@ def _print_table(
         header += f" {'rules':<5}"
     if criteria.use_seed_filter:
         header += f" {'seedTm':>7}"
+    if criteria.use_offtarget_filter:
+        header += f" {'offMM':>6}"
     if criteria.use_hairpin_filter:
         header += f" {'hpTm':>6}"
     if criteria.use_homopolymer_filter:
@@ -352,6 +384,9 @@ def _print_table(
             row += f" {_rules_code(e, criteria):<5}"
         if criteria.use_seed_filter:
             row += f" {e.seed.max_tm:>7.1f}"
+        if criteria.use_offtarget_filter:
+            mm = None if e.offtarget is None else e.offtarget.min_mismatch
+            row += f" {('none' if mm is None else str(mm)):>6}"
         if criteria.use_hairpin_filter:
             row += f" {('  none' if e.hairpin_tm is None else f'{e.hairpin_tm:.1f}'):>6}"
         if criteria.use_homopolymer_filter:
@@ -364,6 +399,16 @@ def _print_table(
         )
 
 
+def _combined_offtarget_counts(profile) -> list[int]:
+    """Guide + passenger off-target hit counts at mismatch levels 0..3."""
+    out = [0, 0, 0, 0]
+    for counts in (profile.guide_counts, profile.passenger_counts):
+        for i, n in enumerate(counts):
+            if i < len(out):
+                out[i] += n
+    return out
+
+
 def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -> None:
     # guide_5to3 / passenger_5to3 are the full ordered strands (core + 3'
     # overhang); the *_overhang columns name the trailing overhang explicitly.
@@ -371,13 +416,20 @@ def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -
     lines = [
         "region\tstart\tend\tguide_5to3\tguide_overhang\tpassenger_5to3\t"
         "passenger_overhang\tgc_percent\trules_passed\tseed_max_tm_c\t"
-        "hairpin_tm_c\thomopolymer_max_run"
+        "hairpin_tm_c\thomopolymer_max_run\tofftarget_min_mismatch\t"
+        "offtarget_hits_0\tofftarget_hits_1\tofftarget_hits_2\tofftarget_hits_3"
     ]
     for e in selected:
         c = e.candidate
         seed_tm_val = f"{e.seed.max_tm:.2f}" if e.seed is not None else ""
         hairpin_val = "" if e.hairpin_tm is None else f"{e.hairpin_tm:.2f}"
         run_val = "" if e.homopolymer_run is None else str(e.homopolymer_run)
+        if e.offtarget is None:
+            off_min, off_counts = "", ["", "", "", ""]
+        else:
+            m = e.offtarget.min_mismatch
+            off_min = "" if m is None else str(m)
+            off_counts = [str(n) for n in _combined_offtarget_counts(e.offtarget)]
         lines.append(
             "\t".join(
                 [
@@ -393,6 +445,8 @@ def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -
                     seed_tm_val,
                     hairpin_val,
                     run_val,
+                    off_min,
+                    *off_counts,
                 ]
             )
         )
@@ -434,6 +488,33 @@ def design_cmd(
     ),
     seed_tm: float = typer.Option(
         SEED_TM_THRESHOLD_C, "--seed-tm", help="Seed-duplex Tm cut-off in C."
+    ),
+    offtarget: bool = typer.Option(
+        False, "--offtarget/--no-offtarget",
+        help="Apply the transcriptome homology off-target filter (needs a bowtie "
+        "index; see --offtarget-db).",
+    ),
+    offtarget_db: Optional[Path] = typer.Option(
+        None, "--offtarget-db",
+        help="bowtie index prefix for the reference transcriptome "
+        "(build with tools/build_offtarget_db.py).",
+    ),
+    offtarget_min_mismatch: int = typer.Option(
+        DEFAULT_OFFTARGET_MIN_MISMATCH, "--offtarget-min-mismatch",
+        help="Reject a candidate whose nearest off-target has fewer than this many "
+        "mismatches.",
+    ),
+    offtarget_max_mismatch: int = typer.Option(
+        DEFAULT_OFFTARGET_MAX_MISMATCH, "--offtarget-max-mismatch",
+        help="Mismatch depth the search enumerates (bowtie -v allows 0-3).",
+    ),
+    offtarget_self_accession: Optional[str] = typer.Option(
+        None, "--offtarget-self-accession",
+        help="Accession of the target's own transcript to exclude from off-target "
+        "hits (auto-detected from the FASTA header when omitted).",
+    ),
+    bowtie_path: str = typer.Option(
+        "bowtie", "--bowtie-path", help="Path to the bowtie executable.",
     ),
     gc: bool = typer.Option(
         False, "--gc/--no-gc", help="Apply a standalone GC-content window filter."
@@ -502,6 +583,32 @@ def design_cmd(
     thermo_params = _parse_params(params)
     overhang_policy = _parse_overhang(overhang)
     try:
+        design_input = build_design_input(target)
+        mrna = design_input.require_nucleotide_target()
+        candidates = list(
+            enumerate_candidates(mrna, length=length, overhang=overhang_policy)
+        )
+
+        offtarget_searcher = None
+        self_accession = None
+        if offtarget:
+            if offtarget_db is None:
+                raise ValueError(
+                    "--offtarget needs a reference database; pass --offtarget-db "
+                    "(build one with tools/build_offtarget_db.py)."
+                )
+            self_accession = offtarget_self_accession or _detect_accession(mrna)
+            # One batched bowtie run over every strand of every candidate, then a
+            # cheap dict lookup per candidate inside the selection loop.
+            backend = BowtieSearcher(
+                offtarget_db,
+                max_mismatch=offtarget_max_mismatch,
+                bowtie_path=bowtie_path,
+            )
+            reads = [c.sense.seq for c in candidates]
+            reads += [c.antisense.seq for c in candidates]
+            offtarget_searcher = backend.precompute(reads)
+
         criteria = SelectionCriteria(
             use_ui_tei=use_ut,
             use_reynolds=use_rey,
@@ -511,6 +618,10 @@ def design_cmd(
             amarzguioui_threshold=amarzguioui_threshold,
             use_seed_filter=seed,
             seed_tm_threshold=seed_tm,
+            use_offtarget_filter=offtarget,
+            offtarget_min_mismatch=offtarget_min_mismatch,
+            offtarget_searcher=offtarget_searcher,
+            offtarget_self_accession=self_accession,
             use_gc_filter=gc,
             gc_min=gc_min / 100.0,
             gc_max=gc_max / 100.0,
@@ -522,11 +633,6 @@ def design_cmd(
             asymmetry_window=asym_window,
             asymmetry_temp_c=asym_temp,
             thermo_params=thermo_params,
-        )
-        design_input = build_design_input(target)
-        mrna = design_input.require_nucleotide_target()
-        candidates = list(
-            enumerate_candidates(mrna, length=length, overhang=overhang_policy)
         )
         evaluations = list(evaluate_all(candidates, criteria))
     except (HushError, ValueError) as exc:

@@ -21,3 +21,11 @@ class MolTypeError(HushError):
 
 class InputParseError(HushError):
     """A FASTA/PDB (or other) input file could not be parsed into sequences."""
+
+
+class OffTargetError(HushError):
+    """A transcriptome off-target search could not be run.
+
+    e.g. the bowtie binary is not on PATH, the reference index is missing, or
+    the aligner exited with an error.
+    """

@@ -36,8 +36,13 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# HUSH: large downloaded reference data (e.g. IPD-IMGT/HLA dumps).
-# Keep small fixtures under data/ tracked; ignore bulk downloads.
+# HUSH: large downloaded reference data (e.g. IPD-IMGT/HLA dumps, RefSeq
+# transcriptome + bowtie index). Keep small fixtures under data/ tracked; ignore
+# bulk downloads and built indexes. The .manifest.json build record stays tracked.
 data/reference/*.dat
 data/reference/*.fasta.gz
+data/reference/*.fasta
+data/reference/*.ebwt
+data/reference/*.ebwtl
+data/reference/_download/
 data/cache/

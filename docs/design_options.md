@@ -26,6 +26,12 @@ The everyday design surface - what a normal run turns.
 | `--amarzguioui-threshold` | `amarzguioui_threshold` | `3` | Amarzguioui score cut-off. |
 | `--seed` / `--no-seed` | `use_seed_filter` | on | Apply the siDirect seed-duplex off-target Tm filter (both strands). |
 | `--seed-tm` | `seed_tm_threshold` | `21.5` | Seed-duplex Tm cut-off in C. |
+| `--offtarget` / `--no-offtarget` | `use_offtarget_filter` | off | Transcriptome homology off-target filter (needs a bowtie index; see `--offtarget-db`). Distinct from `--seed`: a database search, not a sequence-intrinsic proxy. |
+| `--offtarget-db` | `offtarget_searcher` | - | bowtie index prefix for the reference transcriptome (build with `tools/build_offtarget_db.py`). |
+| `--offtarget-min-mismatch` | `offtarget_min_mismatch` | `2` | Reject a candidate whose nearest off-target has fewer than this many mismatches (2 matches siDirect on the PDCD1 benchmark). |
+| `--offtarget-max-mismatch` | (searcher depth) | `3` | Mismatch depth the search enumerates (bowtie `-v` allows 0-3). |
+| `--offtarget-self-accession` | `offtarget_self_accession` | auto | Accession of the target's own transcript to exclude from hits (auto-detected from the FASTA header). |
+| `--bowtie-path` | (backend) | `bowtie` | Path to the bowtie executable. |
 | `--gc` / `--no-gc` | `use_gc_filter` | off | Apply a standalone GC-content window (separate from Reynolds' internal GC criterion). |
 | `--gc-min` / `--gc-max` | `gc_min` / `gc_max` | `30` / `52` | GC window bounds, in percent. |
 | `--homopolymer` / `--no-homopolymer` | `use_homopolymer_filter` | off | Reject candidates whose core has a single-nucleotide run longer than `--max-run` (e.g. `GGGG`). |
@@ -97,19 +103,19 @@ hush design data/examples/hla_a01.fasta --rules all --mode any \
   --no-seed --gc --hairpin -o selected.tsv
 ```
 
+With the transcriptome off-target filter (needs a bowtie index built by
+`tools/build_offtarget_db.py`):
+
+```bash
+hush design data/examples/PDCD1_CDS.fasta --rules ui-tei,reynolds --mode any \
+  --offtarget --offtarget-db data/reference/refseq_human_mrna
+```
+
 Every run prints the chosen criteria and a funnel of how many candidates clear
 each enabled gate, so an empty result shows exactly which gate removed them.
 
 ## Planned / deferred
 
-- **Transcriptome off-target filter (WIP, next task).** siDirect BLASTs each
-  guide against the human transcriptome and rejects candidates with a near-perfect
-  (0-1 mismatch) off-target. HUSH does not yet do a database search, so on real
-  targets it selects a superset of siDirect's candidates - the extras are the ones
-  siDirect removed for off-target reasons. This is distinct from the already-
-  implemented seed-duplex Tm filter (`--seed`), which is a seed-mediated off-target
-  *proxy*, not a database search. Use `tools/compare_sidirect.py` to see the gap on
-  a given target.
 - **Sequence-motif constraint** (e.g. force a `G` at core position 3 via an
   `NNGNN...`-style pattern). This is primarily a loop-grafting requirement for
   shRNA, where a specific base at the graft junction improves hairpin folding, so
