@@ -157,3 +157,107 @@ def test_design_homopolymer_filter_shows_funnel_row(target_fasta):
     assert result.exit_code == 0
     assert "homopolymer:" in result.stdout
     assert "reject runs > 3 nt" in result.stdout
+
+
+# --------------------------------------------------------------------------- #
+# design command - allele-aware panel targeting (MSA stage)
+# --------------------------------------------------------------------------- #
+
+_ALLELE_1 = "HLA-DEMO*01:01"  # a member id in hla_panel_example.fasta
+
+
+def test_design_panel_pan_allele_gates_and_reports(target_fasta, panel_fasta):
+    # A bare --panel defaults to pan-allele targeting.
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--mode", "any", "--no-seed",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "pan-allele" in result.stdout
+    # The allele gate appears in both the criteria block and the funnel.
+    assert "allele:" in result.stdout
+
+
+def test_design_allele_specific_shows_spare_margin(target_fasta, panel_fasta):
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--allele-specific", _ALLELE_1, "--mode", "any", "--no-seed",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "allele-specific" in result.stdout
+    # Discriminating targeting adds the per-candidate spare-margin column.
+    assert "spareMM" in result.stdout
+
+
+def test_design_explicit_hit_and_spare(target_fasta, panel_fasta):
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--hit", _ALLELE_1, "--spare", "HLA-DEMO*02:01",
+            "--mode", "any", "--no-seed",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "spareMM" in result.stdout
+
+
+def test_design_targeting_without_panel_errors(target_fasta):
+    result = runner.invoke(app, ["design", str(target_fasta), "--pan-allele"])
+    assert result.exit_code != 0
+
+
+def test_design_unknown_allele_errors(target_fasta, panel_fasta):
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--allele-specific", "NOT_IN_PANEL",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Design error" in result.output
+
+
+def test_design_spare_without_hit_errors(target_fasta, panel_fasta):
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--spare", _ALLELE_1,
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_design_mutually_exclusive_targeting_errors(target_fasta, panel_fasta):
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--pan-allele", "--allele-specific", _ALLELE_1,
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_design_panel_tsv_has_allele_columns(target_fasta, panel_fasta, tmp_path):
+    out = tmp_path / "allele.tsv"
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--allele-specific", _ALLELE_1, "--mode", "any", "--no-seed",
+            "-o", str(out),
+        ],
+    )
+    assert result.exit_code == 0
+    header = out.read_text(encoding="ascii").splitlines()[0]
+    assert "allele_hit_max_mismatch" in header
+    assert "allele_spare_min_mismatch" in header

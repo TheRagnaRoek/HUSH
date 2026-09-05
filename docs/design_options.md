@@ -57,6 +57,34 @@ equals siDirect's listed guide (core + upstream overhang = reverse-complement of
 full window), but the **passenger** is offset (its overhang is the downstream flank), so
 compare on the guide or the target position, not the passenger.
 
+## Allele-aware options (MSA panel targeting)
+
+Off unless `--panel` is given. Supplying a panel engages the MSA/allele stage
+(stage 3): the panel is star-aligned to the target, and each candidate is
+additionally gated on whether its window hits the requested alleles and
+discriminates against the spared ones. The allele gate is ANDed with every
+selection filter above. The window length is the siRNA core length (`--length`),
+so windows and candidates line up one-for-one.
+
+| CLI flag | Maps to | Default | What it does |
+|---|---|---|---|
+| `--panel` / `-p` | (loads the panel) | - | Allele-family FASTA (e.g. an HLA locus). Its presence turns the allele gate on. |
+| `--panel-format` | (format override) | auto | Override the panel format: `fasta` / `pdb` / `cif`. |
+| `--pan-allele` | `AlleleTargeting.pan_allele` | on\* | Hit every panel member, spare none (conserved-region targeting). |
+| `--allele-specific` | `AlleleTargeting.allele_specific` | - | Hit exactly this panel member id, spare the rest. |
+| `--hit` | `AlleleTargeting.hit` | - | Comma list of member ids to hit. With `--spare` both sets are explicit; without it the rest are spared (subset). |
+| `--spare` | `AlleleTargeting.spare` | - | Comma list of member ids to discriminate against; only refines an explicit `--hit`. |
+| `--min-spare-mismatches` | `WindowCriteria.min_spare_mismatches` | `1` | Differences a spared allele must carry inside a window before it counts as discriminated. |
+
+\* `--pan-allele` is the default intent when `--panel` is given without
+`--allele-specific` or `--hit`. The three intents (`--pan-allele`,
+`--allele-specific`, `--hit`) are mutually exclusive.
+
+The allele gate is a **filter, not a ranking**, and coverage is required: a window
+where a targeted allele is uncovered, or where a spared allele is uncovered,
+cannot satisfy the request - missing data is never read as evidence. See the
+[`docs/design_notes.md`](design_notes.md) MSA/allele section for the rationale.
+
 ## Advanced options (thermodynamic internals)
 
 Correct by default and safe to ignore. These sit in the "Advanced" group of
@@ -109,6 +137,15 @@ With the transcriptome off-target filter (needs a bowtie index built by
 ```bash
 hush design data/examples/PDCD1_CDS.fasta --rules ui-tei,reynolds --mode any \
   --offtarget --offtarget-db data/reference/refseq_human_mrna
+```
+
+Allele-aware, singling one allele out of a panel (the allele gate is ANDed on
+top of the rule and filter gates):
+
+```bash
+hush design data/examples/target_example.fasta \
+  --panel data/examples/hla_panel_example.fasta \
+  --allele-specific "HLA-DEMO*01:01" --mode any --no-seed
 ```
 
 Every run prints the chosen criteria and a funnel of how many candidates clear

@@ -1,8 +1,10 @@
 """HUSH command-line interface.
 
 CLI-first entry point for the pipeline. Exposes the Input Layer via
-'hush inspect' and siRNA candidate design via 'hush design'; MSA/allele and
-shRNA conversion commands are added as those stages come online.
+'hush inspect' and siRNA candidate design via 'hush design'. The MSA/allele
+stage is engaged from within 'hush design' by supplying '--panel': the panel is
+aligned to the target and each candidate is additionally gated on its allele
+targeting. The shRNA conversion command is added as that stage comes online.
 
 Run 'hush --help' (after 'pip install -e .') or 'python -m app.cli --help'.
 """
@@ -24,6 +26,15 @@ from core.offtarget import (
     DEFAULT_OFFTARGET_MIN_MISMATCH,
     BowtieSearcher,
 )
+from msa.align_star import align_star
+from msa.targeting import AlleleTargeting
+from msa.variation import PanelVariation
+from msa.windows import (
+    DEFAULT_MIN_SPARE_MISMATCHES,
+    WindowCriteria,
+    WindowEvaluation,
+)
+from msa.windows import evaluate_all as evaluate_windows
 from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
 from core.seed import SEED_TM_THRESHOLD_C
 from core.selection import (
@@ -38,6 +49,9 @@ from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
 
 # Help-panel label that groups the expert thermodynamic knobs in `design --help`.
 _ADVANCED = "Advanced (thermodynamic internals)"
+
+# Help-panel label grouping the allele-aware (MSA panel) options in `design --help`.
+_ALLELE = "Allele-aware (MSA panel targeting)"
 
 app = typer.Typer(
     add_completion=False,
@@ -253,6 +267,57 @@ def _parse_overhang(spec: str) -> OverhangPolicy:
     return key
 
 
+def _split_ids(spec: str) -> list[str]:
+    """Split a comma-separated id list, dropping blanks and surrounding space."""
+    return [token.strip() for token in spec.split(",") if token.strip()]
+
+
+def _build_targeting(
+    panel,
+    *,
+    pan_allele: bool,
+    allele_specific: str | None,
+    hit: str | None,
+    spare: str | None,
+) -> AlleleTargeting:
+    """Turn the allele-targeting flags into one AlleleTargeting request.
+
+    The four flags name three mutually exclusive intents (pan-allele, allele-
+    specific, explicit hit/spare); pan-allele is the default when a panel is
+    given without another flag. --spare only refines an explicit --hit.
+    """
+    intents = [
+        name
+        for name, chosen in (
+            ("--pan-allele", pan_allele),
+            ("--allele-specific", allele_specific is not None),
+            ("--hit", hit is not None),
+        )
+        if chosen
+    ]
+    if len(intents) > 1:
+        raise typer.BadParameter(
+            f"{' and '.join(intents)} are mutually exclusive; choose one "
+            "targeting intent.",
+            param_hint="--pan-allele/--allele-specific/--hit",
+        )
+    if spare is not None and hit is None:
+        raise typer.BadParameter(
+            "--spare only refines an explicit --hit; name the alleles to hit too.",
+            param_hint="--spare",
+        )
+
+    if allele_specific is not None:
+        return AlleleTargeting.allele_specific(allele_specific, panel)
+    if hit is not None:
+        hits = _split_ids(hit)
+        if spare is not None:
+            return AlleleTargeting(hit=hits, spare=_split_ids(spare))
+        return AlleleTargeting.subset(hits, panel)
+    # No explicit intent: broad, conserved-region targeting across the family.
+    return AlleleTargeting.pan_allele(panel)
+
+
 # RefSeq accession, e.g. NM_005018.3 / NR_ / XM_ / XR_, with optional version.
 _REFSEQ_ACCESSION = re.compile(r"\b([NX][MR]_\d+(?:\.\d+)?)\b")
 
@@ -282,8 +347,22 @@ def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
     return "".join(parts) or "-"
 
 
-def _print_criteria(criteria: SelectionCriteria) -> None:
+def _print_criteria(
+    criteria: SelectionCriteria,
+    targeting: AlleleTargeting | None = None,
+    min_spare: int = DEFAULT_MIN_SPARE_MISMATCHES,
+) -> None:
     typer.echo(typer.style("Criteria", bold=True))
+    if targeting is not None:
+        mode = targeting.mode.value.replace("_", "-")
+        if targeting.discriminating:
+            allele = (
+                f"{mode}: hit {sorted(targeting.hit)}, spare "
+                f"{len(targeting.spare)} allele(s) (>= {min_spare} diff each)"
+            )
+        else:
+            allele = f"{mode}: hit {len(targeting.hit)} allele(s), spare none"
+        typer.echo(f"  allele:     {allele}")
     if criteria.enabled_rule_names:
         names = ", ".join(n.replace("_", "-") for n in criteria.enabled_rule_names)
         typer.echo(f"  rules:      {names}  (mode: {criteria.rule_mode.value.upper()})")
@@ -330,7 +409,12 @@ def _print_criteria(criteria: SelectionCriteria) -> None:
         typer.echo(f"  params:     {criteria.thermo_params.value}")
 
 
-def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list) -> None:
+def _print_funnel(
+    criteria: SelectionCriteria,
+    evaluations: list,
+    selected: list,
+    window_by_pos: dict[int, WindowEvaluation] | None = None,
+) -> None:
     def row(label: str, count: int) -> str:
         return f"  {label:<16}{count}"
 
@@ -338,6 +422,17 @@ def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list
     typer.echo(
         row(f"rules ({criteria.rule_mode.value}):", sum(1 for e in evaluations if e.rule_pass))
     )
+    if window_by_pos is not None:
+        typer.echo(
+            row(
+                "allele:",
+                sum(
+                    1
+                    for e in evaluations
+                    if window_by_pos[e.candidate.position].satisfies
+                ),
+            )
+        )
     if criteria.use_gc_filter:
         typer.echo(row("GC window:", sum(1 for e in evaluations if e.gc_pass)))
     if criteria.use_seed_filter:
@@ -354,8 +449,20 @@ def _print_funnel(criteria: SelectionCriteria, evaluations: list, selected: list
 
 
 def _print_table(
-    selected: list, criteria: SelectionCriteria, length: int, limit: int
+    selected: list,
+    criteria: SelectionCriteria,
+    length: int,
+    limit: int,
+    window_by_pos: dict[int, WindowEvaluation] | None = None,
+    targeting: AlleleTargeting | None = None,
 ) -> None:
+    # A spare-margin column is shown only when the request discriminates; for a
+    # selected candidate it is the weakest per-spared-allele difference count.
+    show_spare = (
+        window_by_pos is not None
+        and targeting is not None
+        and targeting.discriminating
+    )
     # Strands are shown as ordered: paired core plus the 2-nt 3' overhang.
     seq_w = max(length + 3, 14)
     header = (
@@ -363,6 +470,8 @@ def _print_table(
     )
     if criteria.enabled_rule_names:
         header += f" {'rules':<5}"
+    if show_spare:
+        header += f" {'spareMM':>7}"
     if criteria.use_seed_filter:
         header += f" {'seedTm':>7}"
     if criteria.use_offtarget_filter:
@@ -382,6 +491,9 @@ def _print_table(
         )
         if criteria.enabled_rule_names:
             row += f" {_rules_code(e, criteria):<5}"
+        if show_spare:
+            margin = window_by_pos[c.position].min_spare_mismatches
+            row += f" {('none' if margin is None else str(margin)):>7}"
         if criteria.use_seed_filter:
             row += f" {e.seed.max_tm:>7.1f}"
         if criteria.use_offtarget_filter:
@@ -409,16 +521,27 @@ def _combined_offtarget_counts(profile) -> list[int]:
     return out
 
 
-def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -> None:
+def _write_design_tsv(
+    path: Path,
+    selected: list,
+    criteria: SelectionCriteria,
+    window_by_pos: dict[int, WindowEvaluation] | None = None,
+) -> None:
     # guide_5to3 / passenger_5to3 are the full ordered strands (core + 3'
     # overhang); the *_overhang columns name the trailing overhang explicitly.
     # start/end are the paired-core coordinates on the target.
-    lines = [
+    header = (
         "region\tstart\tend\tguide_5to3\tguide_overhang\tpassenger_5to3\t"
         "passenger_overhang\tgc_percent\trules_passed\tseed_max_tm_c\t"
         "hairpin_tm_c\thomopolymer_max_run\tofftarget_min_mismatch\t"
         "offtarget_hits_0\tofftarget_hits_1\tofftarget_hits_2\tofftarget_hits_3"
-    ]
+    )
+    if window_by_pos is not None:
+        # Allele-window read-outs at this candidate's position: the worst
+        # difference among hit alleles (0 for a selected candidate) and the
+        # weakest discrimination among spared alleles (empty for pan-allele).
+        header += "\tallele_hit_max_mismatch\tallele_spare_min_mismatch"
+    lines = [header]
     for e in selected:
         c = e.candidate
         seed_tm_val = f"{e.seed.max_tm:.2f}" if e.seed is not None else ""
@@ -430,26 +553,30 @@ def _write_design_tsv(path: Path, selected: list, criteria: SelectionCriteria) -
             m = e.offtarget.min_mismatch
             off_min = "" if m is None else str(m)
             off_counts = [str(n) for n in _combined_offtarget_counts(e.offtarget)]
-        lines.append(
-            "\t".join(
-                [
-                    c.region,
-                    str(c.position + 1),
-                    str(c.end),
-                    c.guide_full,
-                    c.guide_overhang,
-                    c.passenger_full,
-                    c.sense_overhang,
-                    f"{c.gc_content * 100:.1f}",
-                    _rules_code(e, criteria),
-                    seed_tm_val,
-                    hairpin_val,
-                    run_val,
-                    off_min,
-                    *off_counts,
-                ]
-            )
-        )
+        fields = [
+            c.region,
+            str(c.position + 1),
+            str(c.end),
+            c.guide_full,
+            c.guide_overhang,
+            c.passenger_full,
+            c.sense_overhang,
+            f"{c.gc_content * 100:.1f}",
+            _rules_code(e, criteria),
+            seed_tm_val,
+            hairpin_val,
+            run_val,
+            off_min,
+            *off_counts,
+        ]
+        if window_by_pos is not None:
+            window = window_by_pos[c.position]
+            spare_min = window.min_spare_mismatches
+            fields += [
+                str(window.max_hit_mismatches),
+                "" if spare_min is None else str(spare_min),
+            ]
+        lines.append("\t".join(fields))
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
@@ -564,6 +691,49 @@ def design_cmd(
         "readouts only (never the seed filter): xia | freier.",
         rich_help_panel=_ADVANCED,
     ),
+    panel: Optional[Path] = typer.Option(
+        None, "--panel", "-p",
+        exists=True, dir_okay=False, readable=True,
+        help="Allele-family FASTA (e.g. an HLA locus). Turns on the MSA/allele "
+        "stage: candidates are gated to windows that hit the requested alleles "
+        "and discriminate against the spared ones.",
+        rich_help_panel=_ALLELE,
+    ),
+    panel_format: Optional[str] = typer.Option(
+        None, "--panel-format",
+        help="Override panel format: fasta | pdb | cif.",
+        rich_help_panel=_ALLELE,
+    ),
+    pan_allele: bool = typer.Option(
+        False, "--pan-allele",
+        help="Hit every panel member and spare none (conserved-region targeting). "
+        "The default when --panel is given without another targeting flag.",
+        rich_help_panel=_ALLELE,
+    ),
+    allele_specific: Optional[str] = typer.Option(
+        None, "--allele-specific",
+        help="Hit exactly this panel member id and spare the rest "
+        "(allele-specific targeting).",
+        rich_help_panel=_ALLELE,
+    ),
+    hit: Optional[str] = typer.Option(
+        None, "--hit",
+        help="Comma list of panel member ids to hit. With --spare the two sets "
+        "are explicit; without it, the remaining members are spared.",
+        rich_help_panel=_ALLELE,
+    ),
+    spare: Optional[str] = typer.Option(
+        None, "--spare",
+        help="Comma list of panel member ids to discriminate against "
+        "(refines --hit).",
+        rich_help_panel=_ALLELE,
+    ),
+    min_spare_mismatches: int = typer.Option(
+        DEFAULT_MIN_SPARE_MISMATCHES, "--min-spare-mismatches",
+        help="Differences a spared allele must carry inside a window before the "
+        "window is credited with discriminating against it.",
+        rich_help_panel=_ALLELE,
+    ),
     limit: int = typer.Option(
         20, "--limit", "-n", help="Max candidates to print (0 = all)."
     ),
@@ -577,17 +747,56 @@ def design_cmd(
     the seed-Tm, GC, hairpin and asymmetry filters are applied on top. Nothing is
     ranked: selected candidates are reported in target-position order. Expert
     thermodynamic knobs live in the Advanced option group (see --help).
+
+    Supply --panel to make the run allele-aware: the panel is aligned to the
+    target (MSA/allele stage) and each candidate is additionally gated on whether
+    its window hits the requested alleles and discriminates against the spared
+    ones. The targeting intent is pan-allele by default, or --allele-specific /
+    --hit (+ --spare). This allele gate is ANDed with the other filters.
     """
     use_ut, use_rey, use_amz = _parse_rules(rules)
     rule_mode = _parse_mode(mode)
     thermo_params = _parse_params(params)
     overhang_policy = _parse_overhang(overhang)
+    if panel is None and (pan_allele or allele_specific or hit or spare):
+        raise typer.BadParameter(
+            "allele targeting needs a panel; pass --panel with an allele-family "
+            "FASTA.",
+            param_hint="--panel",
+        )
     try:
-        design_input = build_design_input(target)
+        design_input = build_design_input(target, panel, panel_fmt=panel_format)
         mrna = design_input.require_nucleotide_target()
         candidates = list(
             enumerate_candidates(mrna, length=length, overhang=overhang_policy)
         )
+
+        # Allele gate (MSA / stage 3): align the panel to the target and evaluate
+        # each candidate window's targeting. Windows and candidates share the
+        # target's coordinates one-for-one, so a candidate is looked up by its
+        # start position.
+        targeting = None
+        window_by_pos = None
+        if design_input.has_panel:
+            targeting = _build_targeting(
+                design_input.panel,
+                pan_allele=pan_allele,
+                allele_specific=allele_specific,
+                hit=hit,
+                spare=spare,
+            )
+            variation = PanelVariation.from_alignment(
+                align_star(mrna, design_input.panel)
+            )
+            window_criteria = WindowCriteria(
+                targeting=targeting,
+                length=length,
+                min_spare_mismatches=min_spare_mismatches,
+            )
+            window_by_pos = {
+                ev.position: ev
+                for ev in evaluate_windows(variation, window_criteria)
+            }
 
         offtarget_searcher = None
         self_accession = None
@@ -639,7 +848,13 @@ def design_cmd(
         typer.secho(f"Design error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    selected = [e for e in evaluations if e.selected]
+    def _allele_ok(evaluation) -> bool:
+        return (
+            window_by_pos is None
+            or window_by_pos[evaluation.candidate.position].satisfies
+        )
+
+    selected = [e for e in evaluations if e.selected and _allele_ok(e)]
 
     typer.echo(typer.style(f"Target: {mrna.id or '<unnamed>'}", fg=typer.colors.CYAN, bold=True))
     typer.echo(
@@ -647,22 +862,21 @@ def design_cmd(
         f"|  {overhang_policy.value} 3' overhang"
     )
     typer.echo("")
-    _print_criteria(criteria)
+    _print_criteria(criteria, targeting, min_spare_mismatches)
     typer.echo("")
-    _print_funnel(criteria, evaluations, selected)
+    _print_funnel(criteria, evaluations, selected, window_by_pos)
     typer.echo("")
 
     if not selected:
-        typer.secho(
-            "No candidates selected. Try relaxing: --mode any, --no-seed, "
-            "or a wider --gc range.",
-            fg=typer.colors.YELLOW,
-        )
+        hint = "--mode any, --no-seed, or a wider --gc range"
+        if window_by_pos is not None:
+            hint += " (or a targeting request the panel can satisfy)"
+        typer.secho(f"No candidates selected. Try relaxing: {hint}.", fg=typer.colors.YELLOW)
     else:
-        _print_table(selected, criteria, length, limit)
+        _print_table(selected, criteria, length, limit, window_by_pos, targeting)
 
     if output is not None:
-        _write_design_tsv(output, selected, criteria)
+        _write_design_tsv(output, selected, criteria, window_by_pos)
         typer.echo(f"\nWrote {len(selected)} selected candidate(s) to {output}")
 
 

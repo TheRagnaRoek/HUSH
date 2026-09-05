@@ -1,10 +1,10 @@
 # HUSH design notes
 
 Design rationale, literature provenance, formulae, and validation records for
-the stage-2 siRNA design engine. This is the long-form companion to the module
-docstrings: the modules say *what* they do and the critical caller contract; the
-*why*, the derivations, and the "checked against the paper's own figures" records
-live here so the code stays readable.
+the stage-2 siRNA design engine and the stage-3 MSA/allele stage. This is the
+long-form companion to the module docstrings: the modules say *what* they do and
+the critical caller contract; the *why*, the derivations, and the "checked
+against the paper's own figures" records live here so the code stays readable.
 
 Related documents:
 
@@ -26,6 +26,7 @@ Contents:
 - [Classical rule sets (`core.rules`)](#classical-rule-sets-corerules)
 - [Candidate selection (`core.selection`)](#candidate-selection-coreselection)
 - [Duplex geometry: core length and 3' overhangs (`core.sirna`)](#duplex-geometry-core-length-and-3-overhangs-coresirna)
+- [MSA / allele stage (`msa`)](#msa--allele-stage-msa)
 
 ---
 
@@ -607,6 +608,116 @@ on the guide or the target position.
 - Elbashir SM, Harborth J, Lendeckel W, Yalcin A, Weber K, Tuschl T. Duplexes of
   21-nucleotide RNAs mediate RNA interference in cultured mammalian cells. *Nature* 411,
   494-498 (2001). doi:10.1038/35078107
+
+---
+
+## MSA / allele stage (`msa`)
+
+The stage that makes HUSH allele-aware. Given the target and a panel of related
+sequences (the motivating case is an HLA allele family), it decides, per target
+position and per candidate window, whether an siRNA built from the target would
+hit the alleles the user wants silenced and discriminate against the ones they
+want spared. The per-unit rationale lives in the module docstrings
+(`msa.alignment`, `msa.align_star`, `msa.variation`, `msa.windows`,
+`msa.targeting`); this section records the design decisions that span the stage
+and the choice made when wiring it into `hush design`.
+
+### The coordinate contract, and why it holds the stage together
+
+Every panel member is projected onto **ungapped target coordinates**: it becomes
+a string exactly as long as the target, index *i* carrying whatever residue the
+member has at target position *i*, with columns the alignment inserted into the
+target removed (kept as insertion payloads, not dropped). This is the single
+decision the rest of the stage rests on. Because the frame is the target's own,
+window position *p* on the target is the same *p* that `core.sirna` enumerates a
+candidate at - the two lists join on position without either side knowing about
+the other. No unit ever converts between alignment columns and target positions,
+because after projection there are no alignment columns left to convert.
+
+`PanelAlignment` enforces the invariant (every row exactly the target's width)
+rather than trusting it, so a backend that violates it fails loudly at the
+hand-off instead of silently shifting which positions look polymorphic.
+
+### Three states, kept distinct: match, mismatch, uncovered
+
+`msa.variation` reduces each member to one of three states per position, and the
+distinction between *mismatch* and *uncovered* is load-bearing, not cosmetic.
+"Uncovered" (a deletion, or an alignment that does not reach) is not a weak form
+of "different": a window in which an allele the user wants to **hit** has no
+residues says nothing about that allele, and one in which an allele to be
+**spared** is missing cannot be claimed to discriminate against it. Folding the
+two together would turn missing data into evidence - a silent error, not a design
+choice - so coverage is required by both gates rather than treated as harmless.
+
+### Two gates, and why a filter and not a ranking
+
+`msa.windows` applies an `AlleleTargeting` request under two gates, in the order a
+rejection is reported: the targeted alleles must be covered and identical across
+the window (the guide is built from the target, so a difference there is a
+mismatch against the very allele it should silence), and every spared allele must
+be covered and carry at least `min_spare_mismatches` differences. The three named
+intents - pan-allele, allele-specific, subset - are not three types but one
+structure (a *hit* set and a disjoint *spare* set) with different values, so a
+single code path serves all three and `spare` is stored explicitly rather than
+inferred as "whatever else is in the panel" (a panel is data that can change; an
+implicit spare set would silently mean something different after a member is
+added).
+
+As in `core.selection`, nothing is ranked. The signals are counts of differences,
+and where a difference sits in the duplex matters enormously - a mismatch in the
+guide seed discriminates far more strongly than one at the 3' end - but weighting
+them needs mismatch thermodynamics `core.thermo` does not yet carry. Every window
+passes or does not and keeps its full per-allele breakdown, and the positions are
+recorded (in target-window coordinates; `guide_position()` converts to the guide
+strand, which runs the opposite way) so the weighting can be added later without
+re-deriving anything. Insertions are likewise recorded but not scored: an
+insertion would make the guide bulge on that member, a strong discriminating
+feature, but scoring it needs the same missing parameters.
+
+### The star backend, and its scope
+
+`msa.align_star` aligns every member pairwise against the target, the target as
+the fixed centre of the star (Gusfield's center-star construction). The classical
+method picks the centre to minimise summed pairwise cost; here the centre is
+fixed by the pipeline - candidates are enumerated from the target - so the
+construction's factor-2 bound does not apply and no optimality is claimed. What it
+buys is a consistent frame, not a quality guarantee. It is adequate while members
+are near-identical (an HLA locus runs ~98-99% identity) and degrades as they
+diverge, because one centre cannot represent the relationships a guide tree would.
+The backend is named through `AlignmentBackend`, so a progressive aligner can be
+slotted in behind it without touching `variation`, `windows`, or the CLI. Gap
+costs default to making an indel buy back at least four mismatches before it pays
+for itself, which keeps the aligner from scattering frame-shifting gaps to chase a
+few mismatches - the failure mode that would move which positions look
+polymorphic; it is an approximation (no codon awareness), not a constraint.
+
+### Wiring into `hush design`: the allele gate lives at the app layer
+
+The allele stage is engaged from `hush design --panel`, not as a separate command,
+so one run does allele-aware design end to end. The integration decision worth
+recording is **where the gate lives**: the dependency direction is `msa -> core`,
+so `core.selection` must never import `msa`. The CLI (`app.cli`) is the composition
+root that may import both, and it is there that the allele verdict is ANDed with
+the siRNA selection verdict - a candidate is selected only if `CandidateEvaluation.
+selected` **and** the window at its position `satisfies` the targeting. The window
+length is bound to the siRNA core length (`--length`) so the two lists stay
+one-for-one; the candidate is looked up by its start position in a dict built once
+from `evaluate_all`. The criteria block and pass-each-gate funnel gain an
+`allele:` line, a discriminating request adds a per-candidate `spareMM` column (the
+weakest per-spared-allele difference count), and the TSV gains
+`allele_hit_max_mismatch` / `allele_spare_min_mismatch`. Keeping the gate at the
+app layer means the allele stage and the siRNA engine each stay testable in
+isolation, and the funnel reports the allele gate as just one more independent
+gate rather than a special case.
+
+### Scope and deferrals
+
+- Residues are compared as characters; IUPAC ambiguity codes are not resolved (an
+  IPD-IMGT/HLA panel is unambiguous, a hand-assembled one may not be).
+- Differences and insertions are counted, not weighted (see above) - the position
+  data needed for weighting is recorded against the day `core.thermo` carries
+  mismatch thermodynamics.
+- Only a star backend exists; divergent families want a progressive one.
 - Elbashir SM, Martinez J, Patkaniowska A, Lendeckel W, Tuschl T. Functional anatomy of
   siRNAs for mediating efficient RNAi in Drosophila melanogaster embryo lysate. *EMBO J*
   20, 6877-6888 (2001). doi:10.1093/emboj/20.23.6877 - establishes the 2-nt 3' overhang
