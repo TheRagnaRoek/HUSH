@@ -71,7 +71,6 @@ manager), needed only for transcriptome-scale off-target search (`hush design
 --offtarget`); everything else, including small-panel off-target search, runs
 without it.
 
-## Usage (Input Layer)
 ### Running without activating the venv
 
 Once installed, you do not have to activate the venv every time. The repo ships
