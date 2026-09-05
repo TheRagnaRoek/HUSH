@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Launchers: shell script must stay LF, batch file CRLF, on every platform.
+hush     text eol=lf
+hush.bat text eol=crlf

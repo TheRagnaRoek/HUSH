@@ -1,8 +1,8 @@
 """HUSH command-line interface.
 
 CLI-first entry point for the pipeline. Exposes the Input Layer via
-'hush input'/'hush inspect' and siRNA candidate design via 'hush design';
-MSA/allele and shRNA conversion commands are added as those stages come online.
+'hush inspect' and siRNA candidate design via 'hush design'; MSA/allele and
+shRNA conversion commands are added as those stages come online.
 
 Run 'hush --help' (after 'pip install -e .') or 'python -m app.cli --help'.
 """
@@ -46,7 +46,9 @@ app = typer.Typer(
 )
 
 
-def _echo_sequence(seq: BioSequence, index: int | None = None) -> None:
+def _echo_sequence(
+    seq: BioSequence, index: int | None = None, show_readiness: bool = False
+) -> None:
     prefix = f"  [{index}] " if index is not None else "  "
     header = f"{prefix}{seq.id or '<unnamed>'}"
     typer.echo(typer.style(header, bold=True))
@@ -58,6 +60,22 @@ def _echo_sequence(seq: BioSequence, index: int | None = None) -> None:
     typer.echo(line)
     preview = seq.seq if seq.length <= 60 else f"{seq.seq[:57]}..."
     typer.echo(f"      {preview}")
+    if show_readiness:
+        if seq.is_nucleotide:
+            typer.echo(
+                typer.style(
+                    "      [OK] nucleotide - ready for siRNA design.",
+                    fg=typer.colors.GREEN,
+                )
+            )
+        else:
+            typer.echo(
+                typer.style(
+                    f"      [!] {seq.moltype.value}; siRNA/shRNA design needs the "
+                    "coding transcript (mRNA/CDS) first.",
+                    fg=typer.colors.YELLOW,
+                )
+            )
 
 
 def _summarize_design_input(design: DesignInput) -> None:
@@ -103,14 +121,11 @@ def _summarize_design_input(design: DesignInput) -> None:
         )
 
 
-@app.command("input")
-def input_cmd(
-    target: Path = typer.Argument(
-        ...,
-        exists=True,
-        dir_okay=False,
-        readable=True,
-        help="Target sequence file (FASTA or PDB).",
+@app.command("inspect")
+def inspect_cmd(
+    path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True,
+        help="Sequence file to inspect (FASTA or PDB/mmCIF).",
     ),
     panel: Optional[Path] = typer.Option(
         None,
@@ -119,55 +134,41 @@ def input_cmd(
         exists=True,
         dir_okay=False,
         readable=True,
-        help="Optional related-sequence panel (e.g. an HLA allele family FASTA).",
+        help="Optional related-sequence panel (e.g. an HLA allele family FASTA). "
+        "When given, PATH is treated as the design target.",
     ),
-    target_format: Optional[str] = typer.Option(
-        None, "--target-format", help="Override target format: fasta | pdb | cif."
+    fmt: Optional[str] = typer.Option(
+        None, "--format", "-f", help="Override PATH format: fasta | pdb | cif."
     ),
     panel_format: Optional[str] = typer.Option(
         None, "--panel-format", help="Override panel format: fasta | pdb | cif."
     ),
 ) -> None:
-    """Load and inspect target (and optional panel) sequences.
+    """Inspect sequences in a file, or preview the design input.
 
-    This exercises the Input Layer: it parses the file(s), validates residues,
-    auto-detects molecule type, and reports what the downstream pipeline will
-    receive.
+    Without --panel, lists every sequence in the file (no roles assigned) and
+    flags each as ready for siRNA design or needing a coding transcript first.
+    With --panel, treats PATH as the design target: it parses both files,
+    validates residues, auto-detects molecule type, assigns target/panel roles,
+    and reports what the downstream siRNA pipeline will receive.
     """
     try:
-        design = build_design_input(
-            target,
-            panel,
-            target_fmt=target_format,
-            panel_fmt=panel_format,
-        )
+        if panel is None:
+            seqs = load_sequences(path, fmt=fmt)
+            typer.echo(f"{len(seqs)} sequence(s) in {path.name}:")
+            for i, seq in enumerate(seqs):
+                _echo_sequence(seq, index=i, show_readiness=True)
+        else:
+            design = build_design_input(
+                path,
+                panel,
+                target_fmt=fmt,
+                panel_fmt=panel_format,
+            )
+            _summarize_design_input(design)
     except HushError as exc:
         typer.secho(f"Input error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
-
-    _summarize_design_input(design)
-
-
-@app.command("inspect")
-def inspect_cmd(
-    path: Path = typer.Argument(
-        ..., exists=True, dir_okay=False, readable=True,
-        help="Any FASTA/PDB file to list sequences from.",
-    ),
-    fmt: Optional[str] = typer.Option(
-        None, "--format", "-f", help="Override format: fasta | pdb | cif."
-    ),
-) -> None:
-    """List every sequence in a file (no target/panel roles assigned)."""
-    try:
-        seqs = load_sequences(path, fmt=fmt)
-    except HushError as exc:
-        typer.secho(f"Input error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1)
-
-    typer.echo(f"{len(seqs)} sequence(s) in {path.name}:")
-    for i, seq in enumerate(seqs):
-        _echo_sequence(seq, index=i)
 
 
 # --------------------------------------------------------------------------- #
