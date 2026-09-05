@@ -27,7 +27,7 @@ of the wider **Project HIDE** (HLA Interference through Disguise and Erasure).
 |---|---|---|
 | 1. Input Layer | `core.inputs` + `core.sequence` | implemented |
 | 2. siRNA Design | `core.sirna` + `core.rules` + `core.thermo` / `core.seed` / `core.offtarget` / `core.asymmetry` / `core.hairpin` + `core.selection` | complete - enumeration (with 3' overhangs), the classical rule pre-screen, the thermodynamics stage, the seed and transcriptome off-target filters, the option-rich selection filter (incl. a homopolymer gate) and a CLI (`hush design`) are implemented and validated against siDirect |
-| 3. MSA / Allele | `msa` | planned |
+| 3. MSA / Allele | `msa` | implemented - panel-to-target star alignment, per-position variation, and per-window allele evaluation (hit/spare gates for pan-allele vs. allele-specific targeting), wired into `hush design --panel` |
 | 4. shRNA Conversion | `shrna` | planned |
 | 5. Output Layer | `core` / `app` | planned |
 
@@ -46,7 +46,12 @@ core/          Shared domain model + the siRNA design engine
   hairpin.py     Intramolecular hairpin Tm (Reynolds internal-structure rule)
   selection.py   Option-rich candidate filter (which rules + filters to apply)
   errors.py      Shared exception types
-msa/           MSA / allele module (stage 3, placeholder)
+msa/           MSA / allele module (stage 3)
+  alignment.py   Alignment result type (PanelAlignment / AlignedRow), target frame
+  align_star.py  Star-alignment backend (each member aligned pairwise to target)
+  variation.py   Per-position match / mismatch / uncovered comparison to target
+  windows.py     Per-window allele evaluation (hit / spare gates) + region merge
+  targeting.py   AlleleTargeting request (pan-allele / allele-specific / subset)
 shrna/         shRNA conversion module (stage 4, placeholder)
 app/           CLI (app.cli) - the CLI-first interface
 data/examples/ Runnable example inputs (synthetic panels plus real gene fixtures
@@ -320,6 +325,85 @@ Rationale (why bowtie1 and not BLAST, the RefSeq pinning, strand semantics, the
 allele-aware caveat) is in
 [`docs/offtarget_design_note.md`](docs/offtarget_design_note.md).
 
+## Allele-aware design (stage 3)
+
+The `msa` module is what makes HUSH allele-aware. Given the target and a **panel**
+of related sequences (e.g. an HLA allele family), it aligns every member to the
+target with a star alignment (`msa.align_star`), projects each onto **ungapped
+target coordinates**, and reports, per target position, whether a member matches
+the target, differs from it, or does not cover it (`msa.variation`). Because the
+projection shares the target's frame, a window on the target lines up
+one-for-one with a siRNA candidate at the same position.
+
+`msa.windows` then evaluates every window against an `AlleleTargeting` request
+(`msa.targeting`) - which panel members to **hit** and which to **spare** - under
+two gates: every targeted allele must be covered and identical across the window
+(the guide is built from the target, so a difference there is a mismatch against
+the allele it should silence), and every spared allele must be covered and carry
+at least `min_spare_mismatches` differences. Three named intents reduce to those
+two sets:
+
+| Intent | Hit | Spare | Selects |
+|---|---|---|---|
+| pan-allele | every member | nothing | conserved sites (broad knockdown) |
+| allele-specific | one member | the rest | polymorphic sites that single one allele out |
+| subset | a chosen group | the rest | sites shared by the group, absent from the rest |
+
+Like `core.selection`, this is a **filter, not a ranking**: differences are
+counted with full per-allele breakdown, never collapsed into a weighted score
+(that would need efficacy data HUSH does not have). Coverage is required, not
+optional - a window where a targeted allele has no residues says nothing about
+it, and one where a spared allele is missing cannot be claimed to discriminate;
+missing data is never silently read as evidence.
+
+This stage is wired straight into `hush design`: add `--panel` and a targeting
+intent, and the allele gate is ANDed with the siRNA selection filters, so one run
+does allele-aware design end to end.
+
+```bash
+# Conserved-region (pan-allele) knockdown across the whole family - the default
+# when --panel is given without another targeting flag:
+hush design data/examples/target_example.fasta \
+  --panel data/examples/hla_panel_example.fasta --mode any --no-seed
+
+# Allele-specific: hit exactly one member, discriminate against the rest:
+hush design data/examples/target_example.fasta \
+  --panel data/examples/hla_panel_example.fasta \
+  --allele-specific "HLA-DEMO*01:01" --mode any --no-seed
+
+# Explicit hit/spare sets (subset targeting):
+hush design data/examples/target_example.fasta \
+  --panel data/examples/hla_panel_example.fasta \
+  --hit "HLA-DEMO*01:01,HLA-DEMO*02:01" --spare "HLA-DEMO*03:01" -o selected.tsv
+```
+
+The criteria block and the pass-each-gate funnel gain an `allele:` line, a
+discriminating run adds a per-candidate `spareMM` column (the weakest
+per-spared-allele difference count), and `-o` adds `allele_hit_max_mismatch` /
+`allele_spare_min_mismatch` columns to the TSV.
+
+```python
+from core.inputs import load_target, load_panel
+from msa.align_star import align_star
+from msa.variation import PanelVariation
+from msa.targeting import AlleleTargeting
+from msa.windows import WindowCriteria, select
+
+target = load_target("data/examples/target_example.fasta")
+panel = load_panel("data/examples/hla_panel_example.fasta")
+
+variation = PanelVariation.from_alignment(align_star(target, panel))
+criteria = WindowCriteria(AlleleTargeting.allele_specific("HLA-DEMO*01:01", panel))
+for window in select(variation, criteria):     # windows are in target order
+    print(window.region, window.min_spare_mismatches)
+```
+
+The star backend is adequate while panel members are near-identical (an HLA locus
+runs ~98-99% identity) and degrades as they diverge; a progressive backend can be
+slotted in behind `AlignmentBackend` without touching the layers above. The full
+rationale and scope live in the `msa` module docstrings and in
+[`docs/design_notes.md`](docs/design_notes.md) (MSA / allele stage).
+
 ## Benchmarking against siDirect
 
 siDirect is HUSH's gold-standard reference. On matched settings the functional
@@ -340,5 +424,5 @@ gap, dropping the extra candidates so the two tools agree.
 ## Development
 
 ```bash
-pytest            # run the test suite (321 tests)
+pytest            # run the test suite (447 tests)
 ```
