@@ -1,0 +1,8 @@
+>NM_000001.1 synthetic self transcript (exact on-target site, 0 mismatch)
+TTAAGGCCTAATGCTTAGCCGATTACAGAGATCGATCGA
+>NM_000002.1 synthetic guide off-target (sense site, 2 mismatches)
+TTAAGGCCTAATGCGTAGCCGAGTACAGAGATCGATCGA
+>NM_000003.1 synthetic passenger off-target (antisense site, 1 mismatch)
+TTAAGGCCTATCTGTAATCTGCTAAGCATGATCGATCGA
+>NM_000004.1 synthetic clean transcript (unrelated)
+TTTAAACCCGGGAAATTTCCCGGGAAATTTCCCGGGAAA

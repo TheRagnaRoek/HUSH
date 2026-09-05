@@ -61,3 +61,9 @@ def amarzguioui_table3() -> list[dict]:
 @pytest.fixture
 def mini_pdb() -> Path:
     return TEST_DATA_DIR / "mini_protein.pdb"
+
+
+@pytest.fixture
+def offtarget_mini_fasta() -> Path:
+    """A tiny synthetic transcriptome with planted off-targets (see the file)."""
+    return TEST_DATA_DIR / "offtarget_mini.fasta"
