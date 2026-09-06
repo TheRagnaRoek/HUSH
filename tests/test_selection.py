@@ -80,7 +80,9 @@ class TestHomopolymerFilter:
         return SelectionCriteria(**base)
 
     def test_disabled_leaves_fields_none(self):
-        criteria = SelectionCriteria(use_seed_filter=False)
+        criteria = SelectionCriteria(
+            use_seed_filter=False, use_homopolymer_filter=False
+        )
         ev = evaluate(one_candidate("ACGUACGUACGUACGUACG"), criteria)
         assert ev.homopolymer_pass is None
         assert ev.homopolymer_run is None
@@ -170,6 +172,7 @@ class TestRuleModes:
             use_reynolds=True,
             use_amarzguioui=False,
             use_seed_filter=False,
+            use_homopolymer_filter=False,
         )
         selected = {e.candidate.position for e in select(hla_candidates, criteria)}
         expected = {
@@ -247,7 +250,7 @@ class TestHairpinFilter:
     def _base(self, **kw):
         return SelectionCriteria(
             use_ui_tei=False, use_reynolds=False, use_amarzguioui=False,
-            use_seed_filter=False, **kw,
+            use_seed_filter=False, use_homopolymer_filter=False, **kw,
         )
 
     def test_default_off_does_not_constrain(self):
@@ -375,17 +378,18 @@ class TestRealHlaTarget:
     def test_default_criteria_are_strict_but_nonempty_reasons_visible(
         self, hla_candidates
     ):
-        # Default = all three rules (ALL) + seed filter. On this GC-rich CDS that
-        # is very strict; the point is that every rejection carries a reason.
+        # Default = rule union (ANY) + seed filter + homopolymer gate. The seed
+        # filter is very strict on this GC-rich CDS; the point is that every
+        # rejection still carries a reason.
         criteria = SelectionCriteria()
         evaluations = list(evaluate_all(hla_candidates, criteria))
         rejected = [e for e in evaluations if not e.selected]
         assert rejected  # this target does reject most candidates
         assert all(e.reasons for e in rejected)
 
-    def test_relaxing_to_any_rule_without_seed_selects_more(self, hla_candidates):
-        strict = SelectionCriteria()  # ALL rules + seed
-        relaxed = SelectionCriteria(rule_mode=RuleMode.ANY, use_seed_filter=False)
+    def test_dropping_the_seed_filter_selects_more(self, hla_candidates):
+        default = SelectionCriteria()  # ANY rules + seed + homopolymer
+        relaxed = SelectionCriteria(use_seed_filter=False)
         assert len(select(hla_candidates, relaxed)) >= len(
-            select(hla_candidates, strict)
+            select(hla_candidates, default)
         )

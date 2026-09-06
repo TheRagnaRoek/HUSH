@@ -518,6 +518,27 @@ reason for any verdict is visible.
   single-nucleotide run over `max_homopolymer_run`, default 3, e.g. `GGGG` - judged
   on the core only), and the loading asymmetry.
 
+### The default paradigm
+
+`SelectionCriteria`'s defaults encode a best-practice screen rather than the most
+permissive or the most conservative one. All three rule sets are enabled and
+combined by **`ANY`** (each classical algorithm is treated as an equal vote, so a
+candidate any one of them endorses survives - `ALL` would demand three
+independent 2004 heuristics agree, which erases almost everything). The **seed**
+off-target Tm gate is on because it is the siDirect industry standard, and the
+**homopolymer** gate is on because poly-runs are disruptive to both siRNA
+stability and polymerase read-through - both are cheap, widely-agreed quality
+gates. The GC, hairpin and asymmetry gates default off: GC is counter-productively
+strict on the GC-rich polymorphic families HUSH targets, and asymmetry is a niche,
+conservative signal not found in comparable tools. The transcriptome off-target
+filter defaults **on at the CLI** (`hush design`) because off-targets can be
+harmful, but it needs a reference index; with none configured the CLI skips it
+with a warning rather than erroring, and `SelectionCriteria` itself keeps it off
+because the filter has a mandatory searcher argument with no sensible default. The
+one deliberate cost of this paradigm: the seed filter is strict enough to reject
+every candidate on a very GC-rich CDS (HLA), where the user is expected to relax it
+per-target with `--no-seed` (the GUI will surface this hint).
+
 ### Customisable values are options, not rule edits
 
 The GC range, seed-Tm threshold, hairpin-Tm cut-off, and rule score thresholds are

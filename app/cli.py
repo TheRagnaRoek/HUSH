@@ -598,8 +598,9 @@ def design_cmd(
         help="Rule sets: comma list of ui-tei,reynolds,amarzguioui, or all/none.",
     ),
     mode: str = typer.Option(
-        "all", "--mode",
-        help="Combine enabled rules by 'all' (intersection) or 'any' (union).",
+        "any", "--mode",
+        help="Combine enabled rules by 'any' (union, the default - each rule "
+        "weighted equally) or 'all' (intersection).",
     ),
     reynolds_threshold: int = typer.Option(
         REYNOLDS_DEFAULT_THRESHOLD, "--reynolds-threshold",
@@ -617,9 +618,10 @@ def design_cmd(
         SEED_TM_THRESHOLD_C, "--seed-tm", help="Seed-duplex Tm cut-off in C."
     ),
     offtarget: bool = typer.Option(
-        False, "--offtarget/--no-offtarget",
-        help="Apply the transcriptome homology off-target filter (needs a bowtie "
-        "index; see --offtarget-db).",
+        True, "--offtarget/--no-offtarget",
+        help="Apply the transcriptome homology off-target filter (on by default; "
+        "needs a bowtie index via --offtarget-db, else it is skipped with a "
+        "warning). Pass --no-offtarget to silence the reminder.",
     ),
     offtarget_db: Optional[Path] = typer.Option(
         None, "--offtarget-db",
@@ -652,9 +654,11 @@ def design_cmd(
     gc_max: float = typer.Option(
         52.0, "--gc-max", help="GC window upper bound (percent)."
     ),
-    homopolymer: bool = typer.Option(
-        False, "--homopolymer/--no-homopolymer",
-        help="Reject candidates with a single-nucleotide run over --max-run.",
+    allow_homopolymers: bool = typer.Option(
+        False, "--allow-homopolymers/--forbid-homopolymers",
+        help="Whether to keep candidates with a single-nucleotide run over "
+        "--max-run. Forbidden by default (poly-runs hurt siRNA stability and "
+        "cause polymerase read-through); pass --allow-homopolymers to keep them.",
     ),
     max_run: int = typer.Option(
         DEFAULT_MAX_HOMOPOLYMER_RUN, "--max-run",
@@ -743,10 +747,12 @@ def design_cmd(
 ) -> None:
     """Enumerate siRNA candidates for a target and filter them by chosen criteria.
 
-    The three classical rule sets toggle independently and combine by --mode;
-    the seed-Tm, GC, hairpin and asymmetry filters are applied on top. Nothing is
-    ranked: selected candidates are reported in target-position order. Expert
-    thermodynamic knobs live in the Advanced option group (see --help).
+    The best-practice default applies all three rule sets combined by ANY (union),
+    the seed-duplex off-target Tm filter, the homopolymer gate, and transcriptome
+    off-target scanning when a --offtarget-db is configured. The GC, hairpin and
+    asymmetry gates are opt-in. Nothing is ranked: selected candidates are
+    reported in target-position order. Expert thermodynamic knobs live in the
+    Advanced option group (see --help).
 
     Supply --panel to make the run allele-aware: the panel is aligned to the
     target (MSA/allele stage) and each candidate is additionally gated on whether
@@ -798,14 +804,14 @@ def design_cmd(
                 for ev in evaluate_windows(variation, window_criteria)
             }
 
+        # Off-target scanning is on by default, but it needs a reference index.
+        # With none configured we skip it (a warning is printed below) rather than
+        # error, so a bare run still works; --no-offtarget silences the reminder.
         offtarget_searcher = None
         self_accession = None
-        if offtarget:
-            if offtarget_db is None:
-                raise ValueError(
-                    "--offtarget needs a reference database; pass --offtarget-db "
-                    "(build one with tools/build_offtarget_db.py)."
-                )
+        offtarget_active = offtarget and offtarget_db is not None
+        offtarget_skipped = offtarget and offtarget_db is None
+        if offtarget_active:
             self_accession = offtarget_self_accession or _detect_accession(mrna)
             # One batched bowtie run over every strand of every candidate, then a
             # cheap dict lookup per candidate inside the selection loop.
@@ -827,7 +833,7 @@ def design_cmd(
             amarzguioui_threshold=amarzguioui_threshold,
             use_seed_filter=seed,
             seed_tm_threshold=seed_tm,
-            use_offtarget_filter=offtarget,
+            use_offtarget_filter=offtarget_active,
             offtarget_min_mismatch=offtarget_min_mismatch,
             offtarget_searcher=offtarget_searcher,
             offtarget_self_accession=self_accession,
@@ -836,7 +842,7 @@ def design_cmd(
             gc_max=gc_max / 100.0,
             use_hairpin_filter=hairpin,
             hairpin_tm_max=hairpin_tm,
-            use_homopolymer_filter=homopolymer,
+            use_homopolymer_filter=not allow_homopolymers,
             max_homopolymer_run=max_run,
             use_asymmetry_filter=asymmetry,
             asymmetry_window=asym_window,
@@ -861,6 +867,13 @@ def design_cmd(
         f"  {len(mrna)} nt  |  {len(evaluations)} candidate {length}-mer(s)  "
         f"|  {overhang_policy.value} 3' overhang"
     )
+    if offtarget_skipped:
+        typer.secho(
+            "  [!] off-target scanning is on by default but no --offtarget-db was "
+            "given; skipping it. Build an index with tools/build_offtarget_db.py, "
+            "or pass --no-offtarget to silence this.",
+            fg=typer.colors.YELLOW,
+        )
     typer.echo("")
     _print_criteria(criteria, targeting, min_spare_mismatches)
     typer.echo("")
@@ -868,7 +881,7 @@ def design_cmd(
     typer.echo("")
 
     if not selected:
-        hint = "--mode any, --no-seed, or a wider --gc range"
+        hint = "--no-seed (strict on GC-rich targets), or --allow-homopolymers"
         if window_by_pos is not None:
             hint += " (or a targeting request the panel can satisfy)"
         typer.secho(f"No candidates selected. Try relaxing: {hint}.", fg=typer.colors.YELLOW)

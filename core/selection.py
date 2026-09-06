@@ -103,6 +103,16 @@ def longest_homopolymer_run(seq: str) -> tuple[int, str]:
 class SelectionCriteria:
     """A user's selection options: which criteria to apply and with what values.
 
+    The defaults encode HUSH's best-practice paradigm: all three rule sets
+    enabled but combined by ANY (union - each rule is weighted equally, so a
+    candidate any one set endorses is kept), the seed-duplex off-target Tm gate
+    on (the siDirect industry standard), and the homopolymer gate on (poly-runs
+    are disruptive to both siRNA stability and polymerase read-through). The GC,
+    hairpin and asymmetry gates default off (each encodes a stronger or more niche
+    opinion, left for the caller to opt into). The transcriptome off-target filter
+    also defaults off *here* because it needs a searcher argument that has no
+    sensible default; the CLI turns it on when a reference index is configured.
+
     Rule sets:
         use_ui_tei / use_reynolds / use_amarzguioui: enable each rule set.
         rule_mode: ALL or ANY combination of the enabled rule sets.
@@ -142,7 +152,7 @@ class SelectionCriteria:
     use_ui_tei: bool = True
     use_reynolds: bool = True
     use_amarzguioui: bool = True
-    rule_mode: RuleMode = RuleMode.ALL
+    rule_mode: RuleMode = RuleMode.ANY
     reynolds_threshold: int = REYNOLDS_DEFAULT_THRESHOLD
     amarzguioui_threshold: int = AMARZGUIOUI_DEFAULT_THRESHOLD
 
@@ -161,7 +171,7 @@ class SelectionCriteria:
     use_hairpin_filter: bool = False
     hairpin_tm_max: float = DEFAULT_INTERNAL_TM_THRESHOLD_C
 
-    use_homopolymer_filter: bool = False
+    use_homopolymer_filter: bool = True
     max_homopolymer_run: int = DEFAULT_MAX_HOMOPOLYMER_RUN
 
     use_asymmetry_filter: bool = False
