@@ -12,6 +12,16 @@ optional gate, and a candidate is selected only if it clears every enabled one.
 Nothing is scored into a single number, and selected candidates come back in
 target-position order.
 
+**The best-practice default paradigm** (what a bare `hush design TARGET` applies):
+all three rule sets, combined by **`any`** (union - each rule weighted equally);
+the **seed** off-target Tm filter (siDirect industry standard); the
+**homopolymer** gate (poly-runs hurt siRNA stability and cause polymerase
+read-through); and **transcriptome off-target** scanning when an index is
+configured (`--offtarget-db`), otherwise skipped with a warning. The GC, hairpin
+and asymmetry gates are opt-in. Note the seed filter is deliberately strict and
+can reject every candidate on a GC-rich family (e.g. HLA) - relax it there with
+`--no-seed`.
+
 ## Standard options
 
 The everyday design surface - what a normal run turns.
@@ -21,12 +31,12 @@ The everyday design surface - what a normal run turns.
 | `--length` / `-l` | (enumeration arg) | `19` | siRNA **core** length, 19-24 nt (the paired region; overhangs are added on top). |
 | `--overhang` | (enumeration arg) | `natural` | 3' overhang on each strand: `natural` (mRNA-derived flanks), `dtdt` (2'-deoxythymidine, shown lowercase `tt`), or `uu`. |
 | `--rules` | `use_ui_tei`, `use_reynolds`, `use_amarzguioui` | `all` | Which of the three 2004 rule sets to apply (comma list, or `all`/`none`). |
-| `--mode` | `rule_mode` | `all` | Combine enabled rule sets by `all` (intersection) or `any` (union). |
+| `--mode` | `rule_mode` | `any` | Combine enabled rule sets by `any` (union, the default) or `all` (intersection). |
 | `--reynolds-threshold` | `reynolds_threshold` | `6` | Reynolds score cut-off (out of 10). |
 | `--amarzguioui-threshold` | `amarzguioui_threshold` | `3` | Amarzguioui score cut-off. |
 | `--seed` / `--no-seed` | `use_seed_filter` | on | Apply the siDirect seed-duplex off-target Tm filter (both strands). |
 | `--seed-tm` | `seed_tm_threshold` | `21.5` | Seed-duplex Tm cut-off in C. |
-| `--offtarget` / `--no-offtarget` | `use_offtarget_filter` | off | Transcriptome homology off-target filter (needs a bowtie index; see `--offtarget-db`). Distinct from `--seed`: a database search, not a sequence-intrinsic proxy. |
+| `--offtarget` / `--no-offtarget` | `use_offtarget_filter` | **on** | Transcriptome homology off-target filter. On by default, but needs a bowtie index (`--offtarget-db`); with none configured it is skipped with a warning rather than erroring. `--no-offtarget` silences the reminder. Distinct from `--seed`: a database search, not a sequence-intrinsic proxy. |
 | `--offtarget-db` | `offtarget_searcher` | - | bowtie index prefix for the reference transcriptome (build with `tools/build_offtarget_db.py`). |
 | `--offtarget-min-mismatch` | `offtarget_min_mismatch` | `2` | Reject a candidate whose nearest off-target has fewer than this many mismatches (2 matches siDirect on the PDCD1 benchmark). |
 | `--offtarget-max-mismatch` | (searcher depth) | `3` | Mismatch depth the search enumerates (bowtie `-v` allows 0-3). |
@@ -34,7 +44,7 @@ The everyday design surface - what a normal run turns.
 | `--bowtie-path` | (backend) | `bowtie` | Path to the bowtie executable. |
 | `--gc` / `--no-gc` | `use_gc_filter` | off | Apply a standalone GC-content window (separate from Reynolds' internal GC criterion). |
 | `--gc-min` / `--gc-max` | `gc_min` / `gc_max` | `30` / `52` | GC window bounds, in percent. |
-| `--homopolymer` / `--no-homopolymer` | `use_homopolymer_filter` | off | Reject candidates whose core has a single-nucleotide run longer than `--max-run` (e.g. `GGGG`). |
+| `--forbid-homopolymers` / `--allow-homopolymers` | `use_homopolymer_filter` | **forbid (on)** | Reject candidates whose core has a single-nucleotide run longer than `--max-run` (e.g. `GGGG`). On by default; `--allow-homopolymers` keeps them. |
 | `--max-run` | `max_homopolymer_run` | `3` | Longest tolerated single-nucleotide run in the core; a run over this is rejected. |
 | `--asymmetry` / `--no-asymmetry` | `use_asymmetry_filter` | off | Require duplex-end asymmetry to favour loading the guide (sign only, no magnitude threshold). |
 
@@ -116,27 +126,27 @@ would let a run silently invalidate a threshold:
 
 ## Two example runs
 
-Strict default (all three rules, seed filter on) - very selective on a GC-rich
-target:
+The default paradigm (rule union + seed + homopolymer). On this GC-rich CDS the
+seed filter is so strict it selects nothing - the expected, documented behaviour
+for a highly GC-rich family:
 
 ```bash
 hush design data/examples/hla_a01.fasta
 ```
 
-Relaxed, with the standalone structure and GC gates added and the union of rule
-sets:
+Relaxed for a GC-rich target: drop the seed filter and add the standalone
+structure and GC gates:
 
 ```bash
-hush design data/examples/hla_a01.fasta --rules all --mode any \
-  --no-seed --gc --hairpin -o selected.tsv
+hush design data/examples/hla_a01.fasta --no-seed --gc --hairpin -o selected.tsv
 ```
 
 With the transcriptome off-target filter (needs a bowtie index built by
 `tools/build_offtarget_db.py`):
 
 ```bash
-hush design data/examples/PDCD1_CDS.fasta --rules ui-tei,reynolds --mode any \
-  --offtarget --offtarget-db data/reference/refseq_human_mrna
+hush design data/examples/PDCD1_CDS.fasta --rules ui-tei,reynolds --no-seed \
+  --offtarget-db data/reference/refseq_human_mrna
 ```
 
 Allele-aware, singling one allele out of a panel (the allele gate is ANDed on

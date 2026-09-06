@@ -66,6 +66,39 @@ def test_design_default_runs(target_fasta):
     assert "selected:" in result.stdout
 
 
+def test_design_lowgc_demo_selects_under_bare_default(demo_lowgc_fasta):
+    # The shipped low-GC demo must yield candidates under the full default
+    # paradigm (seed on), so a newcomer's first bare run is non-empty.
+    result = runner.invoke(app, ["design", str(demo_lowgc_fasta)])
+    assert result.exit_code == 0
+    assert "seed Tm:" in result.stdout  # seed filter is on by default
+    # The selected count sits on its own funnel line; it must be non-zero.
+    selected_line = next(
+        line for line in result.stdout.splitlines() if "selected:" in line
+    )
+    assert int(selected_line.split("selected:")[1].strip()) > 0
+
+
+def test_design_default_mode_is_union(target_fasta):
+    # The best-practice default combines the rule sets by ANY (union).
+    result = runner.invoke(app, ["design", str(target_fasta)])
+    assert result.exit_code == 0
+    assert "mode: ANY" in result.stdout
+
+
+def test_design_offtarget_on_by_default_warns_without_index(target_fasta):
+    # Off-target scanning defaults on but degrades to a warning with no index.
+    result = runner.invoke(app, ["design", str(target_fasta)])
+    assert result.exit_code == 0
+    assert "off-target scanning is on by default" in result.stdout
+
+
+def test_design_no_offtarget_silences_the_reminder(target_fasta):
+    result = runner.invoke(app, ["design", str(target_fasta), "--no-offtarget"])
+    assert result.exit_code == 0
+    assert "off-target scanning is on by default" not in result.stdout
+
+
 def test_design_relaxed_selects_and_lists(target_fasta):
     result = runner.invoke(
         app, ["design", str(target_fasta), "--mode", "any", "--no-seed", "-n", "3"]
@@ -149,14 +182,22 @@ def test_design_unknown_overhang_errors(target_fasta):
     assert result.exit_code != 0
 
 
-def test_design_homopolymer_filter_shows_funnel_row(target_fasta):
-    result = runner.invoke(
-        app,
-        ["design", str(target_fasta), "--mode", "any", "--no-seed", "--homopolymer"],
-    )
+def test_design_homopolymer_filter_on_by_default(target_fasta):
+    # The homopolymer gate is part of the default paradigm.
+    result = runner.invoke(app, ["design", str(target_fasta), "--no-seed"])
     assert result.exit_code == 0
     assert "homopolymer:" in result.stdout
     assert "reject runs > 3 nt" in result.stdout
+
+
+def test_design_allow_homopolymers_disables_the_gate(target_fasta):
+    result = runner.invoke(
+        app,
+        ["design", str(target_fasta), "--no-seed", "--allow-homopolymers"],
+    )
+    assert result.exit_code == 0
+    # The criteria block reports the gate as off, and no funnel row for it.
+    assert "homopolymer:off" in result.stdout.replace(" ", "")
 
 
 # --------------------------------------------------------------------------- #

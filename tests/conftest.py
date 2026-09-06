@@ -35,6 +35,12 @@ def hla_a01_fasta() -> Path:
     return EXAMPLES_DIR / "hla_a01.fasta"
 
 
+@pytest.fixture
+def demo_lowgc_fasta() -> Path:
+    """A synthetic low-GC CDS that selects under the default paradigm (seed on)."""
+    return EXAMPLES_DIR / "demo_lowgc_cds.fasta"
+
+
 @pytest.fixture(scope="session")
 def amarzguioui_table3() -> list[dict]:
     """Table 3 of Amarzguioui & Prydz (2004): 46 siRNAs scored by the authors."""
