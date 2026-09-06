@@ -66,6 +66,19 @@ def test_design_default_runs(target_fasta):
     assert "selected:" in result.stdout
 
 
+def test_design_lowgc_demo_selects_under_bare_default(demo_lowgc_fasta):
+    # The shipped low-GC demo must yield candidates under the full default
+    # paradigm (seed on), so a newcomer's first bare run is non-empty.
+    result = runner.invoke(app, ["design", str(demo_lowgc_fasta)])
+    assert result.exit_code == 0
+    assert "seed Tm:" in result.stdout  # seed filter is on by default
+    # The selected count sits on its own funnel line; it must be non-zero.
+    selected_line = next(
+        line for line in result.stdout.splitlines() if "selected:" in line
+    )
+    assert int(selected_line.split("selected:")[1].strip()) > 0
+
+
 def test_design_default_mode_is_union(target_fasta):
     # The best-practice default combines the rule sets by ANY (union).
     result = runner.invoke(app, ["design", str(target_fasta)])

@@ -68,9 +68,7 @@ mRNA/CDS.
 ### Design siRNA candidates
 
 ```bash
-# Default run. The bundled examples are GC-rich (HLA-motivated), where the strict
-# seed filter selects nothing; --no-seed surfaces candidates (see the note below).
-hush design data/examples/target_example.fasta --no-seed
+hush design data/examples/demo_lowgc_cds.fasta
 ```
 
 `hush design` enumerates every candidate site (19-nt core by default, with 2-nt
