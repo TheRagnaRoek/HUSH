@@ -4,6 +4,8 @@ import pytest
 
 from core.sequence import BioSequence, MolType, SequencePanel
 from msa.alignment import AlignedRow, PanelAlignment
+from msa.discrimination import GuideRegion
+from msa.discrimination import discrimination_key as allele_discrimination_key
 from msa.msa_errors import MsaError
 from msa.targeting import AlleleTargeting
 from msa.variation import PanelVariation
@@ -220,6 +222,106 @@ class TestSliding:
     def test_an_allele_absent_from_the_alignment_is_rejected(self, variation):
         with pytest.raises(MsaError):
             evaluate_window(variation, _criteria(hit={"absent"}), 0)
+
+
+class TestDiscrimination:
+    """The evidence-based ranking attached to each window.
+
+    Uses its own 19-nt fixture: the published findings are indexed by guide
+    position P1..P19, so the short window the other tests use cannot exercise
+    them.
+    """
+
+    SEQ = "ATGCGTACGTTAGCCATTGCACGTAACGGATCATGCA"  # 37 nt
+    WIDE = 19
+    # Target position 3 maps to guide position 16 in the window starting at 0,
+    # target position 12 to guide position 7 - post-seed and seed respectively.
+    STRONG_AT, WEAK_AT = 3, 12
+
+    @pytest.fixture
+    def wide_variation(self) -> PanelVariation:
+        target = BioSequence(self.SEQ, id="TARGET", moltype=MolType.DNA)
+
+        def swap(position: int) -> str:
+            # Both target bases are chosen so the spared allele carries an 'A':
+            # position 3 is C (mutation A>C), position 12 is G (A>G).
+            return self.SEQ[:position] + "A" + self.SEQ[position + 1 :]
+
+        alignment = PanelAlignment.from_rows(
+            target,
+            [
+                AlignedRow("HIT", self.SEQ),
+                AlignedRow("SPARE_STRONG", swap(self.STRONG_AT)),
+                AlignedRow("SPARE_WEAK", swap(self.WEAK_AT)),
+            ],
+        )
+        return PanelVariation.from_alignment(alignment)
+
+    def _window(self, variation, spare=("SPARE_STRONG", "SPARE_WEAK")):
+        criteria = WindowCriteria(
+            AlleleTargeting(hit={"HIT"}, spare=spare), length=self.WIDE
+        )
+        return evaluate_window(variation, criteria, 0)
+
+    def test_only_spared_alleles_are_assessed(self, wide_variation):
+        # A difference from a targeted allele is a defect, not discrimination.
+        window = self._window(wide_variation)
+        assert set(window.mismatch_assessments) == {"SPARE_STRONG", "SPARE_WEAK"}
+
+    def test_assessments_carry_the_guide_position(self, wide_variation):
+        window = self._window(wide_variation)
+        strong = window.mismatch_assessments["SPARE_STRONG"]
+        weak = window.mismatch_assessments["SPARE_WEAK"]
+        assert [a.guide_position for a in strong] == [self.WIDE - self.STRONG_AT]
+        assert [a.guide_position for a in weak] == [self.WIDE - self.WEAK_AT]
+
+    def test_the_weakest_allele_decides(self, wide_variation):
+        # SPARE_STRONG differs at P16, SPARE_WEAK at P7 (seed). An siRNA has to
+        # spare both, so the window is only as good as the worse of the two.
+        window = self._window(wide_variation)
+        deciding = window.deciding_mismatch
+        assert deciding is not None
+        assert deciding.guide_position == self.WIDE - self.WEAK_AT
+        assert deciding.region is GuideRegion.SEED
+
+    def test_key_equals_the_weakest_alleles_own_key(self, wide_variation):
+        window = self._window(wide_variation)
+        weakest = window.mismatch_assessments["SPARE_WEAK"]
+        assert window.discrimination_key == allele_discrimination_key(weakest)
+
+    def test_a_single_spared_allele_decides_alone(self, wide_variation):
+        strong_only = self._window(wide_variation, spare=("SPARE_STRONG",))
+        both = self._window(wide_variation)
+        # Dropping the weak allele can only improve the window's rank.
+        assert strong_only.discrimination_key > both.discrimination_key
+
+    def test_pan_allele_has_nothing_to_rank(self, wide_variation):
+        criteria = WindowCriteria(
+            AlleleTargeting(hit={"HIT", "SPARE_STRONG", "SPARE_WEAK"}),
+            length=self.WIDE,
+        )
+        window = evaluate_window(wide_variation, criteria, 0)
+        assert window.mismatch_assessments == {}
+        assert window.discrimination_key is None
+        assert window.deciding_mismatch is None
+
+    def test_sorting_by_the_key_is_reproducible(self, wide_variation):
+        criteria = WindowCriteria(
+            AlleleTargeting(hit={"HIT"}, spare={"SPARE_STRONG", "SPARE_WEAK"}),
+            length=self.WIDE,
+        )
+        windows = [e for e in evaluate_all(wide_variation, criteria) if e.satisfies]
+        assert windows, "fixture should yield at least one satisfying window"
+
+        def order(items):
+            return [
+                w.position
+                for w in sorted(
+                    items, key=lambda w: (w.discrimination_key, -w.position), reverse=True
+                )
+            ]
+
+        assert order(windows) == order(list(reversed(windows)))
 
 
 class TestRegions:
