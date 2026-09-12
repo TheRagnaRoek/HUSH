@@ -27,6 +27,7 @@ from core.offtarget import (
     BowtieSearcher,
 )
 from msa.align_star import align_star
+from msa.discrimination import MismatchClass
 from msa.targeting import AlleleTargeting
 from msa.variation import PanelVariation
 from msa.windows import (
@@ -448,6 +449,77 @@ def _print_funnel(
     typer.echo(typer.style(row("selected:", len(selected)), fg=typer.colors.GREEN, bold=True))
 
 
+def _discrimination_cell(window: WindowEvaluation) -> str:
+    """Compact readout of the mismatch a window's discrimination rests on.
+
+    'P16*pp' reads: guide position 16, listed in Huang's table for this base
+    change (*), purine:purine (pp). A missing mark means the opposite; '?' means
+    the bases were ambiguous and neither source applies.
+    """
+    deciding = window.deciding_mismatch
+    if deciding is None:
+        return "none"
+    if deciding.huang_recommended is None:
+        listed = "?"
+    else:
+        listed = "*" if deciding.huang_recommended else ""
+    purine = "pp" if deciding.mismatch_class is MismatchClass.PURINE_PURINE else ""
+    return f"P{deciding.guide_position}{listed}{purine}"
+
+
+def _apply_sort(
+    selected: list,
+    sort: str,
+    window_by_pos: dict[int, WindowEvaluation] | None,
+    targeting: AlleleTargeting | None,
+) -> list:
+    """Order the selected candidates as the user asked.
+
+    Position order is the default and the project's convention: nothing is ranked
+    unless asked for. Discrimination order is opt-in because it imposes a
+    priority between published findings that the measurements do not fully
+    settle - see msa.discrimination.DISCRIMINATION_ORDER_NOTE.
+    """
+    if sort == "position":
+        return selected
+    if sort != "discrimination":
+        raise typer.BadParameter(
+            f"unknown sort {sort!r}; choose 'position' or 'discrimination'.",
+            param_hint="--sort",
+        )
+    if window_by_pos is None or targeting is None or not targeting.discriminating:
+        raise typer.BadParameter(
+            "--sort discrimination needs a request that spares something; "
+            "pan-allele targeting asks for no discrimination to rank.",
+            param_hint="--sort",
+        )
+    # Position breaks ties so two runs never disagree.
+    return sorted(
+        selected,
+        key=lambda e: (
+            window_by_pos[e.candidate.position].discrimination_key,
+            -e.candidate.position,
+        ),
+        reverse=True,
+    )
+
+
+def _discrimination_fields(window: WindowEvaluation) -> list[str]:
+    """The deciding mismatch, as six TSV fields. Empty ones where it has none."""
+    deciding = window.deciding_mismatch
+    if deciding is None:
+        return [""] * 6
+    huang = "" if deciding.huang_recommended is None else str(deciding.huang_recommended)
+    return [
+        str(deciding.guide_position),
+        deciding.mutation_type,
+        "" if deciding.mismatch_class is None else deciding.mismatch_class.value,
+        huang,
+        deciding.region.value,
+        str(deciding.sources_agree),
+    ]
+
+
 def _print_table(
     selected: list,
     criteria: SelectionCriteria,
@@ -456,8 +528,9 @@ def _print_table(
     window_by_pos: dict[int, WindowEvaluation] | None = None,
     targeting: AlleleTargeting | None = None,
 ) -> None:
-    # A spare-margin column is shown only when the request discriminates; for a
-    # selected candidate it is the weakest per-spared-allele difference count.
+    # The minDiff/disc columns are shown only when the request discriminates.
+    # minDiff is the weakest per-spared-allele difference count; disc places that
+    # allele's best-positioned difference against the published evidence.
     show_spare = (
         window_by_pos is not None
         and targeting is not None
@@ -471,7 +544,7 @@ def _print_table(
     if criteria.enabled_rule_names:
         header += f" {'rules':<5}"
     if show_spare:
-        header += f" {'spareMM':>7}"
+        header += f" {'minDiff':>7} {'disc':>7}"
     if criteria.use_seed_filter:
         header += f" {'seedTm':>7}"
     if criteria.use_offtarget_filter:
@@ -492,8 +565,10 @@ def _print_table(
         if criteria.enabled_rule_names:
             row += f" {_rules_code(e, criteria):<5}"
         if show_spare:
-            margin = window_by_pos[c.position].min_spare_mismatches
+            window = window_by_pos[c.position]
+            margin = window.min_spare_mismatches
             row += f" {('none' if margin is None else str(margin)):>7}"
+            row += f" {_discrimination_cell(window):>7}"
         if criteria.use_seed_filter:
             row += f" {e.seed.max_tm:>7.1f}"
         if criteria.use_offtarget_filter:
@@ -504,6 +579,20 @@ def _print_table(
         if criteria.use_homopolymer_filter:
             row += f" {e.homopolymer_run:>4}"
         typer.echo(row)
+    if show_spare:
+        # Both allele columns report the weakest spared allele, not an average:
+        # an siRNA has to spare every one of them, so the one it distinguishes
+        # least well is the one that decides.
+        typer.secho(
+            "  minDiff and disc describe the weakest spared allele - the one this "
+            "window distinguishes least well.",
+            fg=typer.colors.BRIGHT_BLACK,
+        )
+        typer.secho(
+            "  disc: guide position, * = listed by Huang et al. for this base "
+            "change, pp = purine:purine.",
+            fg=typer.colors.BRIGHT_BLACK,
+        )
     if limit and len(selected) > limit:
         typer.echo(
             f"  ... {len(selected) - limit} more "
@@ -540,7 +629,13 @@ def _write_design_tsv(
         # Allele-window read-outs at this candidate's position: the worst
         # difference among hit alleles (0 for a selected candidate) and the
         # weakest discrimination among spared alleles (empty for pan-allele).
-        header += "\tallele_hit_max_mismatch\tallele_spare_min_mismatch"
+        header += (
+            "\tallele_hit_max_mismatch\tallele_spare_min_mismatch"
+            # The single mismatch the window's discrimination rank rests on:
+            # the best-placed difference from the weakest spared allele.
+            "\tdisc_guide_position\tdisc_mutation\tdisc_mismatch_class"
+            "\tdisc_huang_recommended\tdisc_region\tdisc_sources_agree"
+        )
     lines = [header]
     for e in selected:
         c = e.candidate
@@ -575,6 +670,7 @@ def _write_design_tsv(
             fields += [
                 str(window.max_hit_mismatches),
                 "" if spare_min is None else str(spare_min),
+                *_discrimination_fields(window),
             ]
         lines.append("\t".join(fields))
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
@@ -738,6 +834,13 @@ def design_cmd(
         "window is credited with discriminating against it.",
         rich_help_panel=_ALLELE,
     ),
+    sort: str = typer.Option(
+        "position", "--sort",
+        help="Report order: position (default, nothing ranked) or discrimination "
+        "(best first, judged by each window's weakest spared allele; needs a "
+        "request that spares something).",
+        rich_help_panel=_ALLELE,
+    ),
     limit: int = typer.Option(
         20, "--limit", "-n", help="Max candidates to print (0 = all)."
     ),
@@ -750,9 +853,10 @@ def design_cmd(
     The best-practice default applies all three rule sets combined by ANY (union),
     the seed-duplex off-target Tm filter, the homopolymer gate, and transcriptome
     off-target scanning when a --offtarget-db is configured. The GC, hairpin and
-    asymmetry gates are opt-in. Nothing is ranked: selected candidates are
-    reported in target-position order. Expert thermodynamic knobs live in the
-    Advanced option group (see --help).
+    asymmetry gates are opt-in. Nothing is ranked by default: selected candidates
+    are reported in target-position order, and '--sort discrimination' is the one
+    way to ask for an ordering. Expert thermodynamic knobs live in the Advanced
+    option group (see --help).
 
     Supply --panel to make the run allele-aware: the panel is aligned to the
     target (MSA/allele stage) and each candidate is additionally gated on whether
@@ -861,6 +965,7 @@ def design_cmd(
         )
 
     selected = [e for e in evaluations if e.selected and _allele_ok(e)]
+    selected = _apply_sort(selected, sort, window_by_pos, targeting)
 
     typer.echo(typer.style(f"Target: {mrna.id or '<unnamed>'}", fg=typer.colors.CYAN, bold=True))
     typer.echo(

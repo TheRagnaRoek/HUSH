@@ -232,8 +232,9 @@ def test_design_allele_specific_shows_spare_margin(target_fasta, panel_fasta):
     )
     assert result.exit_code == 0
     assert "allele-specific" in result.stdout
-    # Discriminating targeting adds the per-candidate spare-margin column.
-    assert "spareMM" in result.stdout
+    # Discriminating targeting adds the two per-candidate allele columns.
+    assert "minDiff" in result.stdout
+    assert "disc" in result.stdout
 
 
 def test_design_explicit_hit_and_spare(target_fasta, panel_fasta):
@@ -246,7 +247,55 @@ def test_design_explicit_hit_and_spare(target_fasta, panel_fasta):
         ],
     )
     assert result.exit_code == 0
-    assert "spareMM" in result.stdout
+    assert "minDiff" in result.stdout
+
+
+def _design_sorted(target_fasta, panel_fasta, sort: str):
+    return runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--allele-specific", _ALLELE_1, "--mode", "any", "--no-seed",
+            "--sort", sort,
+        ],
+    )
+
+
+def test_design_sort_discrimination(target_fasta, panel_fasta):
+    result = _design_sorted(target_fasta, panel_fasta, "discrimination")
+    assert result.exit_code == 0
+    # The legend has to say which allele the two columns describe, since both
+    # report the weakest one rather than an average.
+    assert "weakest spared allele" in result.stdout
+
+
+def test_design_sort_position_is_the_default(target_fasta, panel_fasta):
+    explicit = _design_sorted(target_fasta, panel_fasta, "position")
+    implicit = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--allele-specific", _ALLELE_1, "--mode", "any", "--no-seed",
+        ],
+    )
+    assert explicit.exit_code == 0
+    assert explicit.stdout == implicit.stdout
+
+
+def test_design_sort_discrimination_needs_something_spared(target_fasta, panel_fasta):
+    # Pan-allele targeting asks for no discrimination, so there is none to rank.
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--pan-allele", "--sort", "discrimination",
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_design_unknown_sort_errors(target_fasta, panel_fasta):
+    assert _design_sorted(target_fasta, panel_fasta, "nonsense").exit_code != 0
 
 
 def test_design_targeting_without_panel_errors(target_fasta):

@@ -47,6 +47,9 @@ from dataclasses import dataclass, field
 from typing import Iterable, Iterator
 
 from core.sirna import DEFAULT_LENGTH
+from msa.discrimination import MismatchAssessment, assess_mismatch
+from msa.discrimination import best_mismatch as _best_mismatch
+from msa.discrimination import discrimination_key as _allele_discrimination_key
 from msa.msa_errors import MsaError
 from msa.targeting import AlleleTargeting
 from msa.variation import PanelVariation, SiteState
@@ -132,11 +135,54 @@ class WindowEvaluation:
     spare_pass: bool | None
     satisfies: bool
     reasons: tuple[str, ...] = field(default_factory=tuple)
+    mismatch_assessments: dict[str, tuple[MismatchAssessment, ...]] = field(
+        default_factory=dict
+    )
 
     @property
     def end(self) -> int:
         """0-based, exclusive end of the window on the target."""
         return self.position + self.length
+
+    @property
+    def discrimination_key(self) -> tuple | None:
+        """How well this window discriminates, for ranking. Higher is better.
+
+        The weakest spared allele decides, the same "weakest link" rule
+        min_spare_mismatches follows: a window is only as discriminating as the
+        allele it distinguishes least well.
+
+        None when the request spares nothing - pan-allele targeting asks for no
+        discrimination, so there is none to rank. Callers that sort must decide
+        what to do with that rather than being handed a misleading zero.
+
+        See msa.discrimination for what the entries rest on.
+        """
+        if not self.mismatch_assessments:
+            return None
+        return min(
+            _allele_discrimination_key(assessments)
+            for assessments in self.mismatch_assessments.values()
+        )
+
+    @property
+    def deciding_mismatch(self) -> MismatchAssessment | None:
+        """The single mismatch this window's rank rests on.
+
+        The best-placed difference from the weakest spared allele - the one that
+        sets discrimination_key. Reporting it lets a user see *why* a window
+        ranks where it does without unpacking every assessment.
+
+        None when nothing is spared, or when the weakest allele has no
+        difference at all (in which case the window does not discriminate and
+        will not have been selected).
+        """
+        if not self.mismatch_assessments:
+            return None
+        weakest = min(
+            self.mismatch_assessments.values(), key=_allele_discrimination_key
+        )
+        return _best_mismatch(weakest)
 
     @property
     def region(self) -> str:
@@ -255,10 +301,39 @@ def evaluate_window(
         spare_pass=spare_pass,
         satisfies=satisfies,
         reasons=reasons,
+        mismatch_assessments=_assess(variation, criteria, position, mismatches),
     )
 
 
-def evaluate_windows(
+def _assess(
+    variation: PanelVariation,
+    criteria: WindowCriteria,
+    position: int,
+    mismatches: dict[str, tuple[int, ...]],
+) -> dict[str, tuple[MismatchAssessment, ...]]:
+    """Place every difference from a spared allele against the published evidence.
+
+    Only spared alleles are assessed: discrimination is a statement about what an
+    siRNA fails to silence, so a difference from a targeted allele is a defect,
+    not a feature, and is already reported through hit_pass.
+    """
+    target_seq = variation.target.seq
+    assessments: dict[str, tuple[MismatchAssessment, ...]] = {}
+    for allele in sorted(criteria.targeting.spare):
+        row = variation.alignment[allele].bases
+        assessments[allele] = tuple(
+            assess_mismatch(
+                window_position=offset,
+                window_length=criteria.length,
+                target_base=target_seq[position + offset],
+                spared_base=row[position + offset],
+            )
+            for offset in mismatches[allele]
+        )
+    return assessments
+
+
+def evaluate_all(
     variation: PanelVariation, criteria: WindowCriteria
 ) -> Iterator[WindowEvaluation]:
     """Lazily evaluate every window of the target, satisfying or not.
