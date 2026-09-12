@@ -351,3 +351,67 @@ def test_design_panel_tsv_has_allele_columns(target_fasta, panel_fasta, tmp_path
     header = out.read_text(encoding="ascii").splitlines()[0]
     assert "allele_hit_max_mismatch" in header
     assert "allele_spare_min_mismatch" in header
+
+
+# --------------------------------------------------------------------------- #
+# convert command (stage 4: siRNA -> shRNA)
+# --------------------------------------------------------------------------- #
+
+
+def _design_tsv(target_fasta, tmp_path):
+    """Produce a selected-candidate TSV to feed the converter."""
+    out = tmp_path / "selected.tsv"
+    result = runner.invoke(
+        app,
+        ["design", str(target_fasta), "--no-seed", "--no-offtarget", "-o", str(out)],
+    )
+    assert result.exit_code == 0, result.output
+    return out
+
+
+def test_convert_runs_and_reports_scaffold(target_fasta, tmp_path):
+    sel = _design_tsv(target_fasta, tmp_path)
+    result = runner.invoke(app, ["convert", str(sel), "--loop", "jensen"])
+    assert result.exit_code == 0, result.output
+    assert "stem-loop (SA)" in result.stdout
+    assert "UGUGCUU" in result.stdout  # the jensen loop is echoed
+    assert "fold as designed" in result.stdout
+
+
+def test_convert_writes_tsv_with_expected_columns_and_rows(target_fasta, tmp_path):
+    sel = _design_tsv(target_fasta, tmp_path)
+    out = tmp_path / "shrna.tsv"
+    result = runner.invoke(app, ["convert", str(sel), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    lines = out.read_text(encoding="ascii").splitlines()
+    assert lines[0].startswith("region\tstart\tend\tloop_name\tloop_seq")
+    assert "insert_top_dna_5to3" in lines[0]
+    assert "folds_as_designed" in lines[0]
+    # One construct per selected candidate in the input TSV.
+    assert len(lines) - 1 == len(sel.read_text(encoding="ascii").splitlines()) - 1
+
+
+def test_convert_bottom_oligo_is_reverse_complement_of_top(target_fasta, tmp_path):
+    sel = _design_tsv(target_fasta, tmp_path)
+    out = tmp_path / "shrna.tsv"
+    runner.invoke(app, ["convert", str(sel), "-o", str(out)])
+    header, first = out.read_text(encoding="ascii").splitlines()[:2]
+    cols = header.split("\t")
+    row = dict(zip(cols, first.split("\t")))
+    top, bottom = row["insert_top_dna_5to3"], row["insert_bottom_dna_5to3"]
+    complement = {"A": "T", "T": "A", "G": "C", "C": "G"}
+    assert bottom == "".join(complement[b] for b in reversed(top))
+
+
+def test_convert_unknown_loop_errors(target_fasta, tmp_path):
+    sel = _design_tsv(target_fasta, tmp_path)
+    result = runner.invoke(app, ["convert", str(sel), "--loop", "bogus"])
+    assert result.exit_code != 0
+
+
+def test_convert_rejects_non_design_tsv(tmp_path):
+    bad = tmp_path / "bad.tsv"
+    bad.write_text("foo\tbar\n1\t2\n", encoding="ascii")
+    result = runner.invoke(app, ["convert", str(bad)])
+    assert result.exit_code == 1
+    assert "Convert error" in result.output

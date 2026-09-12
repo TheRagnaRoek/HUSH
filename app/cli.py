@@ -44,9 +44,11 @@ from core.selection import (
     SelectionCriteria,
     evaluate_all,
 )
-from core.sequence import BioSequence, DesignInput
+from core.sequence import BioSequence, DesignInput, MolType
 from core.sirna import OverhangPolicy, enumerate_candidates
 from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
+from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions, convert
+from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold, get_loop
 
 # Help-panel label that groups the expert thermodynamic knobs in `design --help`.
 _ADVANCED = "Advanced (thermodynamic internals)"
@@ -996,6 +998,220 @@ def design_cmd(
     if output is not None:
         _write_design_tsv(output, selected, criteria, window_by_pos)
         typer.echo(f"\nWrote {len(selected)} selected candidate(s) to {output}")
+
+
+# --------------------------------------------------------------------------- #
+# convert command (stage 4: siRNA -> shRNA)
+# --------------------------------------------------------------------------- #
+
+
+def _parse_loop(spec: str) -> LoopScaffold:
+    try:
+        return get_loop(spec)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--loop")
+
+
+# Columns the converter needs from a 'hush design' TSV to rebuild the core.
+_DESIGN_TSV_REQUIRED = {"region", "start", "end", "passenger_5to3", "passenger_overhang"}
+
+
+def _read_design_tsv(path: Path) -> list[dict[str, str]]:
+    """Read a 'hush design' TSV into a list of column-keyed row dicts."""
+    lines = path.read_text(encoding="ascii").splitlines()
+    if not lines:
+        raise ValueError(f"{path} is empty.")
+    header = lines[0].split("\t")
+    missing = _DESIGN_TSV_REQUIRED - set(header)
+    if missing:
+        raise ValueError(
+            f"{path} is missing column(s) {sorted(missing)}; expected a TSV from "
+            "'hush design -o'."
+        )
+    idx = {name: i for i, name in enumerate(header)}
+    rows = []
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        fields = line.split("\t")
+        rows.append({name: fields[i] for name, i in idx.items()})
+    return rows
+
+
+def _core_from_row(row: dict[str, str]) -> tuple[BioSequence, BioSequence]:
+    """Rebuild the (sense, antisense) duplex core from one design-TSV row.
+
+    The passenger strand as ordered is the core plus its 3' overhang; stripping
+    the recorded overhang leaves the paired core (the mRNA-matching sense
+    strand), and the guide is its reverse-complement.
+    """
+    passenger_full = row["passenger_5to3"]
+    overhang = row["passenger_overhang"]
+    core_str = passenger_full[: len(passenger_full) - len(overhang)] if overhang else passenger_full
+    sense = BioSequence(core_str, moltype=MolType.RNA)
+    return sense, sense.reverse_complement()
+
+
+def _print_convert_table(constructs: list, options: ShrnaOptions, limit: int) -> None:
+    hp_w = max(len(c.hairpin_rna.seq) for c in constructs)
+    header = (
+        f"  {'region':<11} {'hairpin 5->3':<{hp_w}} {'fold':>5} {'5G':>3} "
+        f"{'termOK':>6} {'run':>4}"
+    )
+    typer.echo(typer.style(header, bold=True))
+    shown = constructs if limit == 0 else constructs[:limit]
+    for c in shown:
+        fold = "ok" if c.folds_as_designed else "RISK"
+        row = (
+            f"  {c.region:<11} {c.hairpin_rna.seq:<{hp_w}} {fold:>5} "
+            f"{('G' if c.starts_with_g else '-'):>3} "
+            f"{('yes' if c.premature_terminator_free else 'NO'):>6} "
+            f"{c.max_homopolymer_run:>4}"
+        )
+        typer.echo(row)
+    typer.secho(
+        "  fold: 'ok' = folds into the intended stem-loop; 'RISK' = a competing "
+        "structure is more stable.",
+        fg=typer.colors.BRIGHT_BLACK,
+    )
+    typer.secho(
+        "  Order the top/bottom oligos from the TSV (-o); anneal them to form the "
+        "insert, then add your vector's sticky-end tails.",
+        fg=typer.colors.BRIGHT_BLACK,
+    )
+    if limit and len(constructs) > limit:
+        typer.echo(
+            f"  ... {len(constructs) - limit} more "
+            "(use --limit 0 to show all, or -o file.tsv)"
+        )
+
+
+def _write_convert_tsv(path: Path, constructs: list) -> None:
+    header = (
+        "region\tstart\tend\tloop_name\tloop_seq\torientation\thairpin_rna_5to3\t"
+        "insert_top_dna_5to3\tinsert_bottom_dna_5to3\tfolds_as_designed\t"
+        "fold_dg37\tfold_tm_c\tstarts_with_g\tpremature_terminator_free\t"
+        "max_homopolymer_run"
+    )
+    lines = [header]
+    for c in constructs:
+        dg37 = "" if c.fold is None else f"{c.fold.dg37:.2f}"
+        tm = "" if c.fold is None else f"{c.fold.tm:.2f}"
+        fields = [
+            c.region,
+            str(c.start + 1),
+            str(c.end),
+            c.loop_name,
+            LOOPS[c.loop_name].seq,
+            c.orientation.value,
+            c.hairpin_rna.seq,
+            c.insert_top.seq,
+            c.insert_bottom.seq,
+            str(c.folds_as_designed),
+            dg37,
+            tm,
+            str(c.starts_with_g),
+            str(c.premature_terminator_free),
+            str(c.max_homopolymer_run),
+        ]
+        lines.append("\t".join(fields))
+    path.write_text("\n".join(lines) + "\n", encoding="ascii")
+
+
+@app.command("convert")
+def convert_cmd(
+    selected: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True,
+        help="Selected-candidate TSV from 'hush design -o'.",
+    ),
+    loop: str = typer.Option(
+        DEFAULT_LOOP, "--loop",
+        help="Loop scaffold: jensen (UGUGCUU, default) | psuper (UUCAAGAGA) | "
+        "trc (CUCGAG).",
+    ),
+    terminator: bool = typer.Option(
+        True, "--terminator/--no-terminator",
+        help="Append the Pol III poly-T terminator to the hairpin insert.",
+    ),
+    terminator_length: int = typer.Option(
+        DEFAULT_TERMINATOR_LENGTH, "--terminator-length",
+        help="Length of the poly-T terminator run (>= 4 when included).",
+    ),
+    limit: int = typer.Option(
+        20, "--limit", "-n", help="Max constructs to print (0 = all)."
+    ),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Write all constructs to a TSV file."
+    ),
+) -> None:
+    """Convert selected siRNA candidates into stem-loop shRNA constructs.
+
+    Reads a 'hush design -o' TSV and, for each selected candidate, grafts its
+    19-bp duplex core (unchanged) onto the chosen loop as a sense-loop-antisense
+    hairpin. The bare insert is emitted as top/bottom DNA oligos plus a Pol III
+    poly-T terminator - vector-agnostic, so add your vector's restriction
+    sticky-end tails before cloning. Each construct is folded to confirm it forms
+    the intended stem-loop, and QC flags (Pol III 5'-G start, loop
+    terminator-safety, homopolymer runs) are reported.
+    """
+    loop_scaffold = _parse_loop(loop)
+    try:
+        options = ShrnaOptions(
+            loop=loop_scaffold,
+            include_terminator=terminator,
+            terminator_length=terminator_length,
+        )
+        rows = _read_design_tsv(selected)
+        constructs = []
+        for row in rows:
+            sense, antisense = _core_from_row(row)
+            constructs.append(
+                convert(
+                    sense,
+                    antisense,
+                    region=row["region"],
+                    start=int(row["start"]) - 1,
+                    end=int(row["end"]),
+                    options=options,
+                )
+            )
+    except (HushError, ValueError) as exc:
+        typer.secho(f"Convert error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    term = (
+        f"{options.terminator_length}x T" if options.include_terminator else "none"
+    )
+    typer.echo(
+        typer.style(
+            f"Scaffold: stem-loop (SA)  |  loop {loop_scaffold.name} "
+            f"{loop_scaffold.seq}  |  terminator {term}",
+            fg=typer.colors.CYAN,
+            bold=True,
+        )
+    )
+    typer.echo(f"  {loop_scaffold.citation}")
+    typer.echo("")
+
+    if not constructs:
+        typer.secho(
+            "No candidates in the input TSV - nothing to convert.",
+            fg=typer.colors.YELLOW,
+        )
+        return
+
+    fold_ok = sum(1 for c in constructs if c.folds_as_designed)
+    g_start = sum(1 for c in constructs if c.starts_with_g)
+    typer.echo(typer.style("Summary", bold=True))
+    typer.echo(f"  constructs:        {len(constructs)}")
+    typer.echo(f"  fold as designed:  {fold_ok}")
+    typer.echo(f"  5'-G (U6 Pol III): {g_start}")
+    typer.echo("")
+    _print_convert_table(constructs, options, limit)
+
+    if output is not None:
+        _write_convert_tsv(output, constructs)
+        typer.echo(f"\nWrote {len(constructs)} construct(s) to {output}")
 
 
 if __name__ == "__main__":

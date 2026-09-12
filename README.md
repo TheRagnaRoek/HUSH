@@ -24,7 +24,7 @@ the full rationale and prior-art landscape.
 | 1. Input Layer | `core.inputs` + `core.sequence` | implemented |
 | 2. siRNA Design | `core.sirna` / `rules` / `thermo` / `seed` / `offtarget` / `asymmetry` / `hairpin` / `selection` | implemented, validated against siDirect |
 | 3. MSA / Allele | `msa` | implemented, wired into `hush design --panel` |
-| 4. shRNA Conversion | `shrna` | planned |
+| 4. shRNA Conversion | `shrna` | implemented (stem-loop scaffold), wired into `hush convert` |
 | 5. Output Layer | `core` / `app` | planned |
 
 ## Install
@@ -136,6 +136,27 @@ hush design data/examples/target_example.fasta --no-seed \
 The criteria block and funnel gain an `allele:` line, a discriminating run adds a
 `spareMM` column, and `-o` adds allele columns to the TSV.
 
+### Convert siRNA candidates to shRNA
+
+`hush convert` reads a `hush design -o` TSV and grafts each selected candidate's
+19-bp core (unchanged, so the validated guide is preserved) onto an established
+stem-loop scaffold in the sense-loop-antisense orientation. Output is the bare
+hairpin insert as top/bottom DNA oligos plus a Pol III poly-T terminator - it is
+vector-agnostic, so add your vector's restriction sticky-end tails before
+cloning. Each construct is folded to confirm it forms the intended stem-loop (not
+a competing structure), with QC flags for Pol III 5'-G initiation, loop/stem
+terminator-safety, and homopolymer runs.
+
+```bash
+hush design data/examples/hla_a01.fasta --no-seed -o selected.tsv
+hush convert selected.tsv --loop jensen -o shrna.tsv
+```
+
+The loop is selectable (`--loop jensen|psuper|trc`, default the least
+stem-dependent Jensen UGUGCUU); `--no-terminator` and `--terminator-length` tune
+the poly-T terminator. Scaffold rationale and references are in
+[`docs/shrna_design_note.md`](docs/shrna_design_note.md).
+
 ## Benchmarking against siDirect
 
 siDirect is HUSH's gold-standard reference; on matched settings the rule
@@ -153,7 +174,7 @@ python tools/compare_sidirect.py \
 core/    Domain model + the siRNA design engine (sequence, inputs, sirna, rules,
          thermo, seed, offtarget, asymmetry, hairpin, selection, errors)
 msa/     MSA / allele stage (alignment, align_star, variation, windows, targeting)
-shrna/   shRNA conversion (stage 4, placeholder)
+shrna/   shRNA conversion (stage 4: loops, convert)
 app/     CLI (app.cli)
 data/    Example inputs and benchmarking fixtures
 tools/   Developer utilities (build_offtarget_db.py, compare_sidirect.py)
@@ -166,6 +187,7 @@ tests/   pytest suite
 - [`docs/HUSH_concept_dossier.md`](docs/HUSH_concept_dossier.md) - project vision and prior art.
 - [`docs/design_notes.md`](docs/design_notes.md) - long-form rationale, formulae and validation records for every stage.
 - [`docs/design_options.md`](docs/design_options.md) - one-page `hush design` option reference.
+- [`docs/shrna_design_note.md`](docs/shrna_design_note.md) - the stem-loop shRNA conversion: scope, parameters, and references.
 - [`docs/offtarget_design_note.md`](docs/offtarget_design_note.md) and [`docs/seed_offtarget_design_note.md`](docs/seed_offtarget_design_note.md) - the two off-target filters in depth.
 - Module docstrings carry the per-unit contract and scope.
 
