@@ -258,7 +258,7 @@ def evaluate_window(
     )
 
 
-def evaluate_all(
+def evaluate_windows(
     variation: PanelVariation, criteria: WindowCriteria
 ) -> Iterator[WindowEvaluation]:
     """Lazily evaluate every window of the target, satisfying or not.
@@ -291,12 +291,12 @@ def select(
 ) -> list[WindowEvaluation]:
     """Every window that satisfies the request, in target-position order.
 
-    For the full set of evaluations, satisfying or not, map evaluate_all over
-    the variation directly.
+    For the full set of evaluations, satisfying or not, map evaluate_windows
+    over the variation directly.
     """
     return [
         evaluation
-        for evaluation in evaluate_all(variation, criteria)
+        for evaluation in evaluate_windows(variation, criteria)
         if evaluation.satisfies
     ]
 
