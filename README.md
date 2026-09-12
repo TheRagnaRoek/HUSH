@@ -36,9 +36,15 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-Pure-pip; the core needs no external binaries. The one optional dependency is
-**bowtie1** (a separate binary via bioconda or your package manager), used only
-for transcriptome-scale off-target search (`hush design --offtarget-db`).
+Pure-pip; the core needs no external binaries. The one non-pip piece is
+**bowtie1**, used only for transcriptome-scale off-target search
+(`hush design --offtarget-db`). It is **not** an end-user dependency: HUSH ships
+as a hosted, browser-based tool, so bowtie and the RefSeq index live server-side
+in the container image under [`docker/`](docker/README.md) - built and hosted
+once by us, never installed or built by the user. For local development against
+the transcriptome, that same image is the supported way to get bowtie and the
+index (see [`docker/README.md`](docker/README.md)); the pure-Python core, tests,
+and small-panel path all run with no binary at all.
 
 Once installed, the thin launchers call the venv's interpreter directly, so
 `hush` works from the project folder without activating the venv:
@@ -91,8 +97,10 @@ The **default paradigm** (best-practice, not the strictest or the loosest):
 | Duplex-end loading asymmetry | off | `--asymmetry` |
 
 \* On by default, but it needs a reference index; with none configured it is
-skipped with a warning rather than erroring. Build one with
-`python tools/build_offtarget_db.py`, then pass `--offtarget-db`.
+skipped with a warning rather than erroring. In the shipped tool the index is
+prebuilt and served server-side. To build one for local development, use the
+container (`docker compose run --rm build-index`, see
+[`docker/README.md`](docker/README.md)), then pass `--offtarget-db`.
 
 > **GC-rich families:** the seed filter is the siDirect industry standard but is
 > deliberately strict - on a very GC-rich CDS (e.g. HLA) it can reject every

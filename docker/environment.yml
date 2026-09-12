@@ -1,0 +1,13 @@
+# Conda environment for HUSH's off-target stage: Python plus the bowtie1 binary
+# from bioconda. This is the ops-side home for bowtie - it is installed here, in
+# our image/environment, and never asked of the end user. HUSH itself is
+# pip-installed on top from pyproject.toml (see docker/Dockerfile), so this file
+# pins only the system-level pieces the pure-pip install cannot provide.
+name: hush
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - bowtie=1.3.1
+  - pip

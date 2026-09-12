@@ -1,0 +1,33 @@
+# Keep the build context small and reproducible: never ship local virtualenvs,
+# caches, VCS metadata, or the bulk reference downloads/indexes into the image
+# (the index is built inside the container into a mounted volume, not baked in).
+.git
+.gitignore
+.venv
+venv
+env
+ENV
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov
+coverage.xml
+build
+dist
+*.egg-info
+.eggs
+
+# Bulk reference data and built indexes (mounted at run time, not copied in).
+data/reference/
+data/cache/
+
+# Editor / OS cruft
+.idea
+.vscode
+*.swp
+.DS_Store
+Thumbs.db

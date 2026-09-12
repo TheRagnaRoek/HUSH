@@ -7,16 +7,20 @@ file, runs `bowtie-build`, and writes a manifest recording exactly what went in
 build is reproducible. The index this produces is what `hush design --offtarget
 --offtarget-db <prefix>` consumes; core.offtarget.BowtieSearcher reads it.
 
-This is a deliberate, one-off, network-heavy step run by the user - not part of
-the design pipeline or the test suite. The reference is large; nothing here is
-committed (data/reference is gitignored).
+This is a deliberate, one-off, network-heavy build step - not part of the design
+pipeline or the test suite. It is an ops-side job run once by us, not by the end
+user: HUSH ships browser-based with the index prebuilt and hosted server-side.
+The reference is large; nothing here is committed (data/reference is gitignored).
 
-Usage:
+Preferred: run it in the HUSH container, which already carries bowtie1, so
+nothing needs installing on the host (see docker/README.md):
+    docker compose run --rm build-index
+
+Direct usage (needs bowtie1's `bowtie-build` on PATH, e.g. inside that image):
     python tools/build_offtarget_db.py            # into data/reference/
     python tools/build_offtarget_db.py --outdir data/reference --keep-fasta
 
-Requires bowtie1 (`bowtie-build`) on PATH. Only the Python standard library is
-used otherwise.
+Only the Python standard library is used otherwise.
 """
 
 from __future__ import annotations
@@ -133,7 +137,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if shutil.which("bowtie-build") is None:
         raise SystemExit(
-            "bowtie-build not found on PATH. Install bowtie1 (e.g. via bioconda)."
+            "bowtie-build not found on PATH. Run this in the HUSH container, which "
+            "ships bowtie1: 'docker compose run --rm build-index' (see "
+            "docker/README.md). Installing bowtie1 on the host is not required."
         )
 
     args.outdir.mkdir(parents=True, exist_ok=True)

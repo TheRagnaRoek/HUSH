@@ -1,0 +1,21 @@
+# HUSH containerized off-target tooling.
+#
+# The image (docker/Dockerfile) carries bowtie1, so bowtie is never installed by
+# hand. The RefSeq off-target index is built once into the named volume
+# `hush_ref` and reused from there - by the build job below now, and by the
+# hosted design backend later.
+services:
+  # One-shot index build: fetch the RefSeq human transcriptome and run
+  # bowtie-build into the shared volume. Run it with:
+  #   docker compose run --rm build-index
+  build-index:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: hush:latest
+    volumes:
+      - hush_ref:/data/reference
+    command: ["python", "tools/build_offtarget_db.py", "--outdir", "/data/reference"]
+
+volumes:
+  hush_ref:
