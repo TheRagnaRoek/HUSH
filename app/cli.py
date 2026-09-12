@@ -35,7 +35,7 @@ from msa.windows import (
     WindowCriteria,
     WindowEvaluation,
 )
-from msa.windows import evaluate_all as evaluate_windows
+from msa.windows import evaluate_windows
 from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
 from core.seed import SEED_TM_THRESHOLD_C
 from core.selection import (

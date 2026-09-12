@@ -12,7 +12,7 @@ from msa.variation import PanelVariation
 from msa.windows import (
     WindowCriteria,
     WindowEvaluation,
-    evaluate_all,
+    evaluate_windows,
     evaluate_window,
     guide_position,
     regions,
@@ -121,11 +121,11 @@ class TestGuidePosition:
 class TestHitGate:
     def test_an_identical_allele_passes_everywhere(self, variation):
         criteria = _criteria(hit={"A1"})
-        assert all(e.hit_pass for e in evaluate_all(variation, criteria))
+        assert all(e.hit_pass for e in evaluate_windows(variation, criteria))
 
     def test_a_differing_allele_fails_where_it_differs(self, variation):
         criteria = _criteria(hit={"A2"})
-        failing = [e.position for e in evaluate_all(variation, criteria) if not e.hit_pass]
+        failing = [e.position for e in evaluate_windows(variation, criteria) if not e.hit_pass]
         # Every window covering position 8 must fail.
         assert set(failing) == set(range(SUB_A2 - LENGTH + 1, SUB_A2 + 1))
 
@@ -168,7 +168,7 @@ class TestSpareGate:
 
     def test_pan_allele_has_no_spare_gate(self, variation):
         criteria = _criteria(hit={"A1", "A2", "A3"})
-        for window in evaluate_all(variation, criteria):
+        for window in evaluate_windows(variation, criteria):
             assert window.spare_pass is None
             assert window.min_spare_mismatches is None
 
@@ -204,16 +204,16 @@ class TestBreakdown:
 class TestSliding:
     def test_every_window_of_the_target_is_evaluated(self, variation):
         criteria = _criteria(hit={"A1"})
-        assert len(list(evaluate_all(variation, criteria))) == len(TARGET_SEQ) - LENGTH + 1
+        assert len(list(evaluate_windows(variation, criteria))) == len(TARGET_SEQ) - LENGTH + 1
 
     def test_windows_come_in_target_order(self, variation):
-        positions = [e.position for e in evaluate_all(variation, _criteria(hit={"A1"}))]
+        positions = [e.position for e in evaluate_windows(variation, _criteria(hit={"A1"}))]
         assert positions == sorted(positions)
 
     def test_a_window_longer_than_the_target_is_rejected(self, variation):
         criteria = _criteria(hit={"A1"}, length=len(TARGET_SEQ) + 1)
         with pytest.raises(MsaError):
-            list(evaluate_all(variation, criteria))
+            list(evaluate_windows(variation, criteria))
 
     def test_a_window_outside_the_target_is_rejected(self, variation):
         with pytest.raises(IndexError):
@@ -327,11 +327,11 @@ class TestDiscrimination:
 class TestRegions:
     def test_overlapping_windows_merge(self, variation):
         criteria = _criteria(hit={"A1"}, spare={"A2", "A3"})
-        assert list(regions(evaluate_all(variation, criteria))) == [(5, 14)]
+        assert list(regions(evaluate_windows(variation, criteria))) == [(5, 14)]
 
     def test_no_satisfying_window_gives_no_region(self, variation):
         criteria = _criteria(hit={"A1"}, spare={"A2", "A3"}, min_spare=2)
-        assert list(regions(evaluate_all(variation, criteria))) == []
+        assert list(regions(evaluate_windows(variation, criteria))) == []
 
     def test_separated_windows_stay_separate(self):
         def window(position: int, satisfies: bool) -> WindowEvaluation:

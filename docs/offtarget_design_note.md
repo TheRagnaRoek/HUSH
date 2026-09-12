@@ -44,8 +44,19 @@ bowtie is a **binary**, and HUSH is otherwise pip-only. This is contained:
 - The pure-Python `BruteForceSearcher` means the core library, the tests, and the
   small-panel / allele-aware path all work with **zero** binary dependency. bowtie
   is only needed for transcriptome-scale search, which - given the reference is
-  hundreds of MB - is a server-side or desktop-bundled job anyway, never a
-  fully-in-browser one.
+  hundreds of MB - is a server-side job, never a fully-in-browser one.
+
+**Deployment posture (decided 2026-09-06).** HUSH ships as a hosted,
+browser-based tool with a server backend, so bowtie and the RefSeq index are
+**our** responsibility, never the end user's. Both live in the container image
+under `docker/` (bowtie1 pinned from bioconda in `docker/environment.yml`): the
+same image builds the index once (`docker compose run --rm build-index`) and runs
+the design backend that shells out to bowtie. The index is built and hosted once
+by us; users only hit the web UI and never install bowtie, download RefSeq, or
+run `bowtie-build`. This also sidesteps installing bowtie1 on native Windows,
+since the container is Linux. Keeping bowtie (rather than replacing it with a
+pure-Python engine) was the explicit call: it preserves the exact
+siDirect-validated results at no change to the engine.
 
 ## 3. Reference: RefSeq human mRNA, pinned
 
