@@ -30,6 +30,12 @@ from typing import Iterable, Iterator
 
 from core.asymmetry import DEFAULT_WINDOW_BP, EndAsymmetry, end_asymmetry
 from core.hairpin import DEFAULT_INTERNAL_TM_THRESHOLD_C, internal_structure_tm
+from core.offtarget import (
+    DEFAULT_OFFTARGET_MIN_MISMATCH,
+    OffTargetProfile,
+    OffTargetSearcher,
+    evaluate_offtarget,
+)
 from core.rules import (
     AMARZGUIOUI_DEFAULT_THRESHOLD,
     REYNOLDS_DEFAULT_THRESHOLD,
@@ -97,6 +103,16 @@ def longest_homopolymer_run(seq: str) -> tuple[int, str]:
 class SelectionCriteria:
     """A user's selection options: which criteria to apply and with what values.
 
+    The defaults encode HUSH's best-practice paradigm: all three rule sets
+    enabled but combined by ANY (union - each rule is weighted equally, so a
+    candidate any one set endorses is kept), the seed-duplex off-target Tm gate
+    on (the siDirect industry standard), and the homopolymer gate on (poly-runs
+    are disruptive to both siRNA stability and polymerase read-through). The GC,
+    hairpin and asymmetry gates default off (each encodes a stronger or more niche
+    opinion, left for the caller to opt into). The transcriptome off-target filter
+    also defaults off *here* because it needs a searcher argument that has no
+    sensible default; the CLI turns it on when a reference index is configured.
+
     Rule sets:
         use_ui_tei / use_reynolds / use_amarzguioui: enable each rule set.
         rule_mode: ALL or ANY combination of the enabled rule sets.
@@ -108,6 +124,13 @@ class SelectionCriteria:
             from Reynolds criterion I (which stays at the published 30-52%).
         use_seed_filter, seed_tm_threshold: the siDirect seed-duplex off-target
             Tm filter, applied to both strands.
+        use_offtarget_filter, offtarget_min_mismatch, offtarget_searcher,
+            offtarget_self_accession: the transcriptome homology off-target
+            filter. Rejects a candidate whose nearest off-target (on either
+            strand, excluding its own source transcript) has fewer than
+            offtarget_min_mismatch mismatches. Needs a searcher (a reference
+            database handle); distinct from the seed filter above, which is a
+            sequence-intrinsic proxy rather than a database search.
         use_hairpin_filter, hairpin_tm_max: a standalone internal-structure gate -
             reject a candidate whose most stable self-hairpin melts above
             hairpin_tm_max. Distinct from Reynolds criterion (its internal-repeat
@@ -129,7 +152,7 @@ class SelectionCriteria:
     use_ui_tei: bool = True
     use_reynolds: bool = True
     use_amarzguioui: bool = True
-    rule_mode: RuleMode = RuleMode.ALL
+    rule_mode: RuleMode = RuleMode.ANY
     reynolds_threshold: int = REYNOLDS_DEFAULT_THRESHOLD
     amarzguioui_threshold: int = AMARZGUIOUI_DEFAULT_THRESHOLD
 
@@ -140,10 +163,15 @@ class SelectionCriteria:
     use_seed_filter: bool = True
     seed_tm_threshold: float = SEED_TM_THRESHOLD_C
 
+    use_offtarget_filter: bool = False
+    offtarget_min_mismatch: int = DEFAULT_OFFTARGET_MIN_MISMATCH
+    offtarget_searcher: OffTargetSearcher | None = None
+    offtarget_self_accession: str | None = None
+
     use_hairpin_filter: bool = False
     hairpin_tm_max: float = DEFAULT_INTERNAL_TM_THRESHOLD_C
 
-    use_homopolymer_filter: bool = False
+    use_homopolymer_filter: bool = True
     max_homopolymer_run: int = DEFAULT_MAX_HOMOPOLYMER_RUN
 
     use_asymmetry_filter: bool = False
@@ -171,6 +199,26 @@ class SelectionCriteria:
             raise ValueError(
                 f"max_homopolymer_run must be >= 1; got {self.max_homopolymer_run}."
             )
+        if self.use_offtarget_filter:
+            if self.offtarget_searcher is None:
+                raise ValueError(
+                    "use_offtarget_filter requires an offtarget_searcher "
+                    "(a reference database handle)."
+                )
+            if self.offtarget_min_mismatch < 1:
+                raise ValueError(
+                    "offtarget_min_mismatch must be >= 1; got "
+                    f"{self.offtarget_min_mismatch}."
+                )
+            # The search must reach at least threshold-1 mismatches to see every
+            # disqualifying near-match.
+            if self.offtarget_searcher.max_mismatch < self.offtarget_min_mismatch - 1:
+                raise ValueError(
+                    f"offtarget searcher depth {self.offtarget_searcher.max_mismatch} "
+                    f"is too shallow for offtarget_min_mismatch "
+                    f"{self.offtarget_min_mismatch}; it must be >= "
+                    f"{self.offtarget_min_mismatch - 1}."
+                )
 
     @property
     def enabled_rule_names(self) -> tuple[str, ...]:
@@ -208,6 +256,7 @@ class CandidateEvaluation:
     reynolds: ReynoldsResult | None
     amarzguioui: AmarzguiouiResult | None
     seed: SeedTmResult | None
+    offtarget: OffTargetProfile | None
     asymmetry: EndAsymmetry | None
     hairpin_tm: float | None
     homopolymer_run: int | None
@@ -215,6 +264,7 @@ class CandidateEvaluation:
     rule_pass: bool
     gc_pass: bool | None
     seed_pass: bool | None
+    offtarget_pass: bool | None
     hairpin_pass: bool | None
     homopolymer_pass: bool | None
     asymmetry_pass: bool | None
@@ -275,6 +325,19 @@ def evaluate(
     )
     seed_pass = seed.passes if seed is not None else None
 
+    if criteria.use_offtarget_filter:
+        assert criteria.offtarget_searcher is not None  # guarded in __post_init__
+        offtarget = evaluate_offtarget(
+            candidate,
+            criteria.offtarget_searcher,
+            threshold=criteria.offtarget_min_mismatch,
+            self_accession=criteria.offtarget_self_accession,
+        )
+        offtarget_pass = offtarget.passes
+    else:
+        offtarget = None
+        offtarget_pass = None
+
     if criteria.use_hairpin_filter:
         hairpin_tm = internal_structure_tm(
             candidate.sense, params=criteria.thermo_params.table
@@ -306,13 +369,17 @@ def evaluate(
     gates = [rule_pass]
     gates += [
         p
-        for p in (gc_pass, seed_pass, hairpin_pass, homopolymer_pass, asymmetry_pass)
+        for p in (
+            gc_pass, seed_pass, offtarget_pass,
+            hairpin_pass, homopolymer_pass, asymmetry_pass,
+        )
         if p is not None
     ]
     selected = all(gates)
 
     reasons = () if selected else _reasons(
         criteria, rule_pass, gc, gc_pass, seed, seed_pass,
+        offtarget, offtarget_pass,
         hairpin_tm, hairpin_pass, homopolymer_run, homopolymer_base,
         homopolymer_pass, asym, asymmetry_pass,
     )
@@ -323,6 +390,7 @@ def evaluate(
         reynolds=rey,
         amarzguioui=amz,
         seed=seed,
+        offtarget=offtarget,
         asymmetry=asym,
         hairpin_tm=hairpin_tm,
         homopolymer_run=homopolymer_run,
@@ -330,6 +398,7 @@ def evaluate(
         rule_pass=rule_pass,
         gc_pass=gc_pass,
         seed_pass=seed_pass,
+        offtarget_pass=offtarget_pass,
         hairpin_pass=hairpin_pass,
         homopolymer_pass=homopolymer_pass,
         asymmetry_pass=asymmetry_pass,
@@ -345,6 +414,8 @@ def _reasons(
     gc_pass: bool | None,
     seed: SeedTmResult | None,
     seed_pass: bool | None,
+    offtarget: OffTargetProfile | None,
+    offtarget_pass: bool | None,
     hairpin_tm: float | None,
     hairpin_pass: bool | None,
     homopolymer_run: int | None,
@@ -365,6 +436,11 @@ def _reasons(
     if seed_pass is False and seed is not None:
         out.append(
             f"seed off-target Tm {seed.max_tm:.1f}C >= {seed.threshold:.1f}C"
+        )
+    if offtarget_pass is False and offtarget is not None:
+        out.append(
+            f"off-target at {offtarget.min_mismatch} mismatch(es) "
+            f"< {offtarget.threshold}"
         )
     if hairpin_pass is False and hairpin_tm is not None:
         out.append(

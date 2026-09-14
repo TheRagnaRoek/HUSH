@@ -93,7 +93,7 @@ def load_sidirect(path: str) -> dict[str, dict[str, str]]:
 
 
 def load_hush(path: str) -> dict[str, dict[str, str]]:
-    """Map guide sequence -> {region, rules} from a HUSH design TSV."""
+    """Map guide sequence -> {region, rules, min_mismatch} from a HUSH design TSV."""
     out: dict[str, dict[str, str]] = {}
     with open(path, encoding="ascii", newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
@@ -101,6 +101,7 @@ def load_hush(path: str) -> dict[str, dict[str, str]]:
             out[guide] = {
                 "region": row.get("region", ""),
                 "rules": row.get("rules_passed", ""),
+                "min_mismatch": row.get("offtarget_min_mismatch", "").strip(),
             }
     return out
 
@@ -112,6 +113,23 @@ def _start(region: str) -> int:
         return 0
 
 
+def _first_int(text: str):
+    """Leading integer in a cell (siDirect may write '3' or '>=3'), or None."""
+    digits = ""
+    for ch in text:
+        if ch.isdigit():
+            digits += ch
+        elif digits:
+            break
+    return int(digits) if digits else None
+
+
+def _mm_agree(hush_mm: str, sid_mm: str) -> bool:
+    """True when HUSH and siDirect report the same nearest-off-target mismatch."""
+    a, b = _first_int(hush_mm), _first_int(sid_mm)
+    return a is not None and a == b
+
+
 def diff(sidirect: dict, hush: dict) -> int:
     sid_g, hush_g = set(sidirect), set(hush)
     matched = sorted(sid_g & hush_g, key=lambda g: _start(hush[g]["region"]))
@@ -120,20 +138,36 @@ def diff(sidirect: dict, hush: dict) -> int:
 
     print(f"siDirect: {len(sidirect)}   HUSH: {len(hush)}\n")
 
+    mm_disagree = 0
     print(f"== MATCHED (both) : {len(matched)} ==")
     for g in matched:
         h, s = hush[g], sidirect[g]
-        mm = f" minMM={s['min_mismatch']}" if s["min_mismatch"] else ""
+        sid_mm, hush_mm = s["min_mismatch"], h["min_mismatch"]
+        if sid_mm and hush_mm:
+            agree = _mm_agree(hush_mm, sid_mm)
+            mm = f" minMM: HUSH={hush_mm} siDirect={sid_mm} {'ok' if agree else 'DIFF'}"
+            mm_disagree += 0 if agree else 1
+        else:
+            mm = f" minMM={sid_mm}" if sid_mm else ""
         print(f"  HUSH {h['region']:<10} rules={h['rules']:<3} | "
               f"siDirect {s['position']:<10} func={s['functional']:<3}{mm}")
+    if mm_disagree:
+        print(f"  NOTE: {mm_disagree} matched candidate(s) disagree on min-mismatch; "
+              "check the off-target DB/settings against siDirect's.")
 
     print(f"\n== HUSH-ONLY (siDirect excluded) : {len(hush_only)} ==")
     for g in hush_only:
         print(f"  HUSH {hush[g]['region']:<10} rules={hush[g]['rules']:<3} guide={g}")
     if hush_only:
-        print("  NOTE: expected until the transcriptome off-target filter is "
-              "implemented (WIP);\n        siDirect drops near-perfect-off-target "
-              "candidates that HUSH cannot yet see.")
+        any_offtarget = any(hush[g]["min_mismatch"] for g in hush)
+        if any_offtarget:
+            print("  NOTE: with the off-target filter on, these should be siDirect's "
+                  "on-target/rule differences,\n        not missing off-target "
+                  "detection; investigate any remainder.")
+        else:
+            print("  NOTE: expected while the transcriptome off-target filter is off; "
+                  "run with\n        hush design --offtarget to drop near-perfect-"
+                  "off-target candidates.")
 
     print(f"\n== siDirect-ONLY (HUSH missed) : {len(sid_only)} ==")
     for g in sid_only:

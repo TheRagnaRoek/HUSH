@@ -12,6 +12,16 @@ optional gate, and a candidate is selected only if it clears every enabled one.
 Nothing is scored into a single number, and selected candidates come back in
 target-position order.
 
+**The best-practice default paradigm** (what a bare `hush design TARGET` applies):
+all three rule sets, combined by **`any`** (union - each rule weighted equally);
+the **seed** off-target Tm filter (siDirect industry standard); the
+**homopolymer** gate (poly-runs hurt siRNA stability and cause polymerase
+read-through); and **transcriptome off-target** scanning when an index is
+configured (`--offtarget-db`), otherwise skipped with a warning. The GC, hairpin
+and asymmetry gates are opt-in. Note the seed filter is deliberately strict and
+can reject every candidate on a GC-rich family (e.g. HLA) - relax it there with
+`--no-seed`.
+
 ## Standard options
 
 The everyday design surface - what a normal run turns.
@@ -21,14 +31,20 @@ The everyday design surface - what a normal run turns.
 | `--length` / `-l` | (enumeration arg) | `19` | siRNA **core** length, 19-24 nt (the paired region; overhangs are added on top). |
 | `--overhang` | (enumeration arg) | `natural` | 3' overhang on each strand: `natural` (mRNA-derived flanks), `dtdt` (2'-deoxythymidine, shown lowercase `tt`), or `uu`. |
 | `--rules` | `use_ui_tei`, `use_reynolds`, `use_amarzguioui` | `all` | Which of the three 2004 rule sets to apply (comma list, or `all`/`none`). |
-| `--mode` | `rule_mode` | `all` | Combine enabled rule sets by `all` (intersection) or `any` (union). |
+| `--mode` | `rule_mode` | `any` | Combine enabled rule sets by `any` (union, the default) or `all` (intersection). |
 | `--reynolds-threshold` | `reynolds_threshold` | `6` | Reynolds score cut-off (out of 10). |
 | `--amarzguioui-threshold` | `amarzguioui_threshold` | `3` | Amarzguioui score cut-off. |
 | `--seed` / `--no-seed` | `use_seed_filter` | on | Apply the siDirect seed-duplex off-target Tm filter (both strands). |
 | `--seed-tm` | `seed_tm_threshold` | `21.5` | Seed-duplex Tm cut-off in C. |
+| `--offtarget` / `--no-offtarget` | `use_offtarget_filter` | **on** | Transcriptome homology off-target filter. On by default, but needs a bowtie index (`--offtarget-db`); with none configured it is skipped with a warning rather than erroring. `--no-offtarget` silences the reminder. Distinct from `--seed`: a database search, not a sequence-intrinsic proxy. |
+| `--offtarget-db` | `offtarget_searcher` | - | bowtie index prefix for the reference transcriptome (build with `tools/build_offtarget_db.py`). |
+| `--offtarget-min-mismatch` | `offtarget_min_mismatch` | `2` | Reject a candidate whose nearest off-target has fewer than this many mismatches (2 matches siDirect on the PDCD1 benchmark). |
+| `--offtarget-max-mismatch` | (searcher depth) | `3` | Mismatch depth the search enumerates (bowtie `-v` allows 0-3). |
+| `--offtarget-self-accession` | `offtarget_self_accession` | auto | Accession of the target's own transcript to exclude from hits (auto-detected from the FASTA header). |
+| `--bowtie-path` | (backend) | `bowtie` | Path to the bowtie executable. |
 | `--gc` / `--no-gc` | `use_gc_filter` | off | Apply a standalone GC-content window (separate from Reynolds' internal GC criterion). |
 | `--gc-min` / `--gc-max` | `gc_min` / `gc_max` | `30` / `52` | GC window bounds, in percent. |
-| `--homopolymer` / `--no-homopolymer` | `use_homopolymer_filter` | off | Reject candidates whose core has a single-nucleotide run longer than `--max-run` (e.g. `GGGG`). |
+| `--forbid-homopolymers` / `--allow-homopolymers` | `use_homopolymer_filter` | **forbid (on)** | Reject candidates whose core has a single-nucleotide run longer than `--max-run` (e.g. `GGGG`). On by default; `--allow-homopolymers` keeps them. |
 | `--max-run` | `max_homopolymer_run` | `3` | Longest tolerated single-nucleotide run in the core; a run over this is rejected. |
 | `--asymmetry` / `--no-asymmetry` | `use_asymmetry_filter` | off | Require duplex-end asymmetry to favour loading the guide (sign only, no magnitude threshold). |
 
@@ -50,6 +66,34 @@ Note for benchmarking against siDirect: in `natural` mode the **guide** strand s
 equals siDirect's listed guide (core + upstream overhang = reverse-complement of the
 full window), but the **passenger** is offset (its overhang is the downstream flank), so
 compare on the guide or the target position, not the passenger.
+
+## Allele-aware options (MSA panel targeting)
+
+Off unless `--panel` is given. Supplying a panel engages the MSA/allele stage
+(stage 3): the panel is star-aligned to the target, and each candidate is
+additionally gated on whether its window hits the requested alleles and
+discriminates against the spared ones. The allele gate is ANDed with every
+selection filter above. The window length is the siRNA core length (`--length`),
+so windows and candidates line up one-for-one.
+
+| CLI flag | Maps to | Default | What it does |
+|---|---|---|---|
+| `--panel` / `-p` | (loads the panel) | - | Allele-family FASTA (e.g. an HLA locus). Its presence turns the allele gate on. |
+| `--panel-format` | (format override) | auto | Override the panel format: `fasta` / `pdb` / `cif`. |
+| `--pan-allele` | `AlleleTargeting.pan_allele` | on\* | Hit every panel member, spare none (conserved-region targeting). |
+| `--allele-specific` | `AlleleTargeting.allele_specific` | - | Hit exactly this panel member id, spare the rest. |
+| `--hit` | `AlleleTargeting.hit` | - | Comma list of member ids to hit. With `--spare` both sets are explicit; without it the rest are spared (subset). |
+| `--spare` | `AlleleTargeting.spare` | - | Comma list of member ids to discriminate against; only refines an explicit `--hit`. |
+| `--min-spare-mismatches` | `WindowCriteria.min_spare_mismatches` | `1` | Differences a spared allele must carry inside a window before it counts as discriminated. |
+
+\* `--pan-allele` is the default intent when `--panel` is given without
+`--allele-specific` or `--hit`. The three intents (`--pan-allele`,
+`--allele-specific`, `--hit`) are mutually exclusive.
+
+The allele gate is a **filter, not a ranking**, and coverage is required: a window
+where a targeted allele is uncovered, or where a spared allele is uncovered,
+cannot satisfy the request - missing data is never read as evidence. See the
+[`docs/design_notes.md`](design_notes.md) MSA/allele section for the rationale.
 
 ## Advanced options (thermodynamic internals)
 
@@ -82,19 +126,36 @@ would let a run silently invalidate a threshold:
 
 ## Two example runs
 
-Strict default (all three rules, seed filter on) - very selective on a GC-rich
-target:
+The default paradigm (rule union + seed + homopolymer). On this GC-rich CDS the
+seed filter is so strict it selects nothing - the expected, documented behaviour
+for a highly GC-rich family:
 
 ```bash
 hush design data/examples/hla_a01.fasta
 ```
 
-Relaxed, with the standalone structure and GC gates added and the union of rule
-sets:
+Relaxed for a GC-rich target: drop the seed filter and add the standalone
+structure and GC gates:
 
 ```bash
-hush design data/examples/hla_a01.fasta --rules all --mode any \
-  --no-seed --gc --hairpin -o selected.tsv
+hush design data/examples/hla_a01.fasta --no-seed --gc --hairpin -o selected.tsv
+```
+
+With the transcriptome off-target filter (needs a bowtie index built by
+`tools/build_offtarget_db.py`):
+
+```bash
+hush design data/examples/PDCD1_CDS.fasta --rules ui-tei,reynolds --no-seed \
+  --offtarget-db data/reference/refseq_human_mrna
+```
+
+Allele-aware, singling one allele out of a panel (the allele gate is ANDed on
+top of the rule and filter gates):
+
+```bash
+hush design data/examples/target_example.fasta \
+  --panel data/examples/hla_panel_example.fasta \
+  --allele-specific "HLA-DEMO*01:01" --mode any --no-seed
 ```
 
 Every run prints the chosen criteria and a funnel of how many candidates clear
@@ -102,14 +163,6 @@ each enabled gate, so an empty result shows exactly which gate removed them.
 
 ## Planned / deferred
 
-- **Transcriptome off-target filter (WIP, next task).** siDirect BLASTs each
-  guide against the human transcriptome and rejects candidates with a near-perfect
-  (0-1 mismatch) off-target. HUSH does not yet do a database search, so on real
-  targets it selects a superset of siDirect's candidates - the extras are the ones
-  siDirect removed for off-target reasons. This is distinct from the already-
-  implemented seed-duplex Tm filter (`--seed`), which is a seed-mediated off-target
-  *proxy*, not a database search. Use `tools/compare_sidirect.py` to see the gap on
-  a given target.
 - **Sequence-motif constraint** (e.g. force a `G` at core position 3 via an
   `NNGNN...`-style pattern). This is primarily a loop-grafting requirement for
   shRNA, where a specific base at the graft junction improves hairpin folding, so
