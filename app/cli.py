@@ -11,7 +11,6 @@ Run 'hush --help' (after 'pip install -e .') or 'python -m app.cli --help'.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Optional
 
@@ -24,29 +23,18 @@ from core.inputs import build_design_input, load_sequences
 from core.offtarget import (
     DEFAULT_OFFTARGET_MAX_MISMATCH,
     DEFAULT_OFFTARGET_MIN_MISMATCH,
-    BowtieSearcher,
 )
-from msa.align_star import align_star
 from msa.discrimination import MismatchClass
 from msa.targeting import AlleleTargeting
-from msa.variation import PanelVariation
-from msa.windows import (
-    DEFAULT_MIN_SPARE_MISMATCHES,
-    WindowCriteria,
-    WindowEvaluation,
-)
-from msa.windows import evaluate_windows
+from msa.windows import DEFAULT_MIN_SPARE_MISMATCHES, WindowEvaluation
 from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
 from core.seed import SEED_TM_THRESHOLD_C
-from core.selection import (
-    DEFAULT_MAX_HOMOPOLYMER_RUN,
-    RuleMode,
-    SelectionCriteria,
-    evaluate_all,
-)
+from core.selection import DEFAULT_MAX_HOMOPOLYMER_RUN, RuleMode, SelectionCriteria
 from core.sequence import BioSequence, DesignInput, MolType
-from core.sirna import OverhangPolicy, enumerate_candidates
+from core.sirna import OverhangPolicy
 from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
+from service.params import AlleleTargetingSpec, DesignParams
+from service.session import HushSession
 from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions, convert
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold, get_loop
 
@@ -275,67 +263,6 @@ def _split_ids(spec: str) -> list[str]:
     return [token.strip() for token in spec.split(",") if token.strip()]
 
 
-def _build_targeting(
-    panel,
-    *,
-    pan_allele: bool,
-    allele_specific: str | None,
-    hit: str | None,
-    spare: str | None,
-) -> AlleleTargeting:
-    """Turn the allele-targeting flags into one AlleleTargeting request.
-
-    The four flags name three mutually exclusive intents (pan-allele, allele-
-    specific, explicit hit/spare); pan-allele is the default when a panel is
-    given without another flag. --spare only refines an explicit --hit.
-    """
-    intents = [
-        name
-        for name, chosen in (
-            ("--pan-allele", pan_allele),
-            ("--allele-specific", allele_specific is not None),
-            ("--hit", hit is not None),
-        )
-        if chosen
-    ]
-    if len(intents) > 1:
-        raise typer.BadParameter(
-            f"{' and '.join(intents)} are mutually exclusive; choose one "
-            "targeting intent.",
-            param_hint="--pan-allele/--allele-specific/--hit",
-        )
-    if spare is not None and hit is None:
-        raise typer.BadParameter(
-            "--spare only refines an explicit --hit; name the alleles to hit too.",
-            param_hint="--spare",
-        )
-
-    if allele_specific is not None:
-        return AlleleTargeting.allele_specific(allele_specific, panel)
-    if hit is not None:
-        hits = _split_ids(hit)
-        if spare is not None:
-            return AlleleTargeting(hit=hits, spare=_split_ids(spare))
-        return AlleleTargeting.subset(hits, panel)
-    # No explicit intent: broad, conserved-region targeting across the family.
-    return AlleleTargeting.pan_allele(panel)
-
-
-# RefSeq accession, e.g. NM_005018.3 / NR_ / XM_ / XR_, with optional version.
-_REFSEQ_ACCESSION = re.compile(r"\b([NX][MR]_\d+(?:\.\d+)?)\b")
-
-
-def _detect_accession(seq: BioSequence) -> str | None:
-    """Best-effort RefSeq accession from a target's id/description, for self-exclusion.
-
-    The off-target search must drop hits to the candidate's own transcript. The
-    accession usually sits in the FASTA header (e.g. 'NM_005018.3' in the PDCD1
-    fixture); pass --offtarget-self-accession to override when it does not.
-    """
-    match = _REFSEQ_ACCESSION.search(f"{seq.id} {seq.description}")
-    return match.group(1) if match else None
-
-
 def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
     """Compact per-rule pass code, e.g. 'UR-' (Ui-Tei + Reynolds pass, Amarz fails)."""
     parts = []
@@ -467,43 +394,6 @@ def _discrimination_cell(window: WindowEvaluation) -> str:
         listed = "*" if deciding.huang_recommended else ""
     purine = "pp" if deciding.mismatch_class is MismatchClass.PURINE_PURINE else ""
     return f"P{deciding.guide_position}{listed}{purine}"
-
-
-def _apply_sort(
-    selected: list,
-    sort: str,
-    window_by_pos: dict[int, WindowEvaluation] | None,
-    targeting: AlleleTargeting | None,
-) -> list:
-    """Order the selected candidates as the user asked.
-
-    Position order is the default and the project's convention: nothing is ranked
-    unless asked for. Discrimination order is opt-in because it imposes a
-    priority between published findings that the measurements do not fully
-    settle - see msa.discrimination.DISCRIMINATION_ORDER_NOTE.
-    """
-    if sort == "position":
-        return selected
-    if sort != "discrimination":
-        raise typer.BadParameter(
-            f"unknown sort {sort!r}; choose 'position' or 'discrimination'.",
-            param_hint="--sort",
-        )
-    if window_by_pos is None or targeting is None or not targeting.discriminating:
-        raise typer.BadParameter(
-            "--sort discrimination needs a request that spares something; "
-            "pan-allele targeting asks for no discrimination to rank.",
-            param_hint="--sort",
-        )
-    # Position breaks ties so two runs never disagree.
-    return sorted(
-        selected,
-        key=lambda e: (
-            window_by_pos[e.candidate.position].discrimination_key,
-            -e.candidate.position,
-        ),
-        reverse=True,
-    )
 
 
 def _discrimination_fields(window: WindowEvaluation) -> list[str]:
@@ -876,98 +766,69 @@ def design_cmd(
             "FASTA.",
             param_hint="--panel",
         )
+
+    # Turn the parsed flags into a framework-agnostic request, then let the
+    # session wire the pipeline together and hand back a lossless result; the
+    # printers below render it. The allele-targeting intent is only assembled
+    # when a panel is given (the guard above rejects it otherwise).
+    targeting_spec = None
+    if panel is not None:
+        targeting_spec = AlleleTargetingSpec(
+            pan_allele=pan_allele,
+            allele_specific=allele_specific,
+            hit=tuple(_split_ids(hit)) if hit is not None else None,
+            spare=tuple(_split_ids(spare)) if spare is not None else None,
+        )
+    design_params = DesignParams(
+        length=length,
+        overhang=overhang_policy,
+        use_ui_tei=use_ut,
+        use_reynolds=use_rey,
+        use_amarzguioui=use_amz,
+        rule_mode=rule_mode,
+        reynolds_threshold=reynolds_threshold,
+        amarzguioui_threshold=amarzguioui_threshold,
+        use_seed_filter=seed,
+        seed_tm_threshold=seed_tm,
+        use_offtarget_filter=offtarget,
+        offtarget_db=offtarget_db,
+        offtarget_min_mismatch=offtarget_min_mismatch,
+        offtarget_max_mismatch=offtarget_max_mismatch,
+        offtarget_self_accession=offtarget_self_accession,
+        bowtie_path=bowtie_path,
+        use_gc_filter=gc,
+        gc_min=gc_min / 100.0,
+        gc_max=gc_max / 100.0,
+        use_homopolymer_filter=not allow_homopolymers,
+        max_homopolymer_run=max_run,
+        use_asymmetry_filter=asymmetry,
+        asymmetry_window=asym_window,
+        asymmetry_temp_c=asym_temp,
+        use_hairpin_filter=hairpin,
+        hairpin_tm_max=hairpin_tm,
+        thermo_params=thermo_params,
+        targeting=targeting_spec,
+        min_spare_mismatches=min_spare_mismatches,
+        sort=sort,
+    )
+
+    session = HushSession()
     try:
-        design_input = build_design_input(target, panel, panel_fmt=panel_format)
-        mrna = design_input.require_nucleotide_target()
-        candidates = list(
-            enumerate_candidates(mrna, length=length, overhang=overhang_policy)
-        )
-
-        # Allele gate (MSA / stage 3): align the panel to the target and evaluate
-        # each candidate window's targeting. Windows and candidates share the
-        # target's coordinates one-for-one, so a candidate is looked up by its
-        # start position.
-        targeting = None
-        window_by_pos = None
-        if design_input.has_panel:
-            targeting = _build_targeting(
-                design_input.panel,
-                pan_allele=pan_allele,
-                allele_specific=allele_specific,
-                hit=hit,
-                spare=spare,
-            )
-            variation = PanelVariation.from_alignment(
-                align_star(mrna, design_input.panel)
-            )
-            window_criteria = WindowCriteria(
-                targeting=targeting,
-                length=length,
-                min_spare_mismatches=min_spare_mismatches,
-            )
-            window_by_pos = {
-                ev.position: ev
-                for ev in evaluate_windows(variation, window_criteria)
-            }
-
-        # Off-target scanning is on by default, but it needs a reference index.
-        # With none configured we skip it (a warning is printed below) rather than
-        # error, so a bare run still works; --no-offtarget silences the reminder.
-        offtarget_searcher = None
-        self_accession = None
-        offtarget_active = offtarget and offtarget_db is not None
-        offtarget_skipped = offtarget and offtarget_db is None
-        if offtarget_active:
-            self_accession = offtarget_self_accession or _detect_accession(mrna)
-            # One batched bowtie run over every strand of every candidate, then a
-            # cheap dict lookup per candidate inside the selection loop.
-            backend = BowtieSearcher(
-                offtarget_db,
-                max_mismatch=offtarget_max_mismatch,
-                bowtie_path=bowtie_path,
-            )
-            reads = [c.sense.seq for c in candidates]
-            reads += [c.antisense.seq for c in candidates]
-            offtarget_searcher = backend.precompute(reads)
-
-        criteria = SelectionCriteria(
-            use_ui_tei=use_ut,
-            use_reynolds=use_rey,
-            use_amarzguioui=use_amz,
-            rule_mode=rule_mode,
-            reynolds_threshold=reynolds_threshold,
-            amarzguioui_threshold=amarzguioui_threshold,
-            use_seed_filter=seed,
-            seed_tm_threshold=seed_tm,
-            use_offtarget_filter=offtarget_active,
-            offtarget_min_mismatch=offtarget_min_mismatch,
-            offtarget_searcher=offtarget_searcher,
-            offtarget_self_accession=self_accession,
-            use_gc_filter=gc,
-            gc_min=gc_min / 100.0,
-            gc_max=gc_max / 100.0,
-            use_hairpin_filter=hairpin,
-            hairpin_tm_max=hairpin_tm,
-            use_homopolymer_filter=not allow_homopolymers,
-            max_homopolymer_run=max_run,
-            use_asymmetry_filter=asymmetry,
-            asymmetry_window=asym_window,
-            asymmetry_temp_c=asym_temp,
-            thermo_params=thermo_params,
-        )
-        evaluations = list(evaluate_all(candidates, criteria))
+        session.load_target(target)
+        if panel is not None:
+            session.load_panel(panel, fmt=panel_format)
+        result = session.design(design_params)
     except (HushError, ValueError) as exc:
         typer.secho(f"Design error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    def _allele_ok(evaluation) -> bool:
-        return (
-            window_by_pos is None
-            or window_by_pos[evaluation.candidate.position].satisfies
-        )
-
-    selected = [e for e in evaluations if e.selected and _allele_ok(e)]
-    selected = _apply_sort(selected, sort, window_by_pos, targeting)
+    mrna = result.target
+    criteria = result.criteria
+    targeting = result.targeting
+    window_by_pos = result.window_by_pos
+    evaluations = result.evaluations
+    selected = result.selected
+    offtarget_skipped = result.offtarget_skipped
 
     typer.echo(typer.style(f"Target: {mrna.id or '<unnamed>'}", fg=typer.colors.CYAN, bold=True))
     typer.echo(
