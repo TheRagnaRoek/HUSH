@@ -310,7 +310,7 @@ class TestDiscrimination:
             AlleleTargeting(hit={"HIT"}, spare={"SPARE_STRONG", "SPARE_WEAK"}),
             length=self.WIDE,
         )
-        windows = [e for e in evaluate_all(wide_variation, criteria) if e.satisfies]
+        windows = [e for e in evaluate_windows(wide_variation, criteria) if e.satisfies]
         assert windows, "fixture should yield at least one satisfying window"
 
         def order(items):

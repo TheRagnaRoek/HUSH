@@ -333,7 +333,7 @@ def _assess(
     return assessments
 
 
-def evaluate_all(
+def evaluate_windows(
     variation: PanelVariation, criteria: WindowCriteria
 ) -> Iterator[WindowEvaluation]:
     """Lazily evaluate every window of the target, satisfying or not.
