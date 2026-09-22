@@ -166,6 +166,15 @@ class TestSpareGate:
         assert window.spare_pass is False
         assert any("not covered" in reason for reason in window.reasons)
 
+    def test_empty_hit_is_a_pure_spare_gate(self, variation):
+        # Target-specific: nothing to hit (the loaded target is silenced by
+        # construction), so the window turns entirely on discrimination.
+        criteria = _criteria(hit=(), spare={"A2", "A3"})
+        window = evaluate_window(variation, criteria, SUB_A2)
+        assert window.hit_pass  # no targeted allele -> trivially satisfied
+        assert window.max_hit_mismatches == 0
+        assert window.spare_pass is True
+
     def test_pan_allele_has_no_spare_gate(self, variation):
         criteria = _criteria(hit={"A1", "A2", "A3"})
         for window in evaluate_windows(variation, criteria):
@@ -288,6 +297,14 @@ class TestDiscrimination:
         window = self._window(wide_variation)
         weakest = window.mismatch_assessments["SPARE_WEAK"]
         assert window.discrimination_key == allele_discrimination_key(weakest)
+
+    def test_spared_alleles_are_ordered_weakest_first(self, wide_variation):
+        # The per-allele view a renderer walks: the deciding (weakest) allele
+        # leads, so a reader sees why the window ranks where it does, then the
+        # rest in improving order.
+        window = self._window(wide_variation)
+        order = [allele for allele, _ in window.spared_alleles_by_discrimination]
+        assert order == ["SPARE_WEAK", "SPARE_STRONG"]
 
     def test_a_single_spared_allele_decides_alone(self, wide_variation):
         strong_only = self._window(wide_variation, spare=("SPARE_STRONG",))

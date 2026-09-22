@@ -5,6 +5,8 @@ the future HTTP API drive - independently of any renderer. The CLI smoke tests
 (test_cli) cover the terminal-facing behaviour on top of this.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 import service.session as session_mod
@@ -13,6 +15,7 @@ from core.sequence import MolType
 from msa.targeting import TargetingMode
 from service import AlleleTargetingSpec, DesignParams, HushSession
 from service.results import ConvertResult, DesignResult, InspectResult
+from service.session import sort_selection
 
 _ALLELE_1 = "HLA-DEMO*01:01"  # a member id in hla_panel_example.fasta
 _ALLELE_2 = "HLA-DEMO*02:01"
@@ -145,6 +148,20 @@ def test_design_explicit_hit_and_spare(target_fasta, panel_fasta):
     assert targeting.spare == frozenset({_ALLELE_2})
 
 
+def test_design_target_specific_spares_the_whole_panel(target_fasta, panel_fasta):
+    session = _panel_session(target_fasta, panel_fasta)
+    params = DesignParams(
+        use_seed_filter=False,
+        targeting=AlleleTargetingSpec(target_specific=True),
+    )
+    targeting = session.design(params).targeting
+    assert targeting.mode is TargetingMode.TARGET_SPECIFIC
+    assert targeting.hit == frozenset()
+    assert targeting.discriminating is True
+    # Every panel member is spared.
+    assert len(targeting.spare) == 3
+
+
 def test_design_unknown_allele_raises_hush_error(target_fasta, panel_fasta):
     session = _panel_session(target_fasta, panel_fasta)
     params = DesignParams(targeting=AlleleTargetingSpec(allele_specific="NOT_IN_PANEL"))
@@ -181,6 +198,52 @@ def test_design_sort_discrimination_needs_something_spared(target_fasta, panel_f
     params = DesignParams(use_seed_filter=False, sort="discrimination")
     with pytest.raises(ValueError):
         session.design(params)
+
+
+def test_design_default_sort_is_auto(target_fasta, panel_fasta):
+    # 'auto' must not raise for a pan-allele run (it falls back to position),
+    # where explicit 'discrimination' would.
+    session = _panel_session(target_fasta, panel_fasta)
+    result = session.design(DesignParams(use_seed_filter=False))
+    assert result.targeting.discriminating is False  # pan-allele default
+    assert result.selected == sorted(
+        result.selected, key=lambda e: e.candidate.position
+    )
+
+
+class TestSortSelectionRouting:
+    """sort_selection's 'auto' routing, isolated from the pipeline."""
+
+    @staticmethod
+    def _cand(position):
+        return SimpleNamespace(candidate=SimpleNamespace(position=position))
+
+    def test_auto_ranks_by_discrimination_when_something_is_spared(self):
+        a, b = self._cand(0), self._cand(1)
+        window_by_pos = {
+            0: SimpleNamespace(discrimination_key=(1,)),
+            1: SimpleNamespace(discrimination_key=(2,)),
+        }
+        targeting = SimpleNamespace(discriminating=True)
+        out = sort_selection([a, b], "auto", window_by_pos, targeting)
+        # Higher key first: position 1 (key 2) outranks position 0 (key 1).
+        assert [e.candidate.position for e in out] == [1, 0]
+
+    def test_auto_falls_back_to_position_when_nothing_is_spared(self):
+        a, b = self._cand(0), self._cand(1)
+        targeting = SimpleNamespace(discriminating=False)
+        out = sort_selection([b, a], "auto", None, targeting)
+        assert out == [b, a]  # position sort leaves the input order untouched
+
+    def test_explicit_position_keeps_target_order_even_when_discriminating(self):
+        a, b = self._cand(0), self._cand(1)
+        window_by_pos = {
+            0: SimpleNamespace(discrimination_key=(1,)),
+            1: SimpleNamespace(discrimination_key=(2,)),
+        }
+        targeting = SimpleNamespace(discriminating=True)
+        out = sort_selection([a, b], "position", window_by_pos, targeting)
+        assert out == [a, b]
 
 
 # --------------------------------------------------------------------------- #

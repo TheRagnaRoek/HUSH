@@ -269,8 +269,11 @@ def test_design_sort_discrimination(target_fasta, panel_fasta):
     assert "weakest spared allele" in result.stdout
 
 
-def test_design_sort_position_is_the_default(target_fasta, panel_fasta):
-    explicit = _design_sorted(target_fasta, panel_fasta, "position")
+def test_design_default_sort_is_auto_discrimination_when_discriminating(
+    target_fasta, panel_fasta
+):
+    # With no --sort, a discriminating request ranks by discrimination (auto),
+    # so the bare run matches an explicit --sort discrimination.
     implicit = runner.invoke(
         app,
         [
@@ -278,8 +281,40 @@ def test_design_sort_position_is_the_default(target_fasta, panel_fasta):
             "--allele-specific", _ALLELE_1, "--mode", "any", "--no-seed",
         ],
     )
-    assert explicit.exit_code == 0
-    assert explicit.stdout == implicit.stdout
+    discrimination = _design_sorted(target_fasta, panel_fasta, "discrimination")
+    assert implicit.exit_code == 0
+    assert implicit.stdout == discrimination.stdout
+
+
+def test_design_sort_position_is_still_available(target_fasta, panel_fasta):
+    result = _design_sorted(target_fasta, panel_fasta, "position")
+    assert result.exit_code == 0
+
+
+def test_design_target_specific_reports_mode(target_fasta, panel_fasta):
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--target-specific", "--mode", "any", "--no-seed",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "target-specific" in result.stdout
+    assert "spare all" in result.stdout
+
+
+def test_design_explain_shows_per_allele_breakdown(target_fasta, panel_fasta):
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta), "--panel", str(panel_fasta),
+            "--allele-specific", _ALLELE_1, "--mode", "any", "--no-seed",
+            "--explain",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Per-allele discrimination" in result.stdout
 
 
 def test_design_sort_discrimination_needs_something_spared(target_fasta, panel_fasta):
@@ -351,6 +386,10 @@ def test_design_panel_tsv_has_allele_columns(target_fasta, panel_fasta, tmp_path
     header = out.read_text(encoding="ascii").splitlines()[0]
     assert "allele_hit_max_mismatch" in header
     assert "allele_spare_min_mismatch" in header
+    # The full deciding-mismatch criteria, not just position, reach the TSV.
+    assert "allele_spare_count" in header
+    assert "disc_strongest_position" in header
+    assert "disc_multi_mismatch" in header
 
 
 # --------------------------------------------------------------------------- #

@@ -115,8 +115,32 @@ def test_design_allele_specific_shape(client, target, panel):
     assert body["targeting"]["mode"] == "allele_specific"
     assert body["targeting"]["discriminating"] is True
     assert "allele" in body["funnel"]
-    # A discriminating run carries the per-candidate allele block.
-    assert body["selected"][0]["allele"]["spare_min_mismatch"] is not None
+    # A discriminating run carries the per-candidate allele block, now with the
+    # full per-spared-allele breakdown, not just the weakest one.
+    allele = body["selected"][0]["allele"]
+    assert allele["spare_min_mismatch"] is not None
+    assert allele["spare_count"] == 2
+    assert len(allele["per_allele"]) == 2
+    assert allele["discrimination"]["strongest_position"] in (True, False)
+
+
+def test_design_target_specific_shape(client, target, panel):
+    r = client.post(
+        "/design",
+        json={
+            "target_fasta": target,
+            "panel_fasta": panel,
+            "params": {
+                "use_seed_filter": False,
+                "targeting": {"target_specific": True},
+            },
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["targeting"]["mode"] == "target_specific"
+    assert body["targeting"]["hit"] == []
+    assert body["targeting"]["discriminating"] is True
 
 
 def test_design_inverted_gc_window_is_400(client, demo_target):

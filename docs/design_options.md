@@ -9,8 +9,10 @@ sections); this file is just the map.
 
 Selection is a **filter, not a ranking**: every criterion below is an independent,
 optional gate, and a candidate is selected only if it clears every enabled one.
-Nothing is scored into a single number, and selected candidates come back in
-target-position order.
+Nothing is scored into a single number. Survivors come back in target-position
+order, except that an allele-aware request which spares something is ranked by
+discrimination by default (see `--sort` under the allele-aware options); that
+ordering never admits or rejects a candidate.
 
 **The best-practice default paradigm** (what a bare `hush design TARGET` applies):
 all three rule sets, combined by **`any`** (union - each rule weighted equally);
@@ -81,19 +83,45 @@ so windows and candidates line up one-for-one.
 | `--panel` / `-p` | (loads the panel) | - | Allele-family FASTA (e.g. an HLA locus). Its presence turns the allele gate on. |
 | `--panel-format` | (format override) | auto | Override the panel format: `fasta` / `pdb` / `cif`. |
 | `--pan-allele` | `AlleleTargeting.pan_allele` | on\* | Hit every panel member, spare none (conserved-region targeting). |
-| `--allele-specific` | `AlleleTargeting.allele_specific` | - | Hit exactly this panel member id, spare the rest. |
+| `--allele-specific` | `AlleleTargeting.allele_specific` | - | Hit exactly this panel member id, spare the rest. Use when the allele to silence is itself a panel member. |
+| `--target-specific` | `AlleleTargeting.target_specific` | - | Spare **every** panel member and hit none of them. Use when the target is loaded *apart* from its reference panel: candidates are built from the target (so it is silenced by construction), and specificity means discriminating against the whole panel. The opposite request to `--pan-allele` over the same panel. |
 | `--hit` | `AlleleTargeting.hit` | - | Comma list of member ids to hit. With `--spare` both sets are explicit; without it the rest are spared (subset). |
 | `--spare` | `AlleleTargeting.spare` | - | Comma list of member ids to discriminate against; only refines an explicit `--hit`. |
 | `--min-spare-mismatches` | `WindowCriteria.min_spare_mismatches` | `1` | Differences a spared allele must carry inside a window before it counts as discriminated. |
+| `--sort` | `DesignParams.sort` | `auto` | Report order: `auto` (rank by discrimination when the request spares something, else target position), `position` (never rank), or `discrimination` (force ranking; errors when nothing is spared). |
+| `--explain` | (render only) | off | After the table, print the full per-allele discrimination breakdown - every spared allele's difference count and its best mismatch's criteria, not just the weakest. In the shell, `assess [region]` does the same on the last design. |
 
-\* `--pan-allele` is the default intent when `--panel` is given without
-`--allele-specific` or `--hit`. The three intents (`--pan-allele`,
-`--allele-specific`, `--hit`) are mutually exclusive.
+\* `--pan-allele` is the default intent when `--panel` is given without another
+targeting flag. The four intents (`--pan-allele`, `--allele-specific`,
+`--target-specific`, `--hit`) are mutually exclusive.
 
 The allele gate is a **filter, not a ranking**, and coverage is required: a window
 where a targeted allele is uncovered, or where a spared allele is uncovered,
-cannot satisfy the request - missing data is never read as evidence. See the
-[`docs/design_notes.md`](design_notes.md) MSA/allele section for the rationale.
+cannot satisfy the request - missing data is never read as evidence. Ranking by
+discrimination (see `--sort`) orders the survivors but never admits or rejects
+one. Each window is scored by its **weakest** spared allele - an siRNA is only as
+specific as the allele it distinguishes least well - so the `minDiff`/`disc`
+columns and the `--sort` order describe that allele; `--explain` shows the rest.
+See the [`docs/design_notes.md`](design_notes.md) MSA/allele section for the
+rationale.
+
+### The `disc` readout
+
+Each `disc` cell (and each `--explain` line) encodes the criteria that set a
+mismatch's discrimination rank, in one string like `P16 post H+ S pp`:
+
+- `P16` - guide position (5'->3', as Huang et al. and Schwarz et al. count).
+- region - `post` (3' of the seed, discriminates robustly), `seed` (overwhelmed
+  by high siRNA concentration), or `anch` (position 1, unpaired).
+- Huang - `H+` listed in Huang et al. Table 1 for this exact base change, `H-`
+  not listed, `H?` bases ambiguous (no table row).
+- position tier - `S` a strongest position (P10/P16), `C` a merely consistent
+  one, `-` neither.
+- class - `pp` purine:purine (discriminates best), `pu`/`up`/`uu` the milder
+  pairs, `?` ambiguous.
+
+`--explain` adds each allele's difference count and, when Huang and the regional
+finding disagree (e.g. a listed position inside the seed), `agree=no`.
 
 ## Advanced options (thermodynamic internals)
 
@@ -156,6 +184,15 @@ top of the rule and filter gates):
 hush design data/examples/target_example.fasta \
   --panel data/examples/hla_panel_example.fasta \
   --allele-specific "HLA-DEMO*01:01" --mode any --no-seed
+```
+
+Specific to the loaded target, sparing the whole reference panel (use this when
+the target is loaded apart from the panel), with the full per-allele breakdown:
+
+```bash
+hush design data/examples/my_target.fasta \
+  --panel data/examples/hla_reference_panel.fasta \
+  --target-specific --mode any --no-seed --explain
 ```
 
 Every run prints the chosen criteria and a funnel of how many candidates clear

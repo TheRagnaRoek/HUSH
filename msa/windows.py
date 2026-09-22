@@ -166,6 +166,22 @@ class WindowEvaluation:
         )
 
     @property
+    def spared_alleles_by_discrimination(
+        self,
+    ) -> list[tuple[str, tuple[MismatchAssessment, ...]]]:
+        """Every spared allele with its mismatches, weakest discrimination first.
+
+        The first entry is the allele that sets the window's rank (the weakest
+        link discrimination_key reports); the rest follow in improving order. A
+        renderer that wants the whole picture - not just the deciding allele -
+        walks this. Empty when the request spares nothing.
+        """
+        return sorted(
+            self.mismatch_assessments.items(),
+            key=lambda item: _allele_discrimination_key(item[1]),
+        )
+
+    @property
     def deciding_mismatch(self) -> MismatchAssessment | None:
         """The single mismatch this window's rank rests on.
 

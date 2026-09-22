@@ -30,15 +30,16 @@ from msa.windows import DEFAULT_MIN_SPARE_MISMATCHES
 class AlleleTargetingSpec:
     """A targeting intent by panel-member id, before it is resolved to sets.
 
-    The three named intents (pan-allele, allele-specific, explicit hit/spare)
-    are mutually exclusive. Resolution against a panel - which fills in the
-    spared set and validates the ids - happens in the session, where the panel
-    is known. The all-default spec is the pan-allele intent (hit everything,
-    spare nothing).
+    The four named intents (pan-allele, allele-specific, target-specific,
+    explicit hit/spare) are mutually exclusive. Resolution against a panel -
+    which fills in the spared set and validates the ids - happens in the session,
+    where the panel is known. The all-default spec is the pan-allele intent (hit
+    everything, spare nothing).
     """
 
     pan_allele: bool = False
     allele_specific: str | None = None
+    target_specific: bool = False
     hit: tuple[str, ...] | None = None
     spare: tuple[str, ...] | None = None
 
@@ -97,5 +98,6 @@ class DesignParams:
     targeting: AlleleTargetingSpec | None = None
     min_spare_mismatches: int = DEFAULT_MIN_SPARE_MISMATCHES
 
-    # Report ordering: "position" (nothing ranked) or "discrimination".
-    sort: str = "position"
+    # Report ordering: "auto" (discrimination when the request spares something,
+    # else position), "position" (nothing ranked), or "discrimination".
+    sort: str = "auto"
