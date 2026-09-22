@@ -43,12 +43,28 @@ class TestNamedConstructors:
         assert t.hit == {A2, A1}
         assert t.spare == {A3}
 
+    def test_target_specific_spares_the_whole_panel(self, panel):
+        # The loaded target is silenced by construction, so specificity means
+        # hitting nothing in the panel and sparing all of it.
+        t = AlleleTargeting.target_specific(panel)
+        assert t.hit == frozenset()
+        assert t.spare == {A1, A2, A3}
+        assert t.mode is TargetingMode.TARGET_SPECIFIC
+        assert t.discriminating
+
+    def test_target_specific_is_the_opposite_of_pan_allele(self, panel):
+        target = AlleleTargeting.target_specific(panel)
+        pan = AlleleTargeting.pan_allele(panel)
+        assert target.hit == pan.spare
+        assert target.spare == pan.hit
+
     def test_constructors_assign_every_panel_member(self, panel):
         # Nothing is left unconstrained when a request is built from a panel.
         for t in (
             AlleleTargeting.allele_specific(A2, panel),
             AlleleTargeting.pan_allele(panel),
             AlleleTargeting.subset([A2], panel),
+            AlleleTargeting.target_specific(panel),
         ):
             assert t.unconstrained(panel) == frozenset()
 
@@ -64,6 +80,8 @@ class TestModeIsDerived:
             ({A2}, set(), TargetingMode.PAN_ALLELE),
             ({A2, A1}, set(), TargetingMode.PAN_ALLELE),
             ({A2, A1}, {A3}, TargetingMode.SUBSET),
+            (set(), {A1}, TargetingMode.TARGET_SPECIFIC),
+            (set(), {A1, A2, A3}, TargetingMode.TARGET_SPECIFIC),
         ],
     )
     def test_mode(self, hit, spare, expected):
@@ -84,9 +102,17 @@ class TestModeIsDerived:
 
 
 class TestValidation:
-    def test_empty_hit_raises(self):
+    def test_empty_hit_and_spare_raises(self):
+        # A request that constrains nothing has no meaning; an empty hit is only
+        # valid when something is spared (target-specific).
         with pytest.raises(TargetingError):
             AlleleTargeting(hit=set())
+
+    def test_empty_hit_with_spare_is_allowed(self):
+        t = AlleleTargeting(hit=set(), spare={A1})
+        assert t.hit == frozenset()
+        assert t.spare == {A1}
+        assert t.mode is TargetingMode.TARGET_SPECIFIC
 
     def test_allele_in_both_sets_raises(self):
         with pytest.raises(TargetingError):

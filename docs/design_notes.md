@@ -570,9 +570,12 @@ on.
 
 ### Ordering
 
-Nothing is ranked or reordered: selected candidates are returned in target-position
-order, exactly as enumerated. Ordering by any single criterion is left to the
-caller.
+`core.selection` ranks nothing: it is a pure filter, and the candidates it selects
+are returned in target-position order, exactly as enumerated. The one ordering the
+pipeline does impose lives a stage later, in the allele module: a request that
+spares alleles is ranked by discrimination (see the MSA/allele section and
+`msa.discrimination`), which reorders survivors but never admits or rejects one.
+Ordering by any single siRNA criterion is still left to the caller.
 
 ---
 
@@ -676,24 +679,32 @@ choice - so coverage is required by both gates rather than treated as harmless.
 rejection is reported: the targeted alleles must be covered and identical across
 the window (the guide is built from the target, so a difference there is a
 mismatch against the very allele it should silence), and every spared allele must
-be covered and carry at least `min_spare_mismatches` differences. The three named
-intents - pan-allele, allele-specific, subset - are not three types but one
-structure (a *hit* set and a disjoint *spare* set) with different values, so a
-single code path serves all three and `spare` is stored explicitly rather than
-inferred as "whatever else is in the panel" (a panel is data that can change; an
-implicit spare set would silently mean something different after a member is
-added).
+be covered and carry at least `min_spare_mismatches` differences. The four named
+intents - pan-allele, allele-specific, target-specific, subset - are not four
+types but one structure (a *hit* set and a disjoint *spare* set) with different
+values, so a single code path serves all of them and `spare` is stored explicitly
+rather than inferred as "whatever else is in the panel" (a panel is data that can
+change; an implicit spare set would silently mean something different after a
+member is added). Target-specific is the empty-*hit* case: candidates are built
+from the loaded target, so it is silenced by construction, and hitting no panel
+member while sparing the whole panel is a coherent, meaningful request (the mirror
+of pan-allele, which hits everything and spares nothing).
 
-As in `core.selection`, nothing is ranked. The signals are counts of differences,
-and where a difference sits in the duplex matters enormously - a mismatch in the
-guide seed discriminates far more strongly than one at the 3' end - but weighting
-them needs mismatch thermodynamics `core.thermo` does not yet carry. Every window
-passes or does not and keeps its full per-allele breakdown, and the positions are
-recorded (in target-window coordinates; `guide_position()` converts to the guide
-strand, which runs the opposite way) so the weighting can be added later without
-re-deriving anything. Insertions are likewise recorded but not scored: an
-insertion would make the guide bulge on that member, a strong discriminating
-feature, but scoring it needs the same missing parameters.
+The **gate** ranks nothing - every window passes or does not, and keeps its full
+per-allele breakdown. The **ordering** of survivors is a separate layer:
+`msa.discrimination` places each difference against published measurements of
+which mismatches, at which guide positions, block silencing of the spared allele
+(Huang et al. 2009 for the exact base change, Schwarz et al. 2006 for region and
+position, Ohnishi et al. 2008 for a second mismatch). It is a lexicographic tuple
+of published facts, not a weighted score - no calibration data is invented - and a
+window is ranked by its **weakest** spared allele, the "weakest link" rule
+`min_spare_mismatches` already follows. A guide that sits *3' of the seed*
+discriminates robustly while a seed mismatch is overwhelmed by concentration, so
+where a difference sits still matters enormously; the positions are recorded in
+target-window coordinates (`guide_position()` converts to the guide strand, which
+runs the opposite way). Insertions are recorded but not yet scored: an insertion
+would make the guide bulge on that member, a strong discriminating feature, but
+scoring it needs parameters not yet carried.
 
 ### The star backend, and its scope
 
@@ -724,12 +735,17 @@ selected` **and** the window at its position `satisfies` the targeting. The wind
 length is bound to the siRNA core length (`--length`) so the two lists stay
 one-for-one; the candidate is looked up by its start position in a dict built once
 from `evaluate_all`. The criteria block and pass-each-gate funnel gain an
-`allele:` line, a discriminating request adds a per-candidate `spareMM` column (the
-weakest per-spared-allele difference count), and the TSV gains
-`allele_hit_max_mismatch` / `allele_spare_min_mismatch`. Keeping the gate at the
-app layer means the allele stage and the siRNA engine each stay testable in
-isolation, and the funnel reports the allele gate as just one more independent
-gate rather than a special case.
+`allele:` line; a discriminating request adds two per-candidate columns describing
+its weakest spared allele - `minDiff` (that allele's difference count) and `disc`
+(its best mismatch's full criteria: guide position, region, Huang listing,
+position tier, class) - and is ranked by discrimination by default (`--sort auto`;
+`--sort position` forces target order). `--explain`, or `assess <region>` in the
+shell, prints the full per-allele breakdown for every spared allele, not just the
+weakest; the TSV gains `allele_hit_max_mismatch`, `allele_spare_min_mismatch`,
+`allele_spare_count`, and the deciding mismatch's `disc_*` criteria. Keeping the
+gate at the app layer means the allele stage and the siRNA engine each stay
+testable in isolation, and the funnel reports the allele gate as just one more
+independent gate rather than a special case.
 
 ### Scope and deferrals
 

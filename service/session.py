@@ -63,6 +63,7 @@ def resolve_targeting(
         for name, chosen in (
             ("pan_allele", spec.pan_allele),
             ("allele_specific", spec.allele_specific is not None),
+            ("target_specific", spec.target_specific),
             ("hit", spec.hit is not None),
         )
         if chosen
@@ -79,6 +80,8 @@ def resolve_targeting(
 
     if spec.allele_specific is not None:
         return AlleleTargeting.allele_specific(spec.allele_specific, panel)
+    if spec.target_specific:
+        return AlleleTargeting.target_specific(panel)
     if spec.hit is not None:
         if spec.spare is not None:
             return AlleleTargeting(hit=spec.hit, spare=spec.spare)
@@ -87,20 +90,31 @@ def resolve_targeting(
 
 
 def sort_selection(selected, sort, window_by_pos, targeting):
-    """Order selected candidates. Position (the default) ranks nothing.
+    """Order selected candidates. 'auto' (the default) ranks by discrimination
+    whenever the request spares something, and falls back to target-position
+    order otherwise.
 
-    Discrimination order is opt-in because it imposes a priority between
-    published findings the measurements do not fully settle; it needs a request
-    that spares something to have anything to rank. Position breaks ties so two
-    runs never disagree.
+    Discrimination order imposes a priority between published findings the
+    measurements do not fully settle, so it only applies to a request that spares
+    something (there is nothing to rank otherwise). Position breaks ties so two
+    runs never disagree. 'position' forces target order even when a request
+    discriminates; 'discrimination' asks for it explicitly and errors when the
+    request spares nothing.
     """
+    discriminates = (
+        window_by_pos is not None
+        and targeting is not None
+        and targeting.discriminating
+    )
+    if sort == "auto":
+        sort = "discrimination" if discriminates else "position"
     if sort == "position":
         return selected
     if sort != "discrimination":
         raise ValueError(
-            f"unknown sort {sort!r}; choose 'position' or 'discrimination'."
+            f"unknown sort {sort!r}; choose 'auto', 'position' or 'discrimination'."
         )
-    if window_by_pos is None or targeting is None or not targeting.discriminating:
+    if not discriminates:
         raise ValueError(
             "sort discrimination needs a request that spares something; "
             "pan-allele targeting asks for no discrimination to rank."

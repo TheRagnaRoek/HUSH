@@ -10,6 +10,13 @@ from __future__ import annotations
 
 from core.selection import CandidateEvaluation, SelectionCriteria
 from core.sequence import BioSequence, DesignInput, SequencePanel
+from msa.discrimination import (
+    CONSISTENT_POSITIONS,
+    MULTI_MISMATCH,
+    STRONGEST_POSITIONS,
+    MismatchAssessment,
+    best_mismatch,
+)
 from msa.targeting import AlleleTargeting
 from msa.windows import WindowEvaluation
 from service.results import ConvertResult, DesignResult
@@ -89,18 +96,45 @@ def _offtarget_hits(profile) -> list[int]:
     return out
 
 
+def _discrimination_from(
+    d: MismatchAssessment, count: int
+) -> schemas.DiscriminationResult:
+    """One mismatch, with every criterion that sets its discrimination rank."""
+    return schemas.DiscriminationResult(
+        guide_position=d.guide_position,
+        mutation=d.mutation_type,
+        mismatch_class=None if d.mismatch_class is None else d.mismatch_class.value,
+        huang_recommended=d.huang_recommended,
+        region=d.region.value,
+        sources_agree=d.sources_agree,
+        strongest_position=d.guide_position in STRONGEST_POSITIONS,
+        consistent_position=d.guide_position in CONSISTENT_POSITIONS,
+        multi_mismatch=count >= MULTI_MISMATCH,
+    )
+
+
 def _discrimination(window: WindowEvaluation) -> schemas.DiscriminationResult | None:
     deciding = window.deciding_mismatch
     if deciding is None:
         return None
-    return schemas.DiscriminationResult(
-        guide_position=deciding.guide_position,
-        mutation=deciding.mutation_type,
-        mismatch_class=None if deciding.mismatch_class is None else deciding.mismatch_class.value,
-        huang_recommended=deciding.huang_recommended,
-        region=deciding.region.value,
-        sources_agree=deciding.sources_agree,
-    )
+    return _discrimination_from(deciding, window.min_spare_mismatches or 0)
+
+
+def _per_allele(window: WindowEvaluation) -> list[schemas.PerAlleleDiscrimination]:
+    """Every spared allele's discrimination, weakest first."""
+    out = []
+    for allele, assessments in window.spared_alleles_by_discrimination:
+        best = best_mismatch(assessments)
+        out.append(
+            schemas.PerAlleleDiscrimination(
+                allele=allele,
+                diff_count=len(assessments),
+                discrimination=(
+                    None if best is None else _discrimination_from(best, len(assessments))
+                ),
+            )
+        )
+    return out
 
 
 def criteria_summary(criteria: SelectionCriteria) -> schemas.CriteriaSummary:
@@ -171,7 +205,9 @@ def candidate_result(
         allele = schemas.AlleleResult(
             hit_max_mismatch=window.max_hit_mismatches,
             spare_min_mismatch=window.min_spare_mismatches,
+            spare_count=len(window.mismatch_assessments),
             discrimination=_discrimination(window),
+            per_allele=_per_allele(window),
         )
     return schemas.CandidateResult(
         region=c.region,

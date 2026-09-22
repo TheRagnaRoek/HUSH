@@ -155,22 +155,37 @@ every option, its default, and what it does (or `hush design --help`).
 Add `--panel` to engage the MSA/allele stage: the panel is aligned to the target
 and each candidate is additionally gated on whether its window **hits** the
 alleles you want silenced and **discriminates** against the ones you want spared.
-Three targeting intents: pan-allele (conserved sites, the default), allele-
-specific (single one allele out), and explicit hit/spare subsets.
+Four targeting intents:
+
+- `--pan-allele` - conserved sites across the whole family (the default);
+- `--allele-specific ID` - single one panel member out, spare the rest (use when
+  the allele to silence is itself in the panel);
+- `--target-specific` - spare the **whole** panel and hit none of it (use when
+  the target is loaded apart from its reference panel: it is silenced by
+  construction, so specificity means discriminating against every panel member);
+- `--hit` (+ `--spare`) - explicit subsets.
 
 ```bash
 # Pan-allele (conserved-region) knockdown across the family
 hush design data/examples/target_example.fasta --no-seed \
   --panel data/examples/hla_panel_example.fasta
 
-# Allele-specific: hit one member, discriminate against the rest
+# Allele-specific: hit one panel member, discriminate against the rest
 hush design data/examples/target_example.fasta --no-seed \
   --panel data/examples/hla_panel_example.fasta \
   --allele-specific "HLA-DEMO*01:01"
+
+# Target-specific: silence the loaded target, spare the whole reference panel
+hush design data/examples/my_target.fasta --no-seed --target-specific \
+  --panel data/examples/hla_reference_panel.fasta --explain
 ```
 
-The criteria block and funnel gain an `allele:` line, a discriminating run adds a
-`spareMM` column, and `-o` adds allele columns to the TSV.
+The criteria block and funnel gain an `allele:` line. A request that spares
+something is ranked by discrimination by default (`--sort`), and the table adds
+`minDiff` and `disc` columns describing the **weakest** spared allele - the one
+the window distinguishes least well. `--explain` (or `assess <region>` in the
+shell) prints the full per-allele breakdown for every spared allele; `-o` adds
+the allele columns to the TSV.
 
 ### Convert siRNA candidates to shRNA
 

@@ -34,6 +34,7 @@ from app.cli import (
     _write_design_tsv,
     render_convert_result,
     render_design_result,
+    render_discrimination_detail,
 )
 from app.parsing import (
     parse_mode,
@@ -109,6 +110,7 @@ def _build_design_parser() -> _ShellArgParser:
     p.add_argument("--params")
     p.add_argument("--pan-allele", action="store_true")
     p.add_argument("--allele-specific")
+    p.add_argument("--target-specific", action="store_true")
     p.add_argument("--hit")
     p.add_argument("--spare")
     p.add_argument("--min-spare-mismatches", type=int)
@@ -176,10 +178,13 @@ def apply_design_flags(params: DesignParams, tokens: list[str]) -> DesignParams:
     take("min_spare_mismatches", "min_spare_mismatches")
     take("sort", "sort")
 
-    if {"pan_allele", "allele_specific", "hit", "spare"} & provided.keys():
+    if {
+        "pan_allele", "allele_specific", "target_specific", "hit", "spare"
+    } & provided.keys():
         updates["targeting"] = AlleleTargetingSpec(
             pan_allele=provided.get("pan_allele", False),
             allele_specific=provided.get("allele_specific"),
+            target_specific=provided.get("target_specific", False),
             hit=tuple(split_ids(provided["hit"])) if "hit" in provided else None,
             spare=tuple(split_ids(provided["spare"])) if "spare" in provided else None,
         )
@@ -212,7 +217,10 @@ Commands:
   limit [n]             set how many rows design/convert print (0 = all)
   show                  show the loaded inputs, criteria, and last results
   inspect               preview the design input (roles, readiness)
-  design [flags]        run design with the current criteria (flags apply for this run only)
+  design [flags]        run design with the current criteria (flags apply for this run only;
+                        add --explain for the full per-allele discrimination breakdown)
+  assess [region]       show every spared allele's discrimination for the last design
+                        (all selected, or just <region> e.g. 6-24)
   convert [flags]       convert the last design's selected candidates to shRNA
                         (flags: --loop, --terminator/--no-terminator, --terminator-length)
   save <dir>            write design.tsv (and shrna.tsv, if converted) into <dir>
@@ -241,6 +249,7 @@ class HushShell:
             "show": self._cmd_show,
             "inspect": self._cmd_inspect,
             "design": self._cmd_design,
+            "assess": self._cmd_assess,
             "convert": self._cmd_convert,
             "save": self._cmd_save,
             "help": self._cmd_help,
@@ -365,12 +374,43 @@ class HushShell:
         return True
 
     def _cmd_design(self, rest: str) -> bool:
-        params = apply_design_flags(self.params, rest.split()) if rest else self.params
+        tokens = rest.split() if rest else []
+        # --explain is a render flag, not a persistent design knob, so it is
+        # stripped before the criteria parser (which does not know it) runs.
+        explain = "--explain" in tokens
+        tokens = [t for t in tokens if t != "--explain"]
+        params = apply_design_flags(self.params, tokens) if tokens else self.params
         result = self.session.design(params)
         # A previous convert belonged to the old design; drop it so 'save' never
         # pairs a fresh design with stale shRNA.
         self.last_convert = None
-        render_design_result(result, self.limit)
+        render_design_result(result, self.limit, explain=explain)
+        return True
+
+    def _cmd_assess(self, rest: str) -> bool:
+        last = self.session.last_design
+        if last is None:
+            raise ValueError("no design yet; run 'design' first.")
+        if (
+            last.window_by_pos is None
+            or last.targeting is None
+            or not last.targeting.discriminating
+        ):
+            raise ValueError(
+                "the last design spares nothing to assess; use an allele-specific, "
+                "target-specific, or hit/spare request."
+            )
+        selected = last.selected
+        limit = self.limit
+        if rest:
+            selected = [e for e in selected if e.candidate.region == rest]
+            if not selected:
+                raise ValueError(
+                    f"no selected candidate with region {rest!r}; regions are the "
+                    "left column of the design table (e.g. 6-24)."
+                )
+            limit = 0  # a named region is a single candidate; never truncate it
+        render_discrimination_detail(selected, last.window_by_pos, limit)
         return True
 
     def _cmd_convert(self, rest: str) -> bool:
@@ -461,11 +501,14 @@ def _format_targeting(spec: AlleleTargetingSpec | None) -> str:
     if spec is None or (
         not spec.pan_allele
         and spec.allele_specific is None
+        and not spec.target_specific
         and spec.hit is None
     ):
         return "pan-allele (panel only)"
     if spec.allele_specific is not None:
         return f"allele-specific: {spec.allele_specific}"
+    if spec.target_specific:
+        return "target-specific (spare the whole panel)"
     if spec.hit is not None:
         spare = f", spare {list(spec.spare)}" if spec.spare else ""
         return f"hit {list(spec.hit)}{spare}"

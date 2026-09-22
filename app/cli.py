@@ -24,8 +24,16 @@ from core.offtarget import (
     DEFAULT_OFFTARGET_MAX_MISMATCH,
     DEFAULT_OFFTARGET_MIN_MISMATCH,
 )
-from msa.discrimination import MismatchClass
-from msa.targeting import AlleleTargeting
+from msa.discrimination import (
+    CONSISTENT_POSITIONS,
+    MULTI_MISMATCH,
+    STRONGEST_POSITIONS,
+    GuideRegion,
+    MismatchAssessment,
+    MismatchClass,
+    best_mismatch,
+)
+from msa.targeting import AlleleTargeting, TargetingMode
 from msa.windows import DEFAULT_MIN_SPARE_MISMATCHES, WindowEvaluation
 from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
 from core.seed import SEED_TM_THRESHOLD_C
@@ -243,7 +251,12 @@ def _print_criteria(
     typer.echo(typer.style("Criteria", bold=True))
     if targeting is not None:
         mode = targeting.mode.value.replace("_", "-")
-        if targeting.discriminating:
+        if targeting.mode is TargetingMode.TARGET_SPECIFIC:
+            allele = (
+                f"{mode}: loaded target only, spare all {len(targeting.spare)} "
+                f"panel allele(s) (>= {min_spare} diff each)"
+            )
+        elif targeting.discriminating:
             allele = (
                 f"{mode}: hit {sorted(targeting.hit)}, spare "
                 f"{len(targeting.spare)} allele(s) (>= {min_spare} diff each)"
@@ -336,30 +349,61 @@ def _print_funnel(
     typer.echo(typer.style(row("selected:", len(selected)), fg=typer.colors.GREEN, bold=True))
 
 
-def _discrimination_cell(window: WindowEvaluation) -> str:
-    """Compact readout of the mismatch a window's discrimination rests on.
+# Short codes for the criteria that set a mismatch's discrimination rank, so a
+# whole assessment reads in one cell instead of just its position.
+_REGION_CODE = {
+    GuideRegion.POST_SEED: "post",
+    GuideRegion.SEED: "seed",
+    GuideRegion.ANCHOR: "anch",
+}
+_CLASS_CODE = {
+    MismatchClass.PURINE_PURINE: "pp",
+    MismatchClass.PURINE_PYRIMIDINE: "pu",
+    MismatchClass.PYRIMIDINE_PURINE: "up",
+    MismatchClass.PYRIMIDINE_PYRIMIDINE: "uu",
+}
 
-    'P16*pp' reads: guide position 16, listed in Huang's table for this base
-    change (*), purine:purine (pp). A missing mark means the opposite; '?' means
-    the bases were ambiguous and neither source applies.
+
+def _position_tier(guide_position: int) -> str:
+    """S for a strongest position (P10/P16), C for a consistent one, else '-'."""
+    if guide_position in STRONGEST_POSITIONS:
+        return "S"
+    if guide_position in CONSISTENT_POSITIONS:
+        return "C"
+    return "-"
+
+
+def _mismatch_code(d: MismatchAssessment) -> str:
+    """Every ranking criterion of one mismatch in one cell.
+
+    'P16 post H+ S pp' reads: guide position 16; 3' of the seed; listed in
+    Huang's table for this base change (H+, vs H- not listed, H? ambiguous); a
+    strongest position (S; C = merely consistent, - = neither); purine:purine.
+    """
+    huang = "H?" if d.huang_recommended is None else ("H+" if d.huang_recommended else "H-")
+    cls = "?" if d.mismatch_class is None else _CLASS_CODE[d.mismatch_class]
+    return f"P{d.guide_position} {_REGION_CODE[d.region]} {huang} {_position_tier(d.guide_position)} {cls}"
+
+
+def _discrimination_cell(window: WindowEvaluation) -> str:
+    """Full-criteria readout of the mismatch a window's discrimination rests on.
+
+    See _mismatch_code for the encoding. The mismatch shown is the deciding one:
+    the best-placed difference from the weakest spared allele.
     """
     deciding = window.deciding_mismatch
     if deciding is None:
         return "none"
-    if deciding.huang_recommended is None:
-        listed = "?"
-    else:
-        listed = "*" if deciding.huang_recommended else ""
-    purine = "pp" if deciding.mismatch_class is MismatchClass.PURINE_PURINE else ""
-    return f"P{deciding.guide_position}{listed}{purine}"
+    return _mismatch_code(deciding)
 
 
 def _discrimination_fields(window: WindowEvaluation) -> list[str]:
-    """The deciding mismatch, as six TSV fields. Empty ones where it has none."""
+    """The deciding mismatch as nine TSV fields. Empty ones where it has none."""
     deciding = window.deciding_mismatch
     if deciding is None:
-        return [""] * 6
+        return [""] * 9
     huang = "" if deciding.huang_recommended is None else str(deciding.huang_recommended)
+    count = window.min_spare_mismatches or 0
     return [
         str(deciding.guide_position),
         deciding.mutation_type,
@@ -367,7 +411,61 @@ def _discrimination_fields(window: WindowEvaluation) -> list[str]:
         huang,
         deciding.region.value,
         str(deciding.sources_agree),
+        str(deciding.guide_position in STRONGEST_POSITIONS),
+        str(deciding.guide_position in CONSISTENT_POSITIONS),
+        str(count >= MULTI_MISMATCH),
     ]
+
+
+def _print_window_discrimination(window: WindowEvaluation) -> None:
+    """Per-spared-allele breakdown for one window, weakest allele first.
+
+    Where the table row collapses to the deciding (weakest) allele, this shows
+    every spared allele: its difference count, all its mismatch positions, and
+    its own best mismatch's full criteria - so an siRNA can be judged against the
+    whole panel, not just the allele it distinguishes least well.
+    """
+    rows = window.spared_alleles_by_discrimination
+    if not rows:
+        typer.echo("      (nothing spared - no discrimination to assess)")
+        return
+    for index, (allele, assessments) in enumerate(rows):
+        best = best_mismatch(assessments)
+        positions = ",".join(
+            f"P{a.guide_position}"
+            for a in sorted(assessments, key=lambda a: a.guide_position)
+        )
+        code = _mismatch_code(best) if best is not None else "none"
+        agree = "yes" if (best is not None and best.sources_agree) else "no"
+        mutation = best.mutation_type if best is not None else ""
+        marker = "  [weakest]" if index == 0 else ""
+        typer.echo(
+            f"      {allele:<26} diff={len(assessments):<2} [{positions}]  "
+            f"{code:<17} {mutation:<4} agree={agree}{marker}"
+        )
+
+
+def render_discrimination_detail(
+    selected: list, window_by_pos: dict[int, WindowEvaluation], limit: int
+) -> None:
+    """Print the full per-allele discrimination breakdown for the shown candidates."""
+    shown = selected if limit == 0 else selected[:limit]
+    typer.echo("")
+    typer.echo(typer.style("Per-allele discrimination (weakest allele first)", bold=True))
+    for e in shown:
+        c = e.candidate
+        typer.echo(f"  {c.region}  guide 5->3 {c.guide_full}")
+        _print_window_discrimination(window_by_pos[c.position])
+    typer.secho(
+        "  code: P<pos> region(post/seed/anch) Huang(H+/H-/H?) "
+        "position(S=strongest,C=consistent,-=other) class(pp/pu/up/uu); "
+        "agree = Huang and region concur.",
+        fg=typer.colors.BRIGHT_BLACK,
+    )
+    if limit and len(selected) > limit:
+        typer.echo(
+            f"  ... {len(selected) - limit} more (use --limit 0 to show all)"
+        )
 
 
 def _print_table(
@@ -394,7 +492,7 @@ def _print_table(
     if criteria.enabled_rule_names:
         header += f" {'rules':<5}"
     if show_spare:
-        header += f" {'minDiff':>7} {'disc':>7}"
+        header += f" {'minDiff':>7} {'disc':<17}"
     if criteria.use_seed_filter:
         header += f" {'seedTm':>7}"
     if criteria.use_offtarget_filter:
@@ -418,7 +516,7 @@ def _print_table(
             window = window_by_pos[c.position]
             margin = window.min_spare_mismatches
             row += f" {('none' if margin is None else str(margin)):>7}"
-            row += f" {_discrimination_cell(window):>7}"
+            row += f" {_discrimination_cell(window):<17}"
         if criteria.use_seed_filter:
             row += f" {e.seed.max_tm:>7.1f}"
         if criteria.use_offtarget_filter:
@@ -439,8 +537,13 @@ def _print_table(
             fg=typer.colors.BRIGHT_BLACK,
         )
         typer.secho(
-            "  disc: guide position, * = listed by Huang et al. for this base "
-            "change, pp = purine:purine.",
+            "  disc: P<pos> region(post/seed/anch) Huang(H+/H-/H?) "
+            "position(S=strongest,C=consistent,-=other) class(pp/pu/up/uu).",
+            fg=typer.colors.BRIGHT_BLACK,
+        )
+        typer.secho(
+            "  For every spared allele (not just the weakest), pass --explain, or "
+            "'assess <region>' in the shell.",
             fg=typer.colors.BRIGHT_BLACK,
         )
     if limit and len(selected) > limit:
@@ -481,10 +584,13 @@ def _write_design_tsv(
         # weakest discrimination among spared alleles (empty for pan-allele).
         header += (
             "\tallele_hit_max_mismatch\tallele_spare_min_mismatch"
+            "\tallele_spare_count"
             # The single mismatch the window's discrimination rank rests on:
-            # the best-placed difference from the weakest spared allele.
+            # the best-placed difference from the weakest spared allele, with
+            # every criterion that sets its rank.
             "\tdisc_guide_position\tdisc_mutation\tdisc_mismatch_class"
             "\tdisc_huang_recommended\tdisc_region\tdisc_sources_agree"
+            "\tdisc_strongest_position\tdisc_consistent_position\tdisc_multi_mismatch"
         )
     lines = [header]
     for e in selected:
@@ -520,17 +626,22 @@ def _write_design_tsv(
             fields += [
                 str(window.max_hit_mismatches),
                 "" if spare_min is None else str(spare_min),
+                str(len(window.mismatch_assessments)),
                 *_discrimination_fields(window),
             ]
         lines.append("\t".join(fields))
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
-def render_design_result(result: DesignResult, limit: int) -> None:
+def render_design_result(
+    result: DesignResult, limit: int, explain: bool = False
+) -> None:
     """Print a design run: header, criteria, funnel, and the selected table.
 
     The shared renderer behind both 'hush design' and the shell's 'design', so
-    the two stay identical. 'limit' caps the printed rows (0 = all).
+    the two stay identical. 'limit' caps the printed rows (0 = all). With
+    'explain' and a discriminating request, the full per-allele breakdown is
+    appended for the shown candidates.
     """
     mrna = result.target
     typer.echo(
@@ -571,6 +682,15 @@ def render_design_result(result: DesignResult, limit: int) -> None:
             result.window_by_pos,
             result.targeting,
         )
+        if (
+            explain
+            and result.window_by_pos is not None
+            and result.targeting is not None
+            and result.targeting.discriminating
+        ):
+            render_discrimination_detail(
+                result.selected, result.window_by_pos, limit
+            )
 
 
 @app.command("design")
@@ -713,6 +833,13 @@ def design_cmd(
         "(allele-specific targeting).",
         rich_help_panel=_ALLELE,
     ),
+    target_specific: bool = typer.Option(
+        False, "--target-specific",
+        help="Spare every panel member and hit none of them: design specific to "
+        "the loaded target (silenced by construction) against the whole reference "
+        "panel. Use when the target is loaded apart from the panel.",
+        rich_help_panel=_ALLELE,
+    ),
     hit: Optional[str] = typer.Option(
         None, "--hit",
         help="Comma list of panel member ids to hit. With --spare the two sets "
@@ -732,10 +859,17 @@ def design_cmd(
         rich_help_panel=_ALLELE,
     ),
     sort: str = typer.Option(
-        "position", "--sort",
-        help="Report order: position (default, nothing ranked) or discrimination "
-        "(best first, judged by each window's weakest spared allele; needs a "
-        "request that spares something).",
+        "auto", "--sort",
+        help="Report order: auto (default - discrimination when the request "
+        "spares something, else position), position (nothing ranked), or "
+        "discrimination (best first, judged by each window's weakest spared "
+        "allele; needs a request that spares something).",
+        rich_help_panel=_ALLELE,
+    ),
+    explain: bool = typer.Option(
+        False, "--explain",
+        help="After the table, print the full per-allele discrimination breakdown "
+        "(every spared allele, not just the weakest) for the shown candidates.",
         rich_help_panel=_ALLELE,
     ),
     limit: int = typer.Option(
@@ -750,22 +884,26 @@ def design_cmd(
     The best-practice default applies all three rule sets combined by ANY (union),
     the seed-duplex off-target Tm filter, the homopolymer gate, and transcriptome
     off-target scanning when a --offtarget-db is configured. The GC, hairpin and
-    asymmetry gates are opt-in. Nothing is ranked by default: selected candidates
-    are reported in target-position order, and '--sort discrimination' is the one
-    way to ask for an ordering. Expert thermodynamic knobs live in the Advanced
-    option group (see --help).
+    asymmetry gates are opt-in. Ordering is 'auto' by default: a request that
+    spares alleles is ranked best-discrimination first, and everything else stays
+    in target-position order ('--sort position' forces target order). Expert
+    thermodynamic knobs live in the Advanced option group (see --help).
 
     Supply --panel to make the run allele-aware: the panel is aligned to the
     target (MSA/allele stage) and each candidate is additionally gated on whether
     its window hits the requested alleles and discriminates against the spared
-    ones. The targeting intent is pan-allele by default, or --allele-specific /
-    --hit (+ --spare). This allele gate is ANDed with the other filters.
+    ones. The targeting intent is pan-allele by default, or --allele-specific,
+    --target-specific (spare the whole panel), or --hit (+ --spare). This allele
+    gate is ANDed with the other filters; add --explain for the full per-allele
+    breakdown.
     """
     use_ut, use_rey, use_amz = _parse_rules(rules)
     rule_mode = _parse_mode(mode)
     thermo_params = _parse_params(params)
     overhang_policy = _parse_overhang(overhang)
-    if panel is None and (pan_allele or allele_specific or hit or spare):
+    if panel is None and (
+        pan_allele or allele_specific or target_specific or hit or spare
+    ):
         raise typer.BadParameter(
             "allele targeting needs a panel; pass --panel with an allele-family "
             "FASTA.",
@@ -781,6 +919,7 @@ def design_cmd(
         targeting_spec = AlleleTargetingSpec(
             pan_allele=pan_allele,
             allele_specific=allele_specific,
+            target_specific=target_specific,
             hit=tuple(split_ids(hit)) if hit is not None else None,
             spare=tuple(split_ids(spare)) if spare is not None else None,
         )
@@ -827,7 +966,7 @@ def design_cmd(
         typer.secho(f"Design error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    render_design_result(result, limit)
+    render_design_result(result, limit, explain=explain)
 
     if output is not None:
         _write_design_tsv(output, result.selected, result.criteria, result.window_by_pos)

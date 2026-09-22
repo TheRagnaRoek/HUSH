@@ -50,6 +50,7 @@ class TargetingSchema(BaseModel):
 
     pan_allele: bool = False
     allele_specific: Optional[str] = None
+    target_specific: bool = False
     hit: Optional[list[str]] = None
     spare: Optional[list[str]] = None
 
@@ -57,6 +58,7 @@ class TargetingSchema(BaseModel):
         return AlleleTargetingSpec(
             pan_allele=self.pan_allele,
             allele_specific=self.allele_specific,
+            target_specific=self.target_specific,
             hit=tuple(self.hit) if self.hit is not None else None,
             spare=tuple(self.spare) if self.spare is not None else None,
         )
@@ -106,7 +108,7 @@ class DesignParamsSchema(BaseModel):
 
     targeting: Optional[TargetingSchema] = None
     min_spare_mismatches: int = DEFAULT_MIN_SPARE_MISMATCHES
-    sort: str = "position"
+    sort: str = "auto"
 
     def to_domain(self) -> DesignParams:
         from pathlib import Path
@@ -236,12 +238,28 @@ class DiscriminationResult(BaseModel):
     huang_recommended: Optional[bool] = None
     region: str
     sources_agree: bool
+    strongest_position: bool
+    consistent_position: bool
+    multi_mismatch: bool
+
+
+class PerAlleleDiscrimination(BaseModel):
+    """One spared allele's discrimination: how many differences, best placed one."""
+
+    allele: str
+    diff_count: int
+    discrimination: Optional[DiscriminationResult] = None
 
 
 class AlleleResult(BaseModel):
     hit_max_mismatch: int
     spare_min_mismatch: Optional[int] = None
+    spare_count: int = 0
+    # The deciding (weakest) allele's discrimination, then every spared allele in
+    # weakest-first order - so a client can rank on the summary yet still show the
+    # full per-allele picture.
     discrimination: Optional[DiscriminationResult] = None
+    per_allele: list[PerAlleleDiscrimination] = []
 
 
 class CandidateResult(BaseModel):

@@ -6,19 +6,25 @@ This module holds the *request* side of that question - the domain model the res
 of the stage is parameterised by. It performs no alignment and computes no
 verdicts; those live in the alignment and evaluation units.
 
-Three user intents are commonly named, but they are not three different things -
+Four user intents are commonly named, but they are not four different things -
 they are one structure with different values:
 
 * allele-specific - hit exactly one panel member, spare the rest.
 * pan-allele      - hit every panel member, spare none.
 * subset          - hit a chosen group, spare the rest.
+* target-specific - hit no panel member, spare the whole panel.
 
-All three reduce to two disjoint sets of allele ids: the ones a candidate must
+The last one is the case for a target loaded *apart* from its reference panel:
+candidates are always built from the loaded target, so it is silenced by
+construction, and "specific to it" means discriminating against every panel
+member while requiring nothing of the panel to be hit.
+
+All four reduce to two disjoint sets of allele ids: the ones a candidate must
 match ('hit') and the ones it must be able to discriminate against ('spare').
-Modelling them as one type rather than three keeps a single code path through the
-stage, and admits combinations the three named cases do not cover (e.g. sparing
-only part of the panel and leaving the remainder unconstrained). The named cases
-are provided as constructors, not as separate types.
+Modelling them as one type rather than four keeps a single code path through the
+stage, and admits combinations the named cases do not cover (e.g. sparing only
+part of the panel and leaving the remainder unconstrained). The named cases are
+provided as constructors, not as separate types.
 
 TargetingMode is *derived* from the two sets rather than stored, so a request's
 reported mode can never disagree with its contents.
@@ -46,11 +52,15 @@ class TargetingMode(str, Enum):
     PAN_ALLELE:      nothing is spared - the candidate should hit everything asked
                      for and discriminate against nothing.
     SUBSET:          several alleles are targeted while others are spared.
+    TARGET_SPECIFIC: no panel member is targeted and the whole panel is spared -
+                     the loaded target (silenced by construction) is the only
+                     thing hit.
     """
 
     ALLELE_SPECIFIC = "allele_specific"
     PAN_ALLELE = "pan_allele"
     SUBSET = "subset"
+    TARGET_SPECIFIC = "target_specific"
 
 
 # --------------------------------------------------------------------------- #
@@ -74,7 +84,10 @@ class AlleleTargeting:
     made, which is when the user's intent is actually known.
 
     Parameters:
-        hit:   Ids of the panel members the candidate must match. Never empty.
+        hit:   Ids of the panel members the candidate must match. May be empty
+               only when 'spare' is not (target-specific targeting): the loaded
+               target is silenced by construction, so hitting no panel member
+               still targets something.
         spare: Ids the candidate must be able to discriminate against. May be
                empty (pan-allele targeting).
     """
@@ -93,10 +106,11 @@ class AlleleTargeting:
     # -- validation -------------------------------------------------------- #
 
     def _validate(self) -> None:
-        if not self.hit:
+        if not self.hit and not self.spare:
             raise TargetingError(
-                "AlleleTargeting requires at least one allele in 'hit'; a request "
-                "that targets nothing has no meaning."
+                "AlleleTargeting requires at least one allele in 'hit' or 'spare'; "
+                "a request that constrains nothing has no meaning. To target the "
+                "loaded target alone, spare the whole panel (target-specific)."
             )
         overlap = self.hit & self.spare
         if overlap:
@@ -115,6 +129,8 @@ class AlleleTargeting:
         Derived, never stored: a request is defined by its sets, and the mode is
         only a label for reporting.
         """
+        if not self.hit:
+            return TargetingMode.TARGET_SPECIFIC
         if not self.spare:
             return TargetingMode.PAN_ALLELE
         if len(self.hit) == 1:
@@ -166,6 +182,17 @@ class AlleleTargeting:
         ids = _panel_ids(panel)
         _require_present(wanted, ids)
         return cls(hit=wanted, spare=ids - wanted)
+
+    @classmethod
+    def target_specific(cls, panel: SequencePanel) -> "AlleleTargeting":
+        """Spare every member of 'panel'; hit nothing in it.
+
+        For a target loaded apart from its reference panel: the guide is built
+        from that target, so it is silenced by construction, and specificity
+        means discriminating against the whole panel. The counterpart of
+        pan_allele - the same panel, the opposite request.
+        """
+        return cls(hit=frozenset(), spare=_panel_ids(panel))
 
     def __repr__(self) -> str:
         return (
