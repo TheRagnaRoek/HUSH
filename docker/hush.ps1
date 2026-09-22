@@ -9,5 +9,13 @@
 $ErrorActionPreference = 'Stop'
 $image = if ($env:HUSH_IMAGE) { $env:HUSH_IMAGE } else { 'hush:latest' }
 $ref   = if ($env:HUSH_REF_VOLUME) { $env:HUSH_REF_VOLUME } else { 'hush_hush_ref' }
-docker run --rm -v "${ref}:/data/reference" -v "$($PWD.Path):/work" -w /work $image hush @args
+
+# Attach an interactive TTY only at a real console, so 'hush shell' (a REPL that
+# reads stdin) stays open while piped/redirected runs still work. Without it the
+# container's stdin is closed and the shell hits EOF and exits immediately.
+$tty = @()
+if (-not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected) {
+    $tty = @('-it')
+}
+docker run --rm @tty -v "${ref}:/data/reference" -v "$($PWD.Path):/work" -w /work $image hush @args
 exit $LASTEXITCODE

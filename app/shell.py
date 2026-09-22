@@ -18,6 +18,14 @@ import argparse
 from dataclasses import replace
 from pathlib import Path
 
+# Importing readline (Linux/macOS; absent on native Windows) gives input() its
+# arrow-key editing and history in the shell. Without it, the arrow keys leak
+# raw escape codes like ^[[A. Optional, so the import is guarded.
+try:
+    import readline  # noqa: F401
+except ImportError:
+    pass
+
 import typer
 
 from app.cli import (

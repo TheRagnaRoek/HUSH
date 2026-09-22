@@ -86,6 +86,18 @@ leaves:
 docker run --rm -it -v hush_hush_ref:/data/reference -v "${PWD}:/work" -w /work hush:latest bash
 ```
 
+For the HUSH REPL specifically (`hush shell` - load a target once, then tune and
+re-run `design`/`convert`), the wrappers work directly:
+
+```powershell
+.\docker\hush.ps1 shell
+```
+
+They pass an interactive terminal through when run from a console, so the REPL
+stays open. When their input or output is redirected (a pipe, or CI) they drop
+the interactive flags automatically, so one-shot `design`/`convert` runs are
+unaffected.
+
 ## Hosting the index
 
 Build the index once, then publish the volume's contents (the `.ebwt` shards and
