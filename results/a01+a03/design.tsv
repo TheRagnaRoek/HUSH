@@ -1,0 +1,3 @@
+region	start	end	guide_5to3	guide_overhang	passenger_5to3	passenger_overhang	gc_percent	rules_passed	seed_max_tm_c	hairpin_tm_c	homopolymer_max_run	offtarget_min_mismatch	offtarget_hits_0	offtarget_hits_1	offtarget_hits_2	offtarget_hits_3	allele_hit_max_mismatch	allele_spare_min_mismatch	disc_guide_position	disc_mutation	disc_mismatch_class	disc_huang_recommended	disc_region	disc_sources_agree
+82-100	82	100	UGAAGAAAUACCUCAUGGAGU	GU	UCCAUGAGGUAUUUCUUCACA	CA	36.8	-R-			3						0	1	3	C>T	purine:pyrimidine	False	seed	True
+84-102	84	102	UGUGAAGAAAUACCUCAUGGA	GA	CAUGAGGUAUUUCUUCACAUC	UC	36.8	UR-			3						0	1	5	C>T	purine:pyrimidine	False	seed	True
