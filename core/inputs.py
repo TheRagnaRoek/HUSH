@@ -15,6 +15,7 @@ DesignInput.require_nucleotide_target).
 
 from __future__ import annotations
 
+from io import StringIO
 from pathlib import Path
 
 from Bio import SeqIO
@@ -74,6 +75,21 @@ def read_fasta(path: str | Path) -> list[BioSequence]:
     if not records:
         raise InputParseError(f"No sequences found in FASTA file: {path}")
     return [_record_to_bioseq(r, path, "fasta") for r in records]
+
+
+def read_fasta_text(text: str, source: str = "<uploaded>") -> list[BioSequence]:
+    """Parse FASTA records from an in-memory string (e.g. an HTTP upload).
+
+    The string counterpart to read_fasta: same record adaptation, no file. Used
+    by the API, where the target/panel arrive as request text rather than paths.
+    """
+    try:
+        records = list(SeqIO.parse(StringIO(text), "fasta"))
+    except Exception as exc:  # pragma: no cover - Biopython raises many types
+        raise InputParseError(f"Failed to parse FASTA text: {exc}") from exc
+    if not records:
+        raise InputParseError("No sequences found in the FASTA text.")
+    return [_record_to_bioseq(r, Path(source), "fasta") for r in records]
 
 
 def read_pdb(path: str | Path, fmt: str | None = None) -> list[BioSequence]:
