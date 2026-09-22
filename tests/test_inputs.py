@@ -10,9 +10,22 @@ from core.inputs import (
     load_sequences,
     load_target,
     read_fasta,
+    read_fasta_text,
     read_pdb,
 )
 from core.sequence import MolType
+
+
+class TestReadFastaText:
+    def test_parses_records_from_a_string(self):
+        seqs = read_fasta_text(">a desc one\nACGTACGT\n>b\nTTTTGGGG\n")
+        assert [s.id for s in seqs] == ["a", "b"]
+        assert seqs[0].description == "desc one"
+        assert seqs[1].seq == "TTTTGGGG"
+
+    def test_empty_text_raises(self):
+        with pytest.raises(InputParseError):
+            read_fasta_text("   \n  ")
 
 
 class TestFormatDetection:

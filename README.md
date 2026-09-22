@@ -157,6 +157,41 @@ stem-dependent Jensen UGUGCUU); `--no-terminator` and `--terminator-length` tune
 the poly-T terminator. Scaffold rationale and references are in
 [`docs/shrna_design_note.md`](docs/shrna_design_note.md).
 
+## HTTP API
+
+An optional FastAPI backend exposes the same pipeline as JSON, for the browser
+client. Install the extra and run it:
+
+```bash
+pip install -e ".[api]"
+python -m api                       # or: uvicorn api.app:app --reload
+```
+
+Interactive docs are at `/docs` and the OpenAPI schema at `/openapi.json` (from
+which a TypeScript client can be generated). The target and panel are sent as
+FASTA text in the JSON body; GC bounds and results mirror the CLI.
+
+Two ways to call it. Stateless, one request carries everything:
+
+```bash
+curl -s localhost:8000/design -H 'content-type: application/json' -d '{
+  "target_fasta": ">t\nACGT...",
+  "params": {"use_seed_filter": false}
+}'
+```
+
+Or a session: post the inputs once, then design/convert by id (the server caches
+the panel alignment, so re-designs with new parameters do not re-align):
+
+```
+POST   /sessions                 {target_fasta, panel_fasta?}  -> {id, ...}
+POST   /sessions/{id}/design     {params}                      -> results
+POST   /sessions/{id}/convert    {options}                     -> constructs
+DELETE /sessions/{id}
+```
+
+Sessions are an in-memory warm cache (lost on restart), not a database.
+
 ## Benchmarking against siDirect
 
 siDirect is HUSH's gold-standard reference; on matched settings the rule
@@ -175,7 +210,9 @@ core/    Domain model + the siRNA design engine (sequence, inputs, sirna, rules,
          thermo, seed, offtarget, asymmetry, hairpin, selection, errors)
 msa/     MSA / allele stage (alignment, align_star, variation, windows, targeting)
 shrna/   shRNA conversion (stage 4: loops, convert)
+service/ Orchestration layer (HushSession) the CLI and API render over
 app/     CLI (app.cli)
+api/     HTTP API (FastAPI): schemas, serialize, store, app (optional extra)
 data/    Example inputs and benchmarking fixtures
 tools/   Developer utilities (build_offtarget_db.py, compare_sidirect.py)
 docs/    Concept dossier and design notes
