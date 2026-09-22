@@ -56,6 +56,42 @@ Once installed, the thin launchers call the venv's interpreter directly, so
 
 ## Usage
 
+### Interactive shell
+
+For iterative work, `hush shell` keeps one instance alive: load the target (and
+panel) once, tune the criteria, then re-run `design`/`convert` without
+re-loading or re-parsing. The panel alignment is computed once and reused across
+runs.
+
+```bash
+hush shell
+```
+
+Inside the shell:
+
+| Command | Does |
+|---|---|
+| `load <path>` | load the target mRNA/CDS |
+| `panel <path>` | load a related-sequence panel (turns on allele targeting) |
+| `set [flags]` | set persistent design criteria (same flags as `hush design`); no flags prints them |
+| `design [flags]` | design with the current criteria (inline flags apply to that run only) |
+| `convert [flags]` | convert the last design's selected candidates to shRNA |
+| `save <dir>` | write `design.tsv` (and `shrna.tsv`) into `<dir>` |
+| `show` / `inspect` | review the criteria / preview the design input |
+| `limit <n>`, `reset`, `help`, `quit` | display cap, restore defaults, help, exit |
+
+```
+hush> load data/examples/target_example.fasta
+hush> panel data/examples/hla_panel_example.fasta
+hush> set --no-seed --allele-specific "HLA-DEMO*01:01"
+hush> design
+hush> convert --loop jensen
+hush> save run1/
+```
+
+The one-shot commands below do the same work per invocation and remain the way
+to script HUSH.
+
 ### Inspect an input
 
 List every sequence in a FASTA/PDB/mmCIF file, or preview the design input with a
@@ -175,7 +211,8 @@ core/    Domain model + the siRNA design engine (sequence, inputs, sirna, rules,
          thermo, seed, offtarget, asymmetry, hairpin, selection, errors)
 msa/     MSA / allele stage (alignment, align_star, variation, windows, targeting)
 shrna/   shRNA conversion (stage 4: loops, convert)
-app/     CLI (app.cli)
+service/ Orchestration layer (HushSession) the CLI and API render over
+app/     CLI: one-shot commands (app.cli) + interactive shell (app.shell)
 data/    Example inputs and benchmarking fixtures
 tools/   Developer utilities (build_offtarget_db.py, compare_sidirect.py)
 docs/    Concept dossier and design notes
