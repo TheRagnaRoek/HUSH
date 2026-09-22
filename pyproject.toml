@@ -27,8 +27,9 @@ dev = ["pytest>=8.0", "pytest-cov>=5.0"]
 hush = "app.cli:app"
 
 [tool.setuptools]
-# Flat top-level packages mirroring the pipeline stages.
-packages = ["core", "msa", "shrna", "app"]
+# Flat top-level packages mirroring the pipeline stages, plus the service layer
+# (the orchestration seam the CLI and API render over).
+packages = ["core", "msa", "shrna", "service", "app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
