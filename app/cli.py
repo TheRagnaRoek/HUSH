@@ -33,7 +33,15 @@ from core.selection import DEFAULT_MAX_HOMOPOLYMER_RUN, RuleMode, SelectionCrite
 from core.sequence import BioSequence, DesignInput, MolType
 from core.sirna import OverhangPolicy
 from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
+from app.parsing import (
+    parse_mode,
+    parse_overhang,
+    parse_params,
+    parse_rules,
+    split_ids,
+)
 from service.params import AlleleTargetingSpec, DesignParams
+from service.results import ConvertResult, DesignResult
 from service.session import HushSession
 from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions, convert
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold, get_loop
@@ -180,87 +188,37 @@ def inspect_cmd(
 # design command
 # --------------------------------------------------------------------------- #
 
-_RULE_ALIASES = {
-    "ui-tei": "ui_tei",
-    "uitei": "ui_tei",
-    "ui_tei": "ui_tei",
-    "reynolds": "reynolds",
-    "amarzguioui": "amarzguioui",
-    "amarz": "amarzguioui",
-}
+# The flag-vocabulary conversions live in app.parsing (shared with the shell)
+# and raise ValueError; here they are re-wrapped as Typer usage errors so a bad
+# --flag still reports with its hint and the usage exit code.
 
 
 def _parse_rules(spec: str) -> tuple[bool, bool, bool]:
-    """Turn a --rules spec into (use_ui_tei, use_reynolds, use_amarzguioui)."""
-    text = spec.strip().lower()
-    if text in ("", "all"):
-        return True, True, True
-    if text == "none":
-        return False, False, False
-    flags = {"ui_tei": False, "reynolds": False, "amarzguioui": False}
-    for token in (t.strip() for t in text.split(",")):
-        if not token:
-            continue
-        key = _RULE_ALIASES.get(token)
-        if key is None:
-            raise typer.BadParameter(
-                f"unknown rule {token!r}; choose from ui-tei, reynolds, "
-                "amarzguioui (comma-separated), or 'all'/'none'.",
-                param_hint="--rules",
-            )
-        flags[key] = True
-    return flags["ui_tei"], flags["reynolds"], flags["amarzguioui"]
+    try:
+        return parse_rules(spec)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--rules")
 
 
 def _parse_mode(spec: str) -> RuleMode:
     try:
-        return RuleMode(spec.strip().lower())
-    except ValueError:
-        raise typer.BadParameter(
-            f"unknown mode {spec!r}; choose 'all' or 'any'.", param_hint="--mode"
-        )
-
-
-_PARAMS_ALIASES = {
-    "xia": ThermoParams.XIA_1998,
-    "xia1998": ThermoParams.XIA_1998,
-    "freier": ThermoParams.FREIER_1986,
-    "freier1986": ThermoParams.FREIER_1986,
-}
+        return parse_mode(spec)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--mode")
 
 
 def _parse_params(spec: str) -> ThermoParams:
-    key = _PARAMS_ALIASES.get(spec.strip().lower())
-    if key is None:
-        raise typer.BadParameter(
-            f"unknown parameter set {spec!r}; choose 'xia' or 'freier'.",
-            param_hint="--params",
-        )
-    return key
-
-
-_OVERHANG_ALIASES = {
-    "natural": OverhangPolicy.NATURAL,
-    "mrna": OverhangPolicy.NATURAL,
-    "dtdt": OverhangPolicy.DTDT,
-    "tt": OverhangPolicy.DTDT,
-    "uu": OverhangPolicy.UU,
-}
+    try:
+        return parse_params(spec)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--params")
 
 
 def _parse_overhang(spec: str) -> OverhangPolicy:
-    key = _OVERHANG_ALIASES.get(spec.strip().lower())
-    if key is None:
-        raise typer.BadParameter(
-            f"unknown overhang {spec!r}; choose 'natural', 'dtdt', or 'uu'.",
-            param_hint="--overhang",
-        )
-    return key
-
-
-def _split_ids(spec: str) -> list[str]:
-    """Split a comma-separated id list, dropping blanks and surrounding space."""
-    return [token.strip() for token in spec.split(",") if token.strip()]
+    try:
+        return parse_overhang(spec)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--overhang")
 
 
 def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
@@ -568,6 +526,53 @@ def _write_design_tsv(
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
+def render_design_result(result: DesignResult, limit: int) -> None:
+    """Print a design run: header, criteria, funnel, and the selected table.
+
+    The shared renderer behind both 'hush design' and the shell's 'design', so
+    the two stay identical. 'limit' caps the printed rows (0 = all).
+    """
+    mrna = result.target
+    typer.echo(
+        typer.style(f"Target: {mrna.id or '<unnamed>'}", fg=typer.colors.CYAN, bold=True)
+    )
+    typer.echo(
+        f"  {len(mrna)} nt  |  {len(result.evaluations)} candidate "
+        f"{result.length}-mer(s)  |  {result.overhang.value} 3' overhang"
+    )
+    if result.offtarget_skipped:
+        typer.secho(
+            "  [!] off-target scanning is on by default but no --offtarget-db was "
+            "given; skipping it. Build an index with tools/build_offtarget_db.py, "
+            "or pass --no-offtarget to silence this.",
+            fg=typer.colors.YELLOW,
+        )
+    typer.echo("")
+    _print_criteria(result.criteria, result.targeting, result.min_spare_mismatches)
+    typer.echo("")
+    _print_funnel(
+        result.criteria, result.evaluations, result.selected, result.window_by_pos
+    )
+    typer.echo("")
+
+    if not result.selected:
+        hint = "--no-seed (strict on GC-rich targets), or --allow-homopolymers"
+        if result.window_by_pos is not None:
+            hint += " (or a targeting request the panel can satisfy)"
+        typer.secho(
+            f"No candidates selected. Try relaxing: {hint}.", fg=typer.colors.YELLOW
+        )
+    else:
+        _print_table(
+            result.selected,
+            result.criteria,
+            result.length,
+            limit,
+            result.window_by_pos,
+            result.targeting,
+        )
+
+
 @app.command("design")
 def design_cmd(
     target: Path = typer.Argument(
@@ -776,8 +781,8 @@ def design_cmd(
         targeting_spec = AlleleTargetingSpec(
             pan_allele=pan_allele,
             allele_specific=allele_specific,
-            hit=tuple(_split_ids(hit)) if hit is not None else None,
-            spare=tuple(_split_ids(spare)) if spare is not None else None,
+            hit=tuple(split_ids(hit)) if hit is not None else None,
+            spare=tuple(split_ids(spare)) if spare is not None else None,
         )
     design_params = DesignParams(
         length=length,
@@ -822,43 +827,11 @@ def design_cmd(
         typer.secho(f"Design error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    mrna = result.target
-    criteria = result.criteria
-    targeting = result.targeting
-    window_by_pos = result.window_by_pos
-    evaluations = result.evaluations
-    selected = result.selected
-    offtarget_skipped = result.offtarget_skipped
-
-    typer.echo(typer.style(f"Target: {mrna.id or '<unnamed>'}", fg=typer.colors.CYAN, bold=True))
-    typer.echo(
-        f"  {len(mrna)} nt  |  {len(evaluations)} candidate {length}-mer(s)  "
-        f"|  {overhang_policy.value} 3' overhang"
-    )
-    if offtarget_skipped:
-        typer.secho(
-            "  [!] off-target scanning is on by default but no --offtarget-db was "
-            "given; skipping it. Build an index with tools/build_offtarget_db.py, "
-            "or pass --no-offtarget to silence this.",
-            fg=typer.colors.YELLOW,
-        )
-    typer.echo("")
-    _print_criteria(criteria, targeting, min_spare_mismatches)
-    typer.echo("")
-    _print_funnel(criteria, evaluations, selected, window_by_pos)
-    typer.echo("")
-
-    if not selected:
-        hint = "--no-seed (strict on GC-rich targets), or --allow-homopolymers"
-        if window_by_pos is not None:
-            hint += " (or a targeting request the panel can satisfy)"
-        typer.secho(f"No candidates selected. Try relaxing: {hint}.", fg=typer.colors.YELLOW)
-    else:
-        _print_table(selected, criteria, length, limit, window_by_pos, targeting)
+    render_design_result(result, limit)
 
     if output is not None:
-        _write_design_tsv(output, selected, criteria, window_by_pos)
-        typer.echo(f"\nWrote {len(selected)} selected candidate(s) to {output}")
+        _write_design_tsv(output, result.selected, result.criteria, result.window_by_pos)
+        typer.echo(f"\nWrote {len(result.selected)} selected candidate(s) to {output}")
 
 
 # --------------------------------------------------------------------------- #
@@ -979,6 +952,42 @@ def _write_convert_tsv(path: Path, constructs: list) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
+def render_convert_result(result: ConvertResult, limit: int) -> None:
+    """Print a convert run: scaffold header, summary, and the construct table.
+
+    The shared renderer behind both 'hush convert' and the shell's 'convert'.
+    """
+    options = result.options
+    loop = options.loop
+    term = f"{options.terminator_length}x T" if options.include_terminator else "none"
+    typer.echo(
+        typer.style(
+            f"Scaffold: stem-loop (SA)  |  loop {loop.name} {loop.seq}  |  "
+            f"terminator {term}",
+            fg=typer.colors.CYAN,
+            bold=True,
+        )
+    )
+    typer.echo(f"  {loop.citation}")
+    typer.echo("")
+
+    constructs = result.constructs
+    if not constructs:
+        typer.secho(
+            "No constructs to show - nothing was converted.", fg=typer.colors.YELLOW
+        )
+        return
+
+    fold_ok = sum(1 for c in constructs if c.folds_as_designed)
+    g_start = sum(1 for c in constructs if c.starts_with_g)
+    typer.echo(typer.style("Summary", bold=True))
+    typer.echo(f"  constructs:        {len(constructs)}")
+    typer.echo(f"  fold as designed:  {fold_ok}")
+    typer.echo(f"  5'-G (U6 Pol III): {g_start}")
+    typer.echo("")
+    _print_convert_table(constructs, options, limit)
+
+
 @app.command("convert")
 def convert_cmd(
     selected: Path = typer.Argument(
@@ -1040,39 +1049,27 @@ def convert_cmd(
         typer.secho(f"Convert error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    term = (
-        f"{options.terminator_length}x T" if options.include_terminator else "none"
-    )
-    typer.echo(
-        typer.style(
-            f"Scaffold: stem-loop (SA)  |  loop {loop_scaffold.name} "
-            f"{loop_scaffold.seq}  |  terminator {term}",
-            fg=typer.colors.CYAN,
-            bold=True,
-        )
-    )
-    typer.echo(f"  {loop_scaffold.citation}")
-    typer.echo("")
-
-    if not constructs:
-        typer.secho(
-            "No candidates in the input TSV - nothing to convert.",
-            fg=typer.colors.YELLOW,
-        )
-        return
-
-    fold_ok = sum(1 for c in constructs if c.folds_as_designed)
-    g_start = sum(1 for c in constructs if c.starts_with_g)
-    typer.echo(typer.style("Summary", bold=True))
-    typer.echo(f"  constructs:        {len(constructs)}")
-    typer.echo(f"  fold as designed:  {fold_ok}")
-    typer.echo(f"  5'-G (U6 Pol III): {g_start}")
-    typer.echo("")
-    _print_convert_table(constructs, options, limit)
+    render_convert_result(ConvertResult(constructs=constructs, options=options), limit)
 
     if output is not None:
         _write_convert_tsv(output, constructs)
         typer.echo(f"\nWrote {len(constructs)} construct(s) to {output}")
+
+
+@app.command("shell")
+def shell_cmd() -> None:
+    """Start an interactive session: load a target and panel once, then design.
+
+    The one-shot commands re-parse and re-load on every call; the shell keeps a
+    live instance so you load the target (and panel) once, tune the criteria with
+    'set', and re-run 'design'/'convert' as often as you like - the panel
+    alignment is computed once and reused. Type 'help' inside for the commands.
+    """
+    # Imported here so the command definitions above load without pulling in the
+    # shell (which imports this module for its renderers).
+    from app.shell import HushShell
+
+    HushShell().run()
 
 
 if __name__ == "__main__":
