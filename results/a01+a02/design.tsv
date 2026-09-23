@@ -1,13 +1,13 @@
-region	start	end	guide_5to3	guide_overhang	passenger_5to3	passenger_overhang	gc_percent	rules_passed	seed_max_tm_c	hairpin_tm_c	homopolymer_max_run	offtarget_min_mismatch	offtarget_hits_0	offtarget_hits_1	offtarget_hits_2	offtarget_hits_3	allele_hit_max_mismatch	allele_spare_min_mismatch	disc_guide_position	disc_mutation	disc_mismatch_class	disc_huang_recommended	disc_region	disc_sources_agree
-345-363	345	363	UAUCUGGAUGGUGUGAGAACC	CC	UUCUCACACCAUCCAGAUAAU	AU	42.1	-R-			2						0	1	1	G>A	pyrimidine:purine	False	anchor	True
-346-364	346	364	UUAUCUGGAUGGUGUGAGAAC	AC	UCUCACACCAUCCAGAUAAUG	UG	42.1	-R-			2						0	1	2	G>A	pyrimidine:purine	False	seed	True
-347-365	347	365	AUUAUCUGGAUGGUGUGAGAA	AA	CUCACACCAUCCAGAUAAUGU	GU	42.1	URA			2						0	1	3	G>A	pyrimidine:purine	False	seed	True
-349-367	349	367	ACAUUAUCUGGAUGGUGUGAG	AG	CACACCAUCCAGAUAAUGUAU	AU	42.1	URA			2						0	1	5	G>A	pyrimidine:purine	False	seed	True
-350-368	350	368	UACAUUAUCUGGAUGGUGUGA	GA	ACACCAUCCAGAUAAUGUAUG	UG	36.8	-R-			2						0	1	6	G>A	pyrimidine:purine	False	seed	True
-351-369	351	369	AUACAUUAUCUGGAUGGUGUG	UG	CACCAUCCAGAUAAUGUAUGG	GG	36.8	URA			2						0	1	7	G>A	pyrimidine:purine	False	seed	True
-973-991	973	991	UCACGGCAGCGACCACAGCUC	UC	GCUGUGGUCGCUGCCGUGAUG	UG	68.4	--A			2						0	1	5	T>C	purine:pyrimidine	False	seed	True
-974-992	974	992	AUCACGGCAGCGACCACAGCU	CU	CUGUGGUCGCUGCCGUGAUGU	GU	63.2	--A			2						0	1	6	T>C	purine:pyrimidine	False	seed	True
-976-994	976	994	ACAUCACGGCAGCGACCACAG	AG	GUGGUCGCUGCCGUGAUGUGG	GG	63.2	U-A			2						0	1	8	T>C	purine:pyrimidine	False	seed	True
-979-997	979	997	UCCACAUCACGGCAGCGACCA	CA	GUCGCUGCCGUGAUGUGGAGG	GG	63.2	U--			2						0	1	11	T>C	purine:pyrimidine	True	post_seed	True
-985-1003	985	1003	UCCUCCUCCACAUCACGGCAG	AG	GCCGUGAUGUGGAGGAGGAAG	AG	63.2	--A			2						0	1	17	T>C	purine:pyrimidine	False	post_seed	False
-986-1004	986	1004	UUCCUCCUCCACAUCACGGCA	CA	CCGUGAUGUGGAGGAGGAAGA	GA	57.9	--A			2						0	1	18	T>C	purine:pyrimidine	False	post_seed	False
+region	start	end	guide_5to3	guide_overhang	passenger_5to3	passenger_overhang	gc_percent	rules_passed	seed_max_tm_c	hairpin_tm_c	homopolymer_max_run	offtarget_min_mismatch	offtarget_hits_0	offtarget_hits_1	offtarget_hits_2	offtarget_hits_3	allele_hit_max_mismatch	allele_spare_min_mismatch	allele_spare_count	disc_guide_position	disc_mutation	disc_mismatch_class	disc_huang_recommended	disc_region	disc_sources_agree	disc_strongest_position	disc_consistent_position	disc_multi_mismatch
+273-291	273	291	AGUCUGUGAGUGGGCCUUCAU	AU	GAAGGCCCACUCACAGACUGA	GA	57.9	U--			3						0	1	1	10	G>C	purine:purine	True	post_seed	True	True	False	False
+1072-1090	1072	1090	UACAAGCUGUGAGAGACACAU	AU	GUGUCUCUCACAGCUUGUAAA	AA	47.4	U-A			2						0	1	1	14	C>T	purine:pyrimidine	True	post_seed	True	False	True	False
+1069-1087	1069	1087	AAGCUGUGAGAGACACAUCAG	AG	GAUGUGUCUCUCACAGCUUGU	GU	47.4	U--			2						0	1	1	11	C>T	purine:pyrimidine	True	post_seed	True	False	False	False
+1074-1092	1074	1092	UUUACAAGCUGUGAGAGACAC	AC	GUCUCUCACAGCUUGUAAAGU	GU	42.1	URA			3						0	1	1	16	C>T	purine:pyrimidine	False	post_seed	False	True	False	False
+1073-1091	1073	1091	UUACAAGCUGUGAGAGACACA	CA	UGUCUCUCACAGCUUGUAAAG	AG	42.1	-R-			2						0	1	1	15	C>T	purine:pyrimidine	False	post_seed	False	False	False	False
+1076-1094	1076	1094	ACUUUACAAGCUGUGAGAGAC	AC	CUCUCACAGCUUGUAAAGUGU	GU	42.1	U-A			3						0	1	1	18	C>T	purine:pyrimidine	False	post_seed	False	False	False	False
+1063-1081	1063	1081	UGAGAGACACAUCAGAGCCCU	CU	GGCUCUGAUGUGUCUCUCACA	CA	52.6	U-A			2						0	1	1	5	C>T	purine:pyrimidine	False	seed	True	False	True	False
+474-492	474	492	AGCUGCCAUGUCCGCCGCGGU	GU	CGCGGCGGACAUGGCAGCUCA	CA	73.7	--A			2						0	1	1	4	G>A	pyrimidine:purine	False	seed	True	False	False	False
+476-494	476	494	UGAGCUGCCAUGUCCGCCGCG	CG	CGGCGGACAUGGCAGCUCAGA	GA	68.4	--A			2						0	1	1	6	G>A	pyrimidine:purine	False	seed	True	False	False	False
+478-496	478	496	UCUGAGCUGCCAUGUCCGCCG	CG	GCGGACAUGGCAGCUCAGAUC	UC	63.2	--A			2						0	1	1	8	G>A	pyrimidine:purine	False	seed	True	False	False	False
+1059-1077	1059	1077	AGACACAUCAGAGCCCUGGGC	GC	CCAGGGCUCUGAUGUGUCUCU	CU	57.9	U-A			3						0	1	1	1	C>T	purine:pyrimidine	False	anchor	True	False	False	False
+1065-1083	1065	1083	UGUGAGAGACACAUCAGAGCC	CC	CUCUGAUGUGUCUCUCACAGC	GC	47.4	U-A			1						0	1	1	7	C>T	purine:pyrimidine	False	seed	True	False	False	False
