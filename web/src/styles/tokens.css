@@ -1,0 +1,129 @@
+/* HIDE design tokens.
+ *
+ * Palette: Helles Rot #E30222, Dunkles Rot #AB011B, Blau #01C9DD, Grau #AEB6CD,
+ * Lila #9D8BBA. Roles: red = identity + primary action + guide strand; cyan =
+ * data / highlight / mismatch-vs-spared (a GOOD signal, not an error); purple +
+ * grey = structure. Semantic pass/warn/fail stay separate from the red brand
+ * accent. Light is the default; dark follows the viewer's choice (data-theme) or
+ * the OS when unset. Every token is defined on bare :root first, then only
+ * redefined in the dark blocks.
+ */
+:root {
+  --bg: #eef0f5;
+  --surface: #ffffff;
+  --surface-2: #f3f4f8;
+  --inset: #f6f7fa;
+  --fg: #1a1e2b;
+  --muted: #5f6880;
+  --faint: #99a0b5;
+  --line: #e5e7ef;
+  --line-2: #eceef4;
+  --brand: #e30222;
+  --brand-d: #ab011b;
+  --brand-soft: #fde9eb;
+  --cyan: #01c9dd;
+  --cyan-ink: #0a8a99;
+  --cyan-soft: #dcf6f9;
+  --purple: #9d8bba;
+  --purple-ink: #6f5c90;
+  --purple-soft: #efebf5;
+  --grey: #aeb6cd;
+  --good: #2e9e5b;
+  --good-soft: #e4f3ea;
+  --warn: #c2801b;
+  --warn-soft: #f8eed9;
+  --bad: #ab011b;
+  --bad-soft: #f8e3e5;
+  --mismatch: #01c9dd;
+  --mismatch-ink: #0a8a99;
+  --mismatch-soft: #d6f4f8;
+  --seg-sense: #7d68a0;
+  --seg-loop: #0b93a4;
+  --seg-anti: #e30222;
+  --seg-term: #58607a;
+  --font-ui: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-title: "Be Vietnam Pro", "DM Sans", system-ui, sans-serif;
+  --font-lead: "Lato", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --shadow: 0 1px 2px rgba(26, 30, 43, 0.04), 0 10px 30px rgba(26, 30, 43, 0.07);
+  --shadow-sm: 0 1px 2px rgba(26, 30, 43, 0.05);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11131a;
+    --surface: #1a1d27;
+    --surface-2: #20242f;
+    --inset: #191c25;
+    --fg: #eceef4;
+    --muted: #a2aabe;
+    --faint: #6a7286;
+    --line: #2a2e3a;
+    --line-2: #232732;
+    --brand: #f5324a;
+    --brand-d: #ff5e6c;
+    --brand-soft: #2b1418;
+    --cyan: #01c9dd;
+    --cyan-ink: #3bd6e8;
+    --cyan-soft: #0a2c31;
+    --purple: #b9a7d6;
+    --purple-ink: #c9bce0;
+    --purple-soft: #241f30;
+    --grey: #aeb6cd;
+    --good: #4bbf86;
+    --good-soft: #16281d;
+    --warn: #e0a14a;
+    --warn-soft: #2c2411;
+    --bad: #ff5e6c;
+    --bad-soft: #2d1519;
+    --mismatch: #01c9dd;
+    --mismatch-ink: #3bd6e8;
+    --mismatch-soft: #0a2c31;
+    --seg-sense: #b9a7d6;
+    --seg-loop: #2bc3d6;
+    --seg-anti: #f5324a;
+    --seg-term: #8891a8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.42);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #11131a;
+  --surface: #1a1d27;
+  --surface-2: #20242f;
+  --inset: #191c25;
+  --fg: #eceef4;
+  --muted: #a2aabe;
+  --faint: #6a7286;
+  --line: #2a2e3a;
+  --line-2: #232732;
+  --brand: #f5324a;
+  --brand-d: #ff5e6c;
+  --brand-soft: #2b1418;
+  --cyan: #01c9dd;
+  --cyan-ink: #3bd6e8;
+  --cyan-soft: #0a2c31;
+  --purple: #b9a7d6;
+  --purple-ink: #c9bce0;
+  --purple-soft: #241f30;
+  --grey: #aeb6cd;
+  --good: #4bbf86;
+  --good-soft: #16281d;
+  --warn: #e0a14a;
+  --warn-soft: #2c2411;
+  --bad: #ff5e6c;
+  --bad-soft: #2d1519;
+  --mismatch: #01c9dd;
+  --mismatch-ink: #3bd6e8;
+  --mismatch-soft: #0a2c31;
+  --seg-sense: #b9a7d6;
+  --seg-loop: #2bc3d6;
+  --seg-anti: #f5324a;
+  --seg-term: #8891a8;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.42);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}

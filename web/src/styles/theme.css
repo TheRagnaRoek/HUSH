@@ -1,0 +1,47 @@
+/* Map Bootstrap's theme variables onto the HIDE tokens so any react-bootstrap
+ * component (buttons, forms, modals) inherits the brand without per-component
+ * overrides. Loaded after bootstrap.min.css and tokens.css. */
+:root {
+  --bs-body-font-family: var(--font-ui);
+  --bs-body-color: var(--fg);
+  --bs-body-bg: var(--bg);
+  --bs-border-color: var(--line);
+  --bs-primary: var(--brand);
+  --bs-primary-rgb: 227, 2, 34;
+  --bs-link-color: var(--cyan-ink);
+  --bs-link-hover-color: var(--brand-d);
+  --bs-secondary-color: var(--muted);
+  --bs-emphasis-color: var(--fg);
+}
+
+/* Headings use the title face; the lead line uses Lato (same roles as the wiki). */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6 {
+  font-family: var(--font-title);
+  letter-spacing: -0.012em;
+}
+.lead {
+  font-family: var(--font-lead);
+}
+
+/* react-bootstrap Button variant="primary" -> HIDE red. */
+.btn-primary {
+  --bs-btn-bg: var(--brand);
+  --bs-btn-border-color: var(--brand);
+  --bs-btn-hover-bg: var(--brand-d);
+  --bs-btn-hover-border-color: var(--brand-d);
+  --bs-btn-active-bg: var(--brand-d);
+  --bs-btn-active-border-color: var(--brand-d);
+  --bs-btn-disabled-bg: var(--brand);
+  --bs-btn-disabled-border-color: var(--brand);
+}

@@ -1,0 +1,5 @@
+/* HIDE typefaces, matching the wiki: Be Vietnam Pro (titles), Lato (leads),
+ * DM Sans (body), plus DM Mono for sequences. Served from Google Fonts, which
+ * carries all four. To self-host later (no external dependency), drop the
+ * @import and add @font-face rules pointing at files in public/fonts. */
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Lato:ital,wght@0,300;0,400;0,700;1,400&display=swap");
