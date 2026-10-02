@@ -1,8 +1,0 @@
-region	start	end	guide_5to3	guide_overhang	passenger_5to3	passenger_overhang	gc_percent	rules_passed	seed_max_tm_c	hairpin_tm_c	homopolymer_max_run	offtarget_min_mismatch	offtarget_hits_0	offtarget_hits_1	offtarget_hits_2	offtarget_hits_3	allele_hit_max_mismatch	allele_spare_min_mismatch	allele_spare_count	disc_guide_position	disc_mutation	disc_mismatch_class	disc_huang_recommended	disc_region	disc_sources_agree	disc_strongest_position	disc_consistent_position	disc_multi_mismatch
-530-548	530	548	UAGGCUCUCAACUGCUCCGCC	CC	CGGAGCAGUUGAGAGCCUACC	CC	57.9	--A			2						0	3	1	10	G>T	purine:purine	True	post_seed	True	True	False	True
-529-547	529	547	AGGCUCUCAACUGCUCCGCCA	CA	GCGGAGCAGUUGAGAGCCUAC	AC	63.2	--A			2						0	3	1	10	C>T	purine:pyrimidine	True	post_seed	True	True	False	True
-564-582	564	582	UCUGCGGAGCCACUCCACGCA	CA	CGUGGAGUGGCUCCGCAGAUA	UA	68.4	--A			2						0	2	1	12	G>T	purine:purine	True	post_seed	True	False	True	True
-531-549	531	549	GUAGGCUCUCAACUGCUCCGC	GC	GGAGCAGUUGAGAGCCUACCU	CU	57.9	--A			2						0	3	1	12	C>T	purine:pyrimidine	True	post_seed	True	False	True	True
-565-583	565	583	AUCUGCGGAGCCACUCCACGC	GC	GUGGAGUGGCUCCGCAGAUAC	AC	63.2	--A			2						0	2	1	13	G>T	purine:purine	False	post_seed	False	False	True	True
-330-348	330	348	AGAACCGGCCUCGCUCUGGUU	UU	CCAGAGCGAGGCCGGUUCUCA	CA	68.4	--A			2						0	1	1	8	A>C	purine:purine	True	seed	False	False	False	False
-191-209	191	209	UCCAUCCUCUGGCUCGCGGCG	CG	CCGCGAGCCAGAGGAUGGAGC	GC	68.4	--A			2						0	1	1	7	A>G	pyrimidine:purine	False	seed	True	False	False	False
