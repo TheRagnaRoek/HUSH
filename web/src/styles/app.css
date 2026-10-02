@@ -1245,6 +1245,55 @@ button.allele.hit:hover {
 }
 
 /* construct */
+/* scaffold (convert) options */
+.scaffold-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+}
+.so-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-family: var(--font-lead);
+  color: var(--muted);
+}
+.so-field .so-label {
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.so-field select,
+.so-field input[type="number"] {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.so-field input[type="number"] {
+  width: 64px;
+}
+.so-field input[type="number"]:disabled {
+  opacity: 0.5;
+}
+.so-check input {
+  accent-color: var(--brand);
+  width: 16px;
+  height: 16px;
+}
+.so-cite {
+  font-size: 11.5px;
+  color: var(--faint);
+  font-family: var(--font-lead);
+}
+
 .schematic {
   overflow-x: auto;
   padding: 4px 0 18px;

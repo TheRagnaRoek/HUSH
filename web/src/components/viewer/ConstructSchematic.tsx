@@ -24,10 +24,12 @@ export function ConstructSchematic({
           <span className="sl">antisense (guide)</span>
           {antisense}
         </div>
-        <div className="seg" style={{ background: "var(--seg-term)" }}>
-          <span className="sl">Pol III term</span>
-          {terminator}
-        </div>
+        {terminator && (
+          <div className="seg" style={{ background: "var(--seg-term)" }}>
+            <span className="sl">Pol III term</span>
+            {terminator}
+          </div>
+        )}
       </div>
     </div>
   );

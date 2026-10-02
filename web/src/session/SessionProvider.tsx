@@ -5,7 +5,14 @@ import {
   sessionConvert,
   sessionDesign,
 } from "../api/hush";
-import type { DesignParams, ConvertResponse, DesignResponse, InspectResponse } from "../api/types";
+import type {
+  ConvertOptions,
+  ConvertResponse,
+  DesignParams,
+  DesignResponse,
+  InspectResponse,
+} from "../api/types";
+import { DEFAULT_LOOP, DEFAULT_TERMINATOR_LENGTH } from "../lib/loops";
 import { DEFAULT_PARAMS } from "../lib/params";
 import { constructForRegion, sampleConvert, sampleDesign, sampleEnrichment, sampleInspect } from "../lib/sample";
 import { SessionContext, type SessionValue, type Step } from "./context";
@@ -25,6 +32,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [params, setParams] = useState<DesignParams>(DEFAULT_PARAMS);
   const updateParams = useCallback(
     (patch: Partial<DesignParams>) => setParams((p) => ({ ...p, ...patch })),
+    [],
+  );
+  const [convertOptions, setConvertOptions] = useState<ConvertOptions>({
+    loop: DEFAULT_LOOP,
+    include_terminator: true,
+    terminator_length: DEFAULT_TERMINATOR_LENGTH,
+  });
+  const updateConvertOptions = useCallback(
+    (patch: Partial<ConvertOptions>) => setConvertOptions((o) => ({ ...o, ...patch })),
     [],
   );
 
@@ -95,7 +111,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     setBusy(true);
     try {
-      const res = await sessionConvert(sessionId.current);
+      const res = await sessionConvert(sessionId.current, convertOptions);
       setConvert(res);
       setStep("construct");
     } catch (e) {
@@ -105,7 +121,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setBusy(false);
     }
-  }, [offline]);
+  }, [offline, convertOptions]);
 
   const selectedCandidate = useMemo(
     () => design?.selected.find((c) => c.region === selectedRegion),
@@ -134,6 +150,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setPanelFasta,
     params,
     updateParams,
+    convertOptions,
+    updateConvertOptions,
     inspect,
     design,
     convert,
