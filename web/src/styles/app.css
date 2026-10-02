@@ -525,10 +525,20 @@ a {
   gap: 8px;
   border: 0;
 }
+button.allele {
+  cursor: pointer;
+}
+button.allele:hover {
+  background: var(--surface-3);
+}
 .allele.hit {
   background: var(--brand-soft);
   color: var(--brand-d);
   box-shadow: inset 0 0 0 1px var(--brand);
+}
+button.allele.hit:hover {
+  background: var(--brand-soft);
+  filter: brightness(0.98);
 }
 .allele .role {
   font-family: var(--font-ui);

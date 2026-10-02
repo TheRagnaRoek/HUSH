@@ -1,24 +1,81 @@
+import { useEffect, useMemo, useState } from "react";
+import type { TargetingSchema } from "../../api/types";
 import { useSession } from "../../session/useSession";
 
-const INTENTS = [
+type Intent = "pan" | "allele" | "target" | "custom";
+
+const INTENTS: { id: Intent; t: string; d: string }[] = [
   {
+    id: "allele",
     t: "Allele-specific",
     d: "Silence one named panel member, discriminate against the rest. Use when the allele to silence is in the panel.",
-    checked: true,
   },
-  { t: "Pan-allele", d: "Conserved sites across the whole family. Hit every member, spare none.", checked: false },
+  { id: "pan", t: "Pan-allele", d: "Conserved sites across the whole family. Hit every member, spare none." },
   {
+    id: "target",
     t: "Target-specific",
     d: "Silence the loaded target, spare the entire reference panel. Use when the target sits apart from its panel.",
-    checked: false,
   },
-  { t: "Custom hit / spare", d: "Name explicit subsets to hit and to discriminate against.", checked: false },
+  { id: "custom", t: "Custom hit / spare", d: "Assign each panel member to hit or spare explicitly." },
 ];
 
+function initialIntent(t: TargetingSchema | null | undefined, hasPanel: boolean): Intent {
+  if (t?.allele_specific) return "allele";
+  if (t?.target_specific) return "target";
+  if (t?.hit) return "custom";
+  if (t?.pan_allele) return "pan";
+  return hasPanel ? "allele" : "pan";
+}
+
 export function TargetingStep() {
-  const { inspect, design, setStep } = useSession();
-  const members = inspect?.panel?.members ?? [];
-  const hit = new Set(design?.targeting?.hit ?? []);
+  const { inspect, params, updateParams, setStep } = useSession();
+  const members = useMemo(() => inspect?.panel?.members ?? [], [inspect]);
+  const memberIds = useMemo(() => members.map((m) => m.id), [members]);
+  const hasPanel = memberIds.length > 0;
+
+  const [intent, setIntent] = useState<Intent>(() =>
+    initialIntent(params.targeting, memberIds.length > 0),
+  );
+  const [specificId, setSpecificId] = useState<string>(
+    () => params.targeting?.allele_specific ?? memberIds[0] ?? "",
+  );
+  const [hitSet, setHitSet] = useState<Set<string>>(
+    () => new Set(params.targeting?.hit ?? (memberIds[0] ? [memberIds[0]] : [])),
+  );
+
+  // The UI selection is the single source of truth for params.targeting.
+  const schema = useMemo<TargetingSchema>(() => {
+    if (intent === "pan") return { pan_allele: true };
+    if (intent === "allele") return { allele_specific: specificId };
+    if (intent === "target") return { target_specific: true };
+    return { hit: [...hitSet], spare: memberIds.filter((id) => !hitSet.has(id)) };
+  }, [intent, specificId, hitSet, memberIds]);
+
+  useEffect(() => {
+    updateParams({ targeting: hasPanel ? schema : null });
+  }, [schema, hasPanel, updateParams]);
+
+  function roleOf(id: string): "hit" | "spare" {
+    if (intent === "pan") return "hit";
+    if (intent === "target") return "spare";
+    if (intent === "allele") return id === specificId ? "hit" : "spare";
+    return hitSet.has(id) ? "hit" : "spare";
+  }
+
+  function onMember(id: string) {
+    if (intent === "allele") setSpecificId(id);
+    else if (intent === "custom") {
+      setHitSet((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    }
+  }
+
+  const interactive = intent === "allele" || intent === "custom";
+  const discriminates = intent === "allele" || intent === "target" || intent === "custom";
 
   return (
     <div className="workspace">
@@ -30,32 +87,62 @@ export function TargetingStep() {
         </p>
       </div>
 
+      {!hasPanel && (
+        <div className="banner">
+          No panel loaded - add one in step 1 to use allele targeting. A design with no panel runs
+          the efficacy filters alone.
+        </div>
+      )}
+
       <div className="intent">
         {INTENTS.map((it) => (
-          <label key={it.t}>
-            <input type="radio" name="intent" defaultChecked={it.checked} />
+          <label key={it.id}>
+            <input
+              type="radio"
+              name="intent"
+              checked={intent === it.id}
+              onChange={() => setIntent(it.id)}
+            />
             <span className="t">{it.t}</span>
             <span className="d">{it.d}</span>
           </label>
         ))}
       </div>
 
-      <div className="divider" />
-      <div className="funnel-h">Panel members - click to assign roles</div>
-      <div className="members">
-        {members.map((m) => {
-          const isHit = hit.has(m.id);
-          return (
-            <span className={`allele${isHit ? " hit" : ""}`} key={m.id}>
-              {m.id} <span className="role">{isHit ? "hit" : "spare"}</span>
-            </span>
-          );
-        })}
-      </div>
+      {hasPanel && (
+        <>
+          <div className="divider" />
+          <div className="funnel-h">
+            Panel members
+            {interactive && (
+              <>
+                {" - "}
+                {intent === "allele" ? "click the one to silence" : "click to toggle hit / spare"}
+              </>
+            )}
+          </div>
+          <div className="members">
+            {members.map((m) => {
+              const role = roleOf(m.id);
+              const cls = `allele${role === "hit" ? " hit" : ""}`;
+              return interactive ? (
+                <button type="button" className={cls} key={m.id} onClick={() => onMember(m.id)}>
+                  {m.id} <span className="role">{role}</span>
+                </button>
+              ) : (
+                <span className={cls} key={m.id}>
+                  {m.id} <span className="role">{role}</span>
+                </span>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <p className="hint" style={{ marginTop: 14 }}>
-        A request that spares something is ranked by discrimination by default - survivors are
-        ordered by how well they distinguish the weakest spared allele.
+        {discriminates
+          ? "A request that spares something is ranked by discrimination by default - survivors are ordered by how well they distinguish the weakest spared allele."
+          : "Pan-allele targeting spares nothing, so there is no discrimination to rank; survivors come back in target-position order."}
       </p>
 
       <div className="actions">
