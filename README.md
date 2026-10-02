@@ -243,6 +243,13 @@ DELETE /sessions/{id}
 
 Sessions are an in-memory warm cache (lost on restart), not a database.
 
+## Web GUI
+
+A browser front-end (React + Vite + TypeScript) renders this API as a guided,
+allele-aware design workflow with a construct viewer. It lives in
+[`web/`](web/README.md) and runs against the FastAPI backend above (it also opens
+on sample data with no backend). See [`web/README.md`](web/README.md) to develop it.
+
 ## Benchmarking against siDirect
 
 siDirect is HUSH's gold-standard reference; on matched settings the rule
@@ -264,6 +271,7 @@ shrna/   shRNA conversion (stage 4: loops, convert)
 service/ Orchestration layer (HushSession) the CLI and API render over
 app/     CLI: one-shot commands (app.cli) + interactive shell (app.shell)
 api/     HTTP API (FastAPI): schemas, serialize, store, app (optional extra)
+web/     Browser GUI (React + Vite + TypeScript) over the API - see web/README.md
 data/    Example inputs and benchmarking fixtures
 tools/   Developer utilities (build_offtarget_db.py, compare_sidirect.py)
 docs/    Concept dossier and design notes
