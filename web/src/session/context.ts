@@ -3,6 +3,7 @@ import type {
   CandidateResult,
   ConstructResult,
   ConvertResponse,
+  DesignParams,
   DesignResponse,
   InspectResponse,
 } from "../api/types";
@@ -28,6 +29,10 @@ export interface SessionValue {
   setTargetFasta: (v: string) => void;
   panelFasta: string;
   setPanelFasta: (v: string) => void;
+
+  /** The design criteria sent to the API. The criteria step binds to this. */
+  params: DesignParams;
+  updateParams: (patch: Partial<DesignParams>) => void;
 
   inspect: InspectResponse | null;
   design: DesignResponse | null;

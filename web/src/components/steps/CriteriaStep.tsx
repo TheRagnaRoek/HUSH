@@ -1,19 +1,16 @@
 import { useState } from "react";
 import { GateRow } from "../criteria/GateRow";
 import { GATES } from "../criteria/gates";
+import { RELAXED_HLA_PATCH } from "../../lib/params";
 import { useSession } from "../../session/useSession";
 
-function initialOn(): Record<string, boolean> {
-  return Object.fromEntries(GATES.map((g) => [g.id, g.defaultOn]));
-}
-
 export function CriteriaStep() {
-  const { setStep, runDesign, busy } = useSession();
-  const [on, setOn] = useState<Record<string, boolean>>(initialOn);
+  const { setStep, runDesign, busy, params, updateParams, inspect } = useSession();
   const [presetApplied, setPresetApplied] = useState(false);
+  const gc = inspect?.target.gc_percent;
 
   function applyRelaxed() {
-    setOn((prev) => ({ ...prev, seed: false, gc: true, hairpin: true }));
+    updateParams(RELAXED_HLA_PATCH);
     setPresetApplied(true);
   }
 
@@ -30,12 +27,7 @@ export function CriteriaStep() {
 
       <div>
         {GATES.map((g) => (
-          <GateRow
-            key={g.id}
-            gate={g}
-            on={on[g.id]}
-            onToggle={(v) => setOn((prev) => ({ ...prev, [g.id]: v }))}
-          />
+          <GateRow key={g.id} gate={g} params={params} update={updateParams} />
         ))}
       </div>
 
@@ -43,9 +35,10 @@ export function CriteriaStep() {
       <div className="callout warn">
         <span className="ic">{"⚠"}</span>
         <span>
-          <b>This target is GC-rich (64.8%).</b> The seed filter is the siDirect industry standard
-          but deliberately strict - on HLA it can reject every candidate. Recommended here: turn
-          seed <b>off</b> and add the standalone GC and hairpin gates.
+          <b>This target is GC-rich{gc != null ? ` (${gc}%)` : ""}.</b> The seed filter is the
+          siDirect industry standard but deliberately strict - on HLA it can reject every
+          candidate. Recommended here: turn seed <b>off</b> and add the standalone GC and hairpin
+          gates.
           <br />
           <button type="button" className="mini-btn" onClick={applyRelaxed}>
             {presetApplied ? "Relaxed HLA preset applied ✓" : "Apply relaxed HLA preset"}

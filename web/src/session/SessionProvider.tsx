@@ -5,7 +5,8 @@ import {
   sessionConvert,
   sessionDesign,
 } from "../api/hush";
-import type { ConvertResponse, DesignResponse, InspectResponse } from "../api/types";
+import type { DesignParams, ConvertResponse, DesignResponse, InspectResponse } from "../api/types";
+import { DEFAULT_PARAMS } from "../lib/params";
 import { constructForRegion, sampleConvert, sampleDesign, sampleEnrichment, sampleInspect } from "../lib/sample";
 import { SessionContext, type SessionValue, type Step } from "./context";
 
@@ -21,6 +22,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const [targetFasta, setTargetFasta] = useState("");
   const [panelFasta, setPanelFasta] = useState("");
+  const [params, setParams] = useState<DesignParams>(DEFAULT_PARAMS);
+  const updateParams = useCallback(
+    (patch: Partial<DesignParams>) => setParams((p) => ({ ...p, ...patch })),
+    [],
+  );
 
   const [inspect, setInspect] = useState<InspectResponse | null>(sampleInspect);
   const [design, setDesign] = useState<DesignResponse | null>(sampleDesign);
@@ -63,7 +69,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setBusy(true);
     try {
       const id = await ensureSession();
-      const res = await sessionDesign(id); // TODO: bind criteria controls -> params
+      const res = await sessionDesign(id, params);
       setDesign(res);
       setSelectedRegion(res.selected[0]?.region ?? null);
       setConvert(null);
@@ -78,7 +84,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setBusy(false);
     }
-  }, [targetFasta, ensureSession]);
+  }, [targetFasta, ensureSession, params]);
 
   const runConvert = useCallback(async () => {
     setError(null);
@@ -126,6 +132,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setTargetFasta,
     panelFasta,
     setPanelFasta,
+    params,
+    updateParams,
     inspect,
     design,
     convert,
