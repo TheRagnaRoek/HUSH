@@ -31,6 +31,7 @@ export function ConstructViewer({
   offtargetSkipped,
   rank,
   targetId,
+  terminator = "UUUUUU",
   startTab = "align",
   onOpenConstruct,
 }: {
@@ -41,6 +42,7 @@ export function ConstructViewer({
   offtargetSkipped: boolean;
   rank: number;
   targetId: string;
+  terminator?: string;
   startTab?: Tab;
   onOpenConstruct?: () => void;
 }) {
@@ -94,7 +96,7 @@ export function ConstructViewer({
                 sense={sense}
                 loop={construct.loop_seq}
                 antisense={antisense}
-                terminator="UUUUUU"
+                terminator={terminator}
               />
               <div className="buildgrid">
                 <HairpinFold construct={construct} />

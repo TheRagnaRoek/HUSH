@@ -1,12 +1,14 @@
 import { CandidateList } from "../candidates/CandidateList";
 import { Funnel } from "../candidates/Funnel";
 import { ConstructViewer } from "../viewer/ConstructViewer";
+import { terminatorString } from "../../lib/loops";
 import { useSession } from "../../session/useSession";
 
 export function CandidatesStep() {
   const {
     design,
     inspect,
+    convert,
     selectedCandidate,
     selectedConstruct,
     selectedRegion,
@@ -19,6 +21,7 @@ export function CandidatesStep() {
   if (!design) return null;
   const rank = design.selected.findIndex((c) => c.region === selectedRegion) + 1;
   const targetId = inspect?.target.id ?? design.target.id;
+  const terminator = terminatorString(convert?.terminator_length);
 
   return (
     <div className="workspace">
@@ -57,6 +60,7 @@ export function CandidatesStep() {
               offtargetSkipped={design.offtarget_skipped}
               rank={rank}
               targetId={targetId}
+              terminator={terminator}
               startTab="align"
               onOpenConstruct={() => setStep("construct")}
             />

@@ -2,6 +2,7 @@ import { createContext } from "react";
 import type {
   CandidateResult,
   ConstructResult,
+  ConvertOptions,
   ConvertResponse,
   DesignParams,
   DesignResponse,
@@ -33,6 +34,10 @@ export interface SessionValue {
   /** The design criteria sent to the API. The criteria step binds to this. */
   params: DesignParams;
   updateParams: (patch: Partial<DesignParams>) => void;
+
+  /** The shRNA scaffold options. The construct step binds to this. */
+  convertOptions: ConvertOptions;
+  updateConvertOptions: (patch: Partial<ConvertOptions>) => void;
 
   inspect: InspectResponse | null;
   design: DesignResponse | null;

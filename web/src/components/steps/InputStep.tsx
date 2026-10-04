@@ -1,12 +1,36 @@
-import { useState } from "react";
+import { useMemo } from "react";
+import { FastaInput } from "../common/FastaInput";
+import { validateFasta } from "../../lib/fasta";
 import { useSession } from "../../session/useSession";
 
 export function InputStep() {
   const { inspect, targetFasta, setTargetFasta, panelFasta, setPanelFasta, setStep } = useSession();
-  const [openT, setOpenT] = useState(false);
-  const [openP, setOpenP] = useState(false);
-  const t = inspect?.target;
-  const gcRich = (t?.gc_percent ?? 0) >= 60;
+
+  const tSum = useMemo(
+    () => (targetFasta.trim() ? validateFasta(targetFasta, "target") : null),
+    [targetFasta],
+  );
+  const pSum = useMemo(
+    () => (panelFasta.trim() ? validateFasta(panelFasta, "panel") : null),
+    [panelFasta],
+  );
+
+  // Prefer a live preview of the user's own input; fall back to the sample.
+  const usingOwn = tSum != null;
+  const targetId = usingOwn ? (tSum.records[0]?.id ?? "-") : (inspect?.target.id ?? "-");
+  const moltype = usingOwn ? tSum.moltype : inspect?.target.is_nucleotide ? "nucleotide" : "-";
+  const length = usingOwn ? tSum.length : inspect?.target.length;
+  const gc = usingOwn ? tSum.gcPercent : inspect?.target.gc_percent;
+  const panelLabel = usingOwn
+    ? pSum
+      ? `loaded · ${pSum.recordCount}`
+      : "none"
+    : inspect?.panel
+      ? `${inspect.panel.name} · ${inspect.panel.count}`
+      : "none";
+  const ready = usingOwn ? tSum.ok : (inspect?.target_ready ?? false);
+  const gcRich = (gc ?? 0) >= 60;
+  const blockContinue = usingOwn && !tSum.ok;
 
   return (
     <div className="workspace">
@@ -20,90 +44,72 @@ export function InputStep() {
 
       <div className="intake">
         <div className="sources">
-          <button type="button" className="drop" onClick={() => setOpenT((v) => !v)}>
-            <span className="ic">{"\u{1F9EC}"}</span>
-            <span>
-              <b>Target sequence</b>
-              <small>
-                mRNA or CDS, as FASTA or pasted. A protein (PDB/mmCIF) is flagged and must be
-                resolved to its transcript first.
-              </small>
-            </span>
-            <span className="pick">browse / paste</span>
-          </button>
-          {openT && (
-            <textarea
-              className="os"
-              style={{ width: "100%", minHeight: 90, marginBottom: 10 }}
-              placeholder=">HLA-A*01:01&#10;ATG..."
-              value={targetFasta}
-              onChange={(e) => setTargetFasta(e.target.value)}
-            />
-          )}
-
-          <button type="button" className="drop alt" onClick={() => setOpenP((v) => !v)}>
-            <span className="ic">{"☷"}</span>
-            <span>
-              <b>
+          <FastaInput
+            kind="target"
+            icon={"\u{1F9EC}"}
+            title="Target sequence"
+            hint="Click to browse, drag a FASTA here, or paste. mRNA/CDS; a protein is flagged and must be resolved to its transcript."
+            value={targetFasta}
+            onChange={setTargetFasta}
+          />
+          <FastaInput
+            kind="panel"
+            icon={"☷"}
+            altAccent
+            title={
+              <>
                 Related-sequence panel{" "}
                 <span style={{ color: "var(--muted)", fontWeight: 400 }}>(optional)</span>
-              </b>
-              <small>FASTA of the allele family. Its presence engages the MSA / allele stage.</small>
-            </span>
-            <span className="pick">browse / paste</span>
-          </button>
-          {openP && (
-            <textarea
-              className="os"
-              style={{ width: "100%", minHeight: 90 }}
-              placeholder=">HLA-A*02:01&#10;ATG..."
-              value={panelFasta}
-              onChange={(e) => setPanelFasta(e.target.value)}
-            />
-          )}
+              </>
+            }
+            hint="FASTA of the allele family. Its presence engages the MSA / allele stage."
+            value={panelFasta}
+            onChange={setPanelFasta}
+          />
         </div>
 
         <div className="inspect">
-          <h4>Inspect</h4>
+          <h4>Inspect {usingOwn ? "" : "(sample)"}</h4>
           <dl className="kv">
             <dt>Target</dt>
-            <dd className="mono">{t?.id ?? "-"}</dd>
+            <dd className="mono">{targetId}</dd>
             <dt>Molecule</dt>
-            <dd>{t ? `${t.moltype}${t.is_nucleotide ? " (CDS)" : ""}` : "-"}</dd>
+            <dd>{moltype}</dd>
             <dt>Length</dt>
-            <dd className="num">{t ? `${t.length} nt` : "-"}</dd>
+            <dd className="num">{length != null ? `${length} nt` : "-"}</dd>
             <dt>GC content</dt>
-            <dd className="num">{t?.gc_percent != null ? `${t.gc_percent}%` : "-"}</dd>
+            <dd className="num">{gc != null ? `${gc}%` : "-"}</dd>
             <dt>Panel</dt>
-            <dd className="mono">{inspect?.panel ? `${inspect.panel.name} · ${inspect.panel.count}` : "none"}</dd>
-            <dt>Alignment</dt>
-            <dd>{inspect?.panel?.uniform ? "uniform" : "-"}</dd>
+            <dd className="mono">{panelLabel}</dd>
             <dt>Readiness</dt>
-            <dd className={inspect?.target_ready ? "ready" : ""}>
-              {inspect?.target_ready ? "ready" : "-"}
-            </dd>
+            <dd className={ready ? "ready" : ""}>{ready ? "ready" : usingOwn ? "fix errors" : "-"}</dd>
           </dl>
         </div>
       </div>
 
-      {gcRich && (
+      {gcRich && moltype === "nucleotide" && (
         <>
           <div className="divider" />
           <div className="callout cyan">
             <span className="ic">{"ⓘ"}</span>
             <span>
-              <b>GC-rich target.</b> At {t?.gc_percent}% GC this behaves like a classic HLA case -
-              the seed filter may reject every candidate. HUSH will suggest relaxing it in the
-              criteria step.
+              <b>GC-rich target.</b> At {gc}% GC this behaves like a classic HLA case - the seed
+              filter may reject every candidate. HUSH will suggest relaxing it in the criteria step.
             </span>
           </div>
         </>
       )}
 
       <div className="actions">
-        <button type="button" className="hbtn" onClick={() => setStep("targeting")}>
+        <button
+          type="button"
+          className="hbtn"
+          disabled={blockContinue}
+          onClick={() => setStep("targeting")}
+        >
           Continue &rarr;
         </button>
+        {blockContinue && <span className="hint">Fix the target sequence errors to continue.</span>}
       </div>
     </div>
   );

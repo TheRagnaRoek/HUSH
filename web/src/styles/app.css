@@ -294,6 +294,10 @@ a {
   background: var(--brand-d);
   border-color: var(--brand-d);
 }
+.hbtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .hbtn.ghost {
   background: transparent;
   color: var(--fg);
@@ -329,18 +333,74 @@ a {
     padding-bottom: 4px;
   }
 }
+.sources .fastafield + .fastafield {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 4px;
+}
 .drop {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 18px 2px;
+  padding: 18px 10px;
   width: 100%;
   text-align: left;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: none;
+  cursor: pointer;
+  transition: 0.12s;
+}
+.drop:hover {
+  background: var(--surface-2);
+}
+.drop.drag {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.dropbody {
+  min-width: 0;
+}
+.dropactions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pastelink {
   border: 0;
   background: none;
+  color: var(--cyan-ink);
+  font-size: 12.5px;
+  font-weight: 600;
 }
-.drop + .drop {
-  border-top: 1px solid var(--line);
+.fasta-textarea {
+  width: 100%;
+  min-height: 110px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--inset);
+  color: var(--fg);
+  padding: 9px 11px;
+  font-size: 12px;
+  resize: vertical;
+}
+.fstatus {
+  font-size: 12.5px;
+  margin-top: 8px;
+  padding-left: 10px;
+  font-family: var(--font-lead);
+  line-height: 1.5;
+}
+.fstatus.ok {
+  color: var(--good);
+}
+.fstatus.err {
+  color: var(--bad);
+}
+.fstatus .fwarn {
+  color: var(--warn);
 }
 .drop .ic {
   width: 44px;
@@ -525,10 +585,20 @@ a {
   gap: 8px;
   border: 0;
 }
+button.allele {
+  cursor: pointer;
+}
+button.allele:hover {
+  background: var(--surface-3);
+}
 .allele.hit {
   background: var(--brand-soft);
   color: var(--brand-d);
   box-shadow: inset 0 0 0 1px var(--brand);
+}
+button.allele.hit:hover {
+  background: var(--brand-soft);
+  filter: brightness(0.98);
 }
 .allele .role {
   font-family: var(--font-ui);
@@ -1175,6 +1245,55 @@ a {
 }
 
 /* construct */
+/* scaffold (convert) options */
+.scaffold-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+}
+.so-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-family: var(--font-lead);
+  color: var(--muted);
+}
+.so-field .so-label {
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.so-field select,
+.so-field input[type="number"] {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.so-field input[type="number"] {
+  width: 64px;
+}
+.so-field input[type="number"]:disabled {
+  opacity: 0.5;
+}
+.so-check input {
+  accent-color: var(--brand);
+  width: 16px;
+  height: 16px;
+}
+.so-cite {
+  font-size: 11.5px;
+  color: var(--faint);
+  font-family: var(--font-lead);
+}
+
 .schematic {
   overflow-x: auto;
   padding: 4px 0 18px;
