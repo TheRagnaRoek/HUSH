@@ -46,41 +46,26 @@ BLOCK A - paste all of this at once
 2503.04200
 14769950
 24332856
+10.1093/nar/gkh442
+10.1073/pnas.83.24.9373
+10.1146/annurev.biophys.32.110601.141800
+10.1016/s0092-8674(03)00801-8
+10.1016/s0092-8674(03)00759-1
+10.1093/nar/16.24.11725
+10.1016/j.cell.2015.06.029
+10.1016/j.cell.2012.10.036
+10.1261/rna.1894510
+10.1016/j.omtn.2023.06.010
+10.1093/bioadv/vbag075
+10.1016/j.cell.2006.01.040
+10.1016/0092-8674(81)90522-5
+10.1016/j.omtn.2017.11.006
+10.1080/21541264.2017.1322170
+10.1261/rna.2192803
 
 
 BLOCK B - capture these from their URL (no DOI/PMID recorded in the repo)
 ------------------------------------------------------------------------
-Naito, Y. et al. (2004). siDirect. Nucleic Acids Research 32, W124-W129.
-  https://sidirect2.rnai.jp/
-
-Freier, S.M. et al. (1986). Improved free-energy parameters for predictions of
-RNA duplex stability. PNAS 83(24), 9373-9377.
-
-SantaLucia, J. & Hicks, D. (2004). The thermodynamics of DNA structural motifs.
-Annu Rev Biophys Biomol Struct 33, 415-440.
-
-Khvorova, A., Reynolds, A. & Jayasena, S.D. (2003). Functional siRNAs and miRNAs
-exhibit strand bias. Cell 115(2), 209-216.
-
-Schwarz, D.S. et al. (2003). Asymmetry in the assembly of the RNAi enzyme
-complex. Cell 115(2), 199-208.
-
-Groebe, D.R. & Uhlenbeck, O.C. (1988). Characterization of RNA hairpin loop
-stability. Nucleic Acids Research 16(24), 11725-11735.
-
-Ge, Q. et al. (2009/2010). Minimal-length short hairpin RNAs: the relationship of
-structure and RNAi activity. RNA 16(1), 106-117.
-
-Monopoli, K.R. et al. (2023). Asymmetric trichotomous partitioning overcomes
-dataset limitations in building machine learning models for predicting siRNA
-efficacy. Molecular Therapy Nucleic Acids 33, 93-109.
-
-Salomon, W.E. et al. (2015). Single-molecule imaging reveals that Argonaute
-reshapes the binding properties of its nucleic acid guides. Cell 162(1), 84-95.
-
-Wee, L.M. et al. (2012). Argonaute divides its RNA guide into domains with
-distinct functions and RNA-binding properties. Cell 151(5), 1055-1067.
-
 Vert, J.P. et al. An accurate and interpretable model for siRNA efficacy
 prediction (DSIR).
   https://biodev.cea.fr/DSIR/
@@ -93,9 +78,6 @@ pssRNAit: A Web Server for Designing Effective and Specific Plant siRNAs with
 Genome-Wide Off-Target Assessment. Plant Physiology 184(1), 65.
   https://pmc.ncbi.nlm.nih.gov/articles/PMC7479913/
   https://academic.oup.com/plphys/article/184/1/65/6117836
-
-SIREN (journal version). Bioinformatics Advances 6(1), vbag075.
-  https://academic.oup.com/bioinformaticsadvances/article/6/1/vbag075/8524916
 
 Improving the clinical safety of GalNAc-siRNA conjugates using seed-pairing
 destabilization. Nucleic Acids Research 50(12), 6656.
@@ -125,7 +107,6 @@ InvivoGen siRNA Wizard.
 IPD-IMGT/HLA Database.
   https://www.ebi.ac.uk/ipd/imgt/hla/
 
-pLKO.1 / RNAi Consortium (TRC) library - source of the CUCGAG loop.
 
 
 BLOCK C - used in the repo but never cited; find a reference or drop the mention
