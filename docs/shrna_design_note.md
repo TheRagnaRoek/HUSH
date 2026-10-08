@@ -37,17 +37,17 @@ Parameters the literature pins down:
 
 - **Stem length = the siRNA core.** 19-29 bp. A 19-bp stem directly mimics a
   classical siRNA (pSUPER). Stems of 21-29 bp act as Dicer substrates and get
-  processed, shifting the exact guide by a few nt. Ge et al. (2009) is the key
+  processed, shifting the exact guide by a few nt. Ge et al. (2010) is the key
   structure-activity study: stems <= 19 bp ("sshRNA") have distinct behaviour and
   can be extremely potent.
 - **Loop.** 4-11 nt, short (4-9) preferred. Runs of T/U in the loop must be
   avoided - Pol III reads them as termination. Canonical loops:
     - `TTCAAGAGA` (9 nt) - pSUPER / pSHAG.
-    - `CTCGAG` (6 nt, embeds an XhoI site) - pLKO.1 / the TRC library.
+    - `CTCGAG` (6 nt, embeds an XhoI site) - pLKO.1 / the TRC library (Moffat et al. 2006).
     - `TGTGCTT` (7 nt) - Jensen et al. (2012), selected from randomized libraries
       as giving robust knockdown with the least stem-sequence dependence; the
       most design-tool-friendly default for that reason.
-    - Liu et al. (2013) found 8-nt loops best overall (`TTCTAGAA`, `TTGGCCAA`), a
+    - Wang et al. (2013) found 8-nt loops best overall (`TTCTAGAA`, `TTGGCCAA`), a
       4-nt loop dropping below 50% knockdown, and TTCAAGAGA beating CTCGAG.
 - **Orientation.** Both sense-loop-antisense (SA) and antisense-loop-sense (AS)
   are used; the optimum is target-dependent, with no universal winner. pSUPER
@@ -95,17 +95,17 @@ emitted by `selection`.
 - Brummelkamp, T.R., Bernards, R. & Agami, R. (2002). A system for stable
   expression of short interfering RNAs in mammalian cells. *Science* 296, 550-553.
   DOI: 10.1126/science.1068999
-- Anthony, R.V. & Cantlon, J.D. (2006). Ribonucleic acid interference: a new
+- Anthony, R.V. & Cantlon, J.D. (2007). Ribonucleic acid interference: a new
   approach to the in vivo study of gene function. *J Anim Sci* 85(13 Suppl),
   E18-19. DOI: 10.2527/jas.2006-486
 
 ### Stem length and loop sequence structure-activity
-- Ge, Q. et al. (2009). Minimal-length short hairpin RNAs: the relationship of
-  structure and RNAi activity. *RNA* 16(1), 106-117.
-- Jensen, S.M.R. et al. (2012). Functional selection of shRNA loops from
+- Ge, Q., Ilves, H., Dallas, A., Kumar, P., Shorenstein, J., Kazakov, S.A., Johnston, B.H. (2010). Minimal-length short hairpin RNAs: the relationship of
+  structure and RNAi activity. *RNA* 16(1), 106-117. DOI: 10.1261/rna.1894510
+- Jensen, S.M.R., Schmitz, A., Pedersen, F.S., Kjems, J., Bramsen, J.B. (2012). Functional selection of shRNA loops from
   randomized retroviral libraries. *PLoS ONE* 7(8), e43095.
   DOI: 10.1371/journal.pone.0043095
-- Liu, Y.P. et al. (2013). A simple and robust vector-based shRNA expression
+- Wang, X.J., Li, Y., Huang, H., Zhang, X.J., Xie, P.W., Hu, W., Li, D.D., Wang, S.Q. (2013). A simple and robust vector-based shRNA expression
   system used for RNA interference. *PLoS ONE* 8(2), e56110.
   DOI: 10.1371/journal.pone.0056110
 
@@ -118,8 +118,17 @@ emitted by `selection`.
   DOI: 10.1007/978-1-0716-0716-9_13
 
 ### Templating precedent and scaffold engineering (context)
+- Moffat, J., Grueneberg, D.A., Yang, X., Kim, S.Y., Kloepfer, A.M., Hinkle, G.
+  et al. (2006). A lentiviral RNAi library for human and mouse genes applied to
+  an arrayed viral high-content screen. *Cell* 124(6), 1283-1298.
+  DOI: 10.1016/j.cell.2006.01.040 (pLKO.1 / TRC; source of the `CTCGAG` loop).
+  See also the TRC lentiviral shRNA manual (Horizon/Dharmacon): 21-bp stem,
+  6-nt XhoI loop, 5' CCGG and 3' TTTTT flanks.
+- Stewart, S.A. et al. (2003). Lentivirus-delivered stable gene silencing by
+  RNAi in primary cells. *RNA* 9(4), 493-501. DOI: 10.1261/rna.2192803
+  (precedent: CTCGAG loop in the GFP1 hairpin oligo).
 - Silva et al. SSD - a free software for designing multimeric mono-, bi- and
   trivalent shRNAs. PMC7197978.
-- Fellmann, C. et al. (2013). An optimized microRNA backbone for effective
+- Fellmann, C., Hoffmann, T., Sridhar, V., Hopfgartner, B., Muhar, M., Roth, M. et al. (2013). An optimized microRNA backbone for effective
   single-copy RNAi (miR-E). *Cell Reports* 5(6), 1704-1713. Out of scope; kept
   for context.

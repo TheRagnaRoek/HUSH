@@ -190,13 +190,13 @@ direction should be dropped cheaply.
 - Naito, Y., Yoshimura, J., Morishita, S., Ui-Tei, K. (2009). siDirect 2.0:
   updated software for designing functional siRNA with reduced seed-dependent
   off-target effect. BMC Bioinformatics 10, 392. doi:10.1186/1471-2105-10-392
-- Ui-Tei, K. et al. (2008). Thermodynamic stability and Watson-Crick base
+- Ui-Tei, K., Naito, Y., Nishi, K., Juni, A., Saigo, K. (2008). Thermodynamic stability and Watson-Crick base
   pairing in the seed duplex are major determinants of the efficiency of the
   siRNA-based off-target effect. Nucleic Acids Research 36(22), 7100-7109.
   doi:10.1093/nar/gkn902
-- Freier, S.M. et al. (1986). Improved free-energy parameters for predictions of
+- Freier, S.M., Kierzek, R., Jaeger, J.A., Sugimoto, N., Caruthers, M.H., Neilson, T., Turner, D.H. (1986). Improved free-energy parameters for predictions of
   RNA duplex stability. PNAS 83(24), 9373-9377.
-- Xia, T. et al. (1998). Thermodynamic parameters for an expanded
+- Xia, T., SantaLucia, J., Burkard, M.E., Kierzek, R., Schroeder, S.J., Jiao, X., Cox, C., Turner, D.H. (1998). Thermodynamic parameters for an expanded
   nearest-neighbor model for formation of RNA duplexes with Watson-Crick base
   pairs. Biochemistry 37(42), 14719-14735. doi:10.1021/bi9809425
 - Salomon, W.E., Jolly, S.M., Moore, M.J., Zamore, P.D., Serebrov, V. (2015).
