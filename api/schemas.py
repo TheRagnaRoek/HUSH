@@ -305,7 +305,7 @@ class ConstructResult(BaseModel):
     folds_as_designed: bool
     fold_dg37: Optional[float] = None
     fold_tm_c: Optional[float] = None
-    starts_with_g: bool
+    starts_with_purine: bool
     premature_terminator_free: bool
     max_homopolymer_run: int
 
@@ -316,7 +316,7 @@ class ConvertResponse(BaseModel):
     terminator_length: Optional[int] = None
     construct_count: int
     fold_ok_count: int
-    g_start_count: int
+    purine_start_count: int
     constructs: list[ConstructResult]
 
 

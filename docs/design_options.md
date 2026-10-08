@@ -202,8 +202,8 @@ each enabled gate, so an empty result shows exactly which gate removed them.
 
 - **Sequence-motif constraint** (e.g. force a `G` at core position 3 via an
   `NNGNN...`-style pattern). This was primarily a loop-grafting requirement for
-  shRNA, where the Pol III 5' initiation base affects transcription. It is now
-  addressed in the shRNA stage as the `starts_with_g` **QC flag** on each
+  shRNA, where the Pol III 5' initiation base affects transcription (A or G at +1 is efficient on U6/7SK; Gao et al. 2017). It is now
+  addressed in the shRNA stage as the `starts_with_purine` **QC flag** on each
   construct (`hush convert`), not a hard gate that would drop candidates - see
   [`shrna_design_note.md`](shrna_design_note.md). A general sequence-motif
   constraint on the siRNA `design` step remains unimplemented; tracked here so

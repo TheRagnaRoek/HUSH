@@ -134,11 +134,14 @@ def test_loop_that_extends_the_stem_flags_misfold():
     assert c.folds_as_designed is False
 
 
-def test_starts_with_g_flag_tracks_the_transcript_5_prime():
+def test_starts_with_purine_flag_tracks_the_transcript_5_prime():
     g_sense, g_anti = _pair("GCACCGUCAAGGCUGAGAA")
-    assert convert(g_sense, g_anti, region="1-19", start=0, end=19).starts_with_g
+    assert convert(g_sense, g_anti, region="1-19", start=0, end=19).starts_with_purine
     a_sense, a_anti = _pair("ACACCGUCAAGGCUGAGAA")
-    assert not convert(a_sense, a_anti, region="1-19", start=0, end=19).starts_with_g
+    assert convert(a_sense, a_anti, region="1-19", start=0, end=19).starts_with_purine
+    for first in "CU":
+        c_sense, c_anti = _pair(first + "CACCGUCAAGGCUGAGAA")
+        assert not convert(c_sense, c_anti, region="1-19", start=0, end=19).starts_with_purine
 
 
 def test_premature_terminator_flag_catches_a_loop_stem_junction_run():
