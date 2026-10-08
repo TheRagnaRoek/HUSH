@@ -88,7 +88,7 @@ emitted by `selection`.
    out of scope, or expose it as a mode.
 5. **Cloning context** - output the hairpin RNA only, or a full cloneable cassette
    (promoter + insert + terminator + restriction overhangs). Decides whether the
-   Pol III 5'-G constraint and restriction-site avoidance land here.
+   Pol III 5'-A/G start (purine at +1) and restriction-site avoidance land here.
 
 ## 6. References
 

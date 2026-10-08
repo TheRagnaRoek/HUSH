@@ -195,7 +195,7 @@ stem-loop scaffold in the sense-loop-antisense orientation. Output is the bare
 hairpin insert as top/bottom DNA oligos plus a Pol III poly-T terminator - it is
 vector-agnostic, so add your vector's restriction sticky-end tails before
 cloning. Each construct is folded to confirm it forms the intended stem-loop (not
-a competing structure), with QC flags for Pol III 5'-G initiation, loop/stem
+a competing structure), with QC flags for Pol III 5'-A/G initiation, loop/stem
 terminator-safety, and homopolymer runs.
 
 ```bash

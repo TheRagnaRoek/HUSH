@@ -100,7 +100,7 @@ Extra detail on SSD worth having: the paper publishes **neither loop sequences n
 - miR-30 / miR-E pri-miRNA scaffold: out of scope for the current timeline - demands research effort and wet-lab infrastructure (single-copy expression, backbone processing validation) the team does not have. Fellmann (2013) kept as context only (`shrna_design_note.md:15-22`).
 - Genomic (non-transcript) off-targets (`offtarget_design_note.md:111`).
 - The expression-weighted expected-off-target-load model (a separate, later research task with its own validation gate) (`offtarget_design_note.md:112-113`, `seed_offtarget_design_note.md:129-147`).
-- A general sequence-motif constraint on the `design` step (the Pol III 5'-G requirement that motivated it is now a QC flag in the shRNA stage instead) (`design_options.md:201-210`).
+- A general sequence-motif constraint on the `design` step (the Pol III 5'-A/G start preference that motivated it is now a QC flag in the shRNA stage instead) (`design_options.md:201-210`).
 - No asymmetry magnitude threshold - the filter uses the sign only (`design_options.md:151-153`).
 - IUPAC ambiguity codes are not resolved in the MSA stage (`design_notes.md:752-753`).
 - AgoshRNA regime: a boundary condition the module must decide deliberately rather than land on by accident (`shrna_design_note.md:60-68`).
@@ -136,7 +136,7 @@ Extra detail on SSD worth having: the paper publishes **neither loop sequences n
 - Per-candidate legibility: the `minDiff` and `disc` columns describe the **weakest** spared allele; `--explain` (or `assess <region>` in the shell) prints the full per-allele breakdown (`README.md:183-188`).
 - The `disc` string encodes five published criteria in one cell, e.g. `P16 post H+ S pp` - guide position, region (post/seed/anch), Huang listing (H+/H-/H?), position tier (S/C/-), mismatch class (pp/pu/up/uu/?) (`design_options.md:108-124`).
 - **Vector-agnostic** shRNA output: the bare hairpin insert as top/bottom DNA oligos plus a Pol III poly-T terminator - the wet-lab adds sticky-end tails for whichever vector they clone into (`README.md:192-199`, `shrna/convert.py`).
-- Each construct is **folded and QC-flagged**, not template-stamped: `folds_as_designed`, `starts_with_g` (U6 Pol III +1 preference), `premature_terminator_free` (no 4-U run in the hairpin body, including the loop/stem junctions the upstream homopolymer gate cannot see), `max_homopolymer_run` (`shrna/convert.py`).
+- Each construct is **folded and QC-flagged**, not template-stamped: `folds_as_designed`, `starts_with_purine` (U6 Pol III +1 preference), `premature_terminator_free` (no 4-U run in the hairpin body, including the loop/stem junctions the upstream homopolymer gate cannot see), `max_homopolymer_run` (`shrna/convert.py`).
 - Outputs: terminal tables, TSV (`-o`), JSON (API). `save <dir>` in the shell writes `design.tsv` and `shrna.tsv` (`README.md:79`).
 
 ### Reproducibility as a community good

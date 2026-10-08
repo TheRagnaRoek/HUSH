@@ -198,7 +198,7 @@ export interface ConstructResult {
   folds_as_designed: boolean;
   fold_dg37?: number | null;
   fold_tm_c?: number | null;
-  starts_with_g: boolean;
+  starts_with_purine: boolean;
   premature_terminator_free: boolean;
   max_homopolymer_run: number;
 }
@@ -209,7 +209,7 @@ export interface ConvertResponse {
   terminator_length?: number | null;
   construct_count: number;
   fold_ok_count: number;
-  g_start_count: number;
+  purine_start_count: number;
   constructs: ConstructResult[];
 }
 

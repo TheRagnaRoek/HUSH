@@ -1028,7 +1028,7 @@ def _core_from_row(row: dict[str, str]) -> tuple[BioSequence, BioSequence]:
 def _print_convert_table(constructs: list, options: ShrnaOptions, limit: int) -> None:
     hp_w = max(len(c.hairpin_rna.seq) for c in constructs)
     header = (
-        f"  {'region':<11} {'hairpin 5->3':<{hp_w}} {'fold':>5} {'5G':>3} "
+        f"  {'region':<11} {'hairpin 5->3':<{hp_w}} {'fold':>5} {'5AG':>3} "
         f"{'termOK':>6} {'run':>4}"
     )
     typer.echo(typer.style(header, bold=True))
@@ -1037,7 +1037,7 @@ def _print_convert_table(constructs: list, options: ShrnaOptions, limit: int) ->
         fold = "ok" if c.folds_as_designed else "RISK"
         row = (
             f"  {c.region:<11} {c.hairpin_rna.seq:<{hp_w}} {fold:>5} "
-            f"{('G' if c.starts_with_g else '-'):>3} "
+            f"{(c.hairpin_rna.seq[:1] if c.starts_with_purine else '-'):>3} "
             f"{('yes' if c.premature_terminator_free else 'NO'):>6} "
             f"{c.max_homopolymer_run:>4}"
         )
@@ -1063,7 +1063,7 @@ def _write_convert_tsv(path: Path, constructs: list) -> None:
     header = (
         "region\tstart\tend\tloop_name\tloop_seq\torientation\thairpin_rna_5to3\t"
         "insert_top_dna_5to3\tinsert_bottom_dna_5to3\tfolds_as_designed\t"
-        "fold_dg37\tfold_tm_c\tstarts_with_g\tpremature_terminator_free\t"
+        "fold_dg37\tfold_tm_c\tstarts_with_purine\tpremature_terminator_free\t"
         "max_homopolymer_run"
     )
     lines = [header]
@@ -1083,7 +1083,7 @@ def _write_convert_tsv(path: Path, constructs: list) -> None:
             str(c.folds_as_designed),
             dg37,
             tm,
-            str(c.starts_with_g),
+            str(c.starts_with_purine),
             str(c.premature_terminator_free),
             str(c.max_homopolymer_run),
         ]
@@ -1118,11 +1118,11 @@ def render_convert_result(result: ConvertResult, limit: int) -> None:
         return
 
     fold_ok = sum(1 for c in constructs if c.folds_as_designed)
-    g_start = sum(1 for c in constructs if c.starts_with_g)
+    purine_start = sum(1 for c in constructs if c.starts_with_purine)
     typer.echo(typer.style("Summary", bold=True))
     typer.echo(f"  constructs:        {len(constructs)}")
     typer.echo(f"  fold as designed:  {fold_ok}")
-    typer.echo(f"  5'-G (U6 Pol III): {g_start}")
+    typer.echo(f"  5'-A/G (U6 Pol III): {purine_start}")
     typer.echo("")
     _print_convert_table(constructs, options, limit)
 
@@ -1160,7 +1160,7 @@ def convert_cmd(
     hairpin. The bare insert is emitted as top/bottom DNA oligos plus a Pol III
     poly-T terminator - vector-agnostic, so add your vector's restriction
     sticky-end tails before cloning. Each construct is folded to confirm it forms
-    the intended stem-loop, and QC flags (Pol III 5'-G start, loop
+    the intended stem-loop, and QC flags (Pol III 5'-A/G start, loop
     terminator-safety, homopolymer runs) are reported.
     """
     loop_scaffold = _parse_loop(loop)
