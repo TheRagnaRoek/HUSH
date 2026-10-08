@@ -11,11 +11,16 @@ stem-sequence dependence, which is the safest property for an automated tool
 that does not know the stem in advance.
 
 References:
-* Jensen, S.M.R. et al. (2012). Functional selection of shRNA loops from
-  randomized retroviral libraries. PLoS ONE 7(8), e43095.
-* Brummelkamp, T.R. et al. (2002). A system for stable expression of short
-  interfering RNAs in mammalian cells (pSUPER). Science 296, 550-553.
-* pLKO.1 / RNAi Consortium (TRC) library loop.
+* Jensen, S.M.R., Schmitz, A., Pedersen, F.S., Kjems, J., Bramsen, J.B. (2012).
+  Functional selection of shRNA loops from randomized retroviral libraries. PLoS
+  ONE 7(8), e43095.
+* Brummelkamp, T.R., Bernards, R. & Agami, R. (2002). A system for stable
+  expression of short interfering RNAs in mammalian cells (pSUPER). Science 296,
+  550-553.
+* Moffat, J., Grueneberg, D.A., Yang, X., Kim, S.Y., Kloepfer, A.M.,
+  Hinkle, G. et al. (2006). A lentiviral RNAi library for human and mouse genes
+  applied to an arrayed viral high-content screen (pLKO.1 / TRC). Cell 124(6),
+  1283-1298. doi:10.1016/j.cell.2006.01.040
 """
 
 from __future__ import annotations
@@ -65,7 +70,7 @@ LOOPS: dict[str, LoopScaffold] = {
         "psuper", "UUCAAGAGA", "Brummelkamp et al. 2002, Science 296:550 (pSUPER)"
     ),
     "trc": _loop(
-        "trc", "CUCGAG", "pLKO.1 / RNAi Consortium (TRC) library"
+        "trc", "CUCGAG", "Moffat et al. 2006, Cell 124:1283 (pLKO.1 / TRC)"
     ),
 }
 

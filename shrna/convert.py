@@ -28,13 +28,13 @@ from core.sequence import BioSequence, MolType
 from core.sirna import SiRNACandidate
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold
 
-# A run of >= 4 U/T in the transcribed strand is read by Pol III as a
-# termination signal. The hairpin body (stem + loop, before the deliberate 3'
-# terminator) must not contain one - including at the loop/stem junctions, which
-# the upstream homopolymer gate cannot see.
+# A run of >= 4 U/T terminates Pol III (Bogenhagen & Brown 1981; Gao et al.
+# 2018). The hairpin body must not contain one, including at the loop/stem
+# junctions, which the upstream homopolymer gate cannot see.
 _POL3_TERMINATOR_RUN = "UUUU"
 
-# Minimum poly-T terminator length: Pol III needs a run of at least ~4-5 T.
+# Minimum poly-T terminator length: T4 is the minimal Pol III terminator, with
+# full efficiency at >= 6 T (Gao et al. 2018).
 MIN_TERMINATOR_LENGTH = 4
 DEFAULT_TERMINATOR_LENGTH = 6
 

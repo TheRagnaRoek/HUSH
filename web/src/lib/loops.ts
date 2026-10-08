@@ -27,7 +27,7 @@ export const LOOPS: LoopInfo[] = [
     name: "trc",
     label: "TRC / pLKO.1 (CUCGAG)",
     seq: "CUCGAG",
-    citation: "RNAi Consortium (TRC) library.",
+    citation: "Moffat et al. 2006, Cell 124:1283 (pLKO.1 / TRC).",
   },
 ];
 
