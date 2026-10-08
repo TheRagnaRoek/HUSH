@@ -135,6 +135,12 @@ modern tools confirm efficacy rather than generate candidates.
   - **Used for:** the third registry loop, `trc` CUCGAG (CTCGAG as DNA, embeds an XhoI site), from the pLKO.1 / RNAi Consortium (TRC) library. The loop and flanks (21-bp stem, 6-nt XhoI loop, 5' CCGG, 3' TTTTT) are documented in the TRC lentiviral shRNA manual (Horizon/Dharmacon); Addgene asks users of pLKO.1 to cite this paper. The paper's full text was not read; the abstract does not mention the loop.
 - **Stewart, S.A., Dykxhoorn, D.M., Palliser, D., Mizuno, H., Yu, E.Y., An, D.S., Sabatini, D.M., Chen, I.S.Y., Hahn, W.C., Sharp, P.A., Weinberg, R.A. & Novina, C.D. (2003).** Lentivirus-delivered stable gene silencing by RNAi in primary cells. *RNA* 9(4), 493-501. DOI **10.1261/rna.2192803** - PMID **12649500** - PMC **PMC1370415**
   - **Used for:** precedent only - its GFP1 hairpin oligo already uses CTCGAG between the stem arms (retroviral vector; the paper gives no loop sequence for its lentiviral constructs).
+- **Bogenhagen, D.F. & Brown, D.D. (1981).** Nucleotide sequences in Xenopus 5S DNA required for transcription termination. *Cell* 24(1), 261-270. DOI **10.1016/0092-8674(81)90522-5** - PMID **6263489**
+  - **Used for:** the Pol III termination signal - termination occurs within a cluster of four or more consecutive T residues. Basis of the `premature_terminator_free` check (no UUUU in the hairpin body) in `shrna.convert`.
+- **Gao, Z., Herrera-Carrillo, E. & Berkhout, B. (2018).** Delineation of the exact transcription termination signal for type 3 polymerase III. *Molecular Therapy Nucleic Acids* 10, 36-44 (online 2017-11-21). DOI **10.1016/j.omtn.2017.11.006** - PMID **29499947** - PMC **PMC5725217**
+  - **Used for:** in-vivo confirmation on the human U6, 7SK and H1 promoters - T4 is the minimal terminator but full efficiency needs a T-stretch of 6 or more, and termination within the stretch is heterogeneous (1-6 nt U-tail). Supports both the terminator-safety check and the terminator length options.
+- **Gao, Z., Harwig, A., Berkhout, B. & Herrera-Carrillo, E. (2017).** Mutation of nucleotides around the +1 position of type 3 polymerase III promoters: the effect on transcriptional activity and start site usage. *Transcription* 8(5), 275-287. DOI **10.1080/21541264.2017.1322170** - PMID **28598252** - PMC **PMC5703244**
+  - **Used for:** the `starts_with_purine` QC flag - human U6 and 7SK promoters with A or G at +1 efficiently give small RNAs with a precise +1 start, so a G-only requirement is too narrow.
 
 ## 9. Off-target search infrastructure
 

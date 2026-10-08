@@ -30,8 +30,9 @@ gap left by SSD / siRNA Wizard).
 A vector-expressed stem-loop shRNA is a well-defined object. The canonical form
 is the pSUPER design (Brummelkamp et al. 2002): an RNA Pol III promoter (U6 or
 H1) transcribes an inverted repeat - loop - inverted repeat, closed by a poly-T
-terminator (5-6 T). After nuclear export Dicer removes the loop, regenerating an
-siRNA-like duplex that loads into RISC.
+terminator (5-6 T; Pol III stops at a run of four or more T, Bogenhagen & Brown
+1981, with full efficiency at 6 or more, Gao et al. 2018). After nuclear export
+Dicer removes the loop, regenerating an siRNA-like duplex that loads into RISC.
 
 Parameters the literature pins down:
 
@@ -92,6 +93,16 @@ emitted by `selection`.
 ## 6. References
 
 ### Founding scaffold and reviews
+- Bogenhagen, D.F. & Brown, D.D. (1981). Nucleotide sequences in Xenopus 5S DNA
+  required for transcription termination. *Cell* 24(1), 261-270.
+  DOI: 10.1016/0092-8674(81)90522-5
+- Gao, Z., Herrera-Carrillo, E. & Berkhout, B. (2018). Delineation of the exact
+  transcription termination signal for type 3 polymerase III. *Mol Ther Nucleic
+  Acids* 10, 36-44. DOI: 10.1016/j.omtn.2017.11.006
+- Gao, Z., Harwig, A., Berkhout, B. & Herrera-Carrillo, E. (2017). Mutation of
+  nucleotides around the +1 position of type 3 polymerase III promoters: the
+  effect on transcriptional activity and start site usage. *Transcription*
+  8(5), 275-287. DOI: 10.1080/21541264.2017.1322170
 - Brummelkamp, T.R., Bernards, R. & Agami, R. (2002). A system for stable
   expression of short interfering RNAs in mammalian cells. *Science* 296, 550-553.
   DOI: 10.1126/science.1068999
