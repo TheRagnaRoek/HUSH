@@ -67,15 +67,27 @@ Scope and deferrals:
 
 References:
 
-* Huang, H. et al. (2009). Profiling of mismatch discrimination in RNAi enabled
-  rational design of allele-specific siRNAs. Nucleic Acids Research 37(22),
-  7560-7569. doi:10.1093/nar/gkp835
-* Schwarz, D.S. et al. (2006). Designing siRNA that distinguish between genes
-  that differ by a single nucleotide. PLoS Genetics 2(9), e140.
+* Huang, H., Qiao, R., Zhao, D., Zhang, T., Li, Y., Yi, F. et al. (2009).
+  Profiling of mismatch discrimination in RNAi enabled rational design of
+  allele-specific siRNAs. Nucleic Acids Research 37(22), 7560-7569.
+  doi:10.1093/nar/gkp835
+* Schwarz, D.S., Ding, H., Kennington, L., Moore, J.T., Schelter, J., Burchard,
+  J. et al. (2006). Designing siRNA that distinguish between genes that differ
+  by a single nucleotide. PLoS Genetics 2(9), e140.
   doi:10.1371/journal.pgen.0020140
-* Du, Q. et al. (2005). A systematic analysis of the silencing effects of an
-  active siRNA at all single-nucleotide mismatched target sites. Nucleic Acids
-  Research 33(5), 1671-1677. doi:10.1093/nar/gki312
+* Ohnishi, Y., Tamura, Y., Yoshida, M., Tokunaga, K., Hohjoh, H. (2008).
+  Enhancement of allele discrimination by introduction of nucleotide mismatches
+  into siRNA in allele-specific gene silencing by RNAi. PLoS ONE 3(5), e2248.
+  doi:10.1371/journal.pone.0002248
+  NO LONGER USED. Formerly cited for "a second mismatch improves
+  discrimination", which put mismatch count at the top of the key. The second
+  mismatch there is engineered into the siRNA and mismatches both alleles, and
+  the natural SNP is central, so it does not support ranking a multi-mismatch
+  window above a well-placed single one. See docs/msa_ranking_note.md section 6.
+* Du, Q., Thonberg, H., Wang, J., Wahlestedt, C., Liang, Z. (2005). A systematic
+  analysis of the silencing effects of an active siRNA at all single-nucleotide
+  mismatched target sites. Nucleic Acids Research 33(5), 1671-1677.
+  doi:10.1093/nar/gki312
 """
 
 from __future__ import annotations
