@@ -17,8 +17,9 @@ hand-written BibTeX file, which is why one is not provided here. The handful of 
 with no DOI/PMID are listed at the end of that file to capture with the Zotero
 browser connector instead.
 
-**Verify before citing** - flagged inline with (!): a few entries have a
-year/volume mismatch or an uncertain journal name in the repo's own text.
+Where a citation needed a judgement call - an advance-online year differing from
+the issue year, a journal renamed, a loop sequence documented outside the paper
+itself - the entry carries a note recording it.
 
 ---
 

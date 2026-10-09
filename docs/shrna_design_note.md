@@ -1,12 +1,12 @@
 # Design note: siRNA to shRNA conversion via stem-loop scaffolding
 
-Status: **scope fixed, references gathered, design decisions pending.** This note
-records the literature basis for HUSH pipeline stage 4 (`shrna/`, currently a
-placeholder package), the design parameters the literature fixes, and the open
-decisions that must be resolved before the module is specified. It exists so the
-conversion step can be built without re-deriving the background.
+Status: **built.** This note records the literature basis for HUSH pipeline
+stage 4 (`shrna/`), the design parameters the literature fixes, and the
+decisions taken when the module was specified. It exists so the conversion step
+can be maintained without re-deriving the background. Where this note and the
+code disagree, the code (`shrna/convert.py`, `shrna/loops.py`) is authoritative.
 
-Date: 2026-09-12.
+Date: 2026-09-12. Revised 2026-10-09: section 5 records the decisions as built.
 
 ---
 
@@ -77,18 +77,30 @@ mono/bi/trivalent cassettes. HUSH's differentiator (dossier pillar 2) is to
 `core.hairpin` (self-fold Tm), `core.asymmetry`, and the guide/passenger strands
 emitted by `selection`.
 
-## 5. Open design decisions (to resolve before spec)
+## 5. Design decisions as built
 
-1. **Loop set** - single evidence-backed default (`TGTGCTT`) vs. a small
-   selectable set (pSUPER / TRC / Jensen).
-2. **Stem** - use the 19-mer core as-is, or extend toward a Dicer-substrate stem
-   (determines whether the guide stays fixed or shifts on processing).
-3. **Orientation** - fix sense-loop-antisense, or emit both.
-4. **Processing regime** - commit to Dicer-processed shRNA and treat AgoshRNA as
-   out of scope, or expose it as a mode.
-5. **Cloning context** - output the hairpin RNA only, or a full cloneable cassette
-   (promoter + insert + terminator + restriction overhangs). Decides whether the
-   Pol III 5'-A/G start (purine at +1) and restriction-site avoidance land here.
+1. **Loop set** - a small selectable registry (`shrna/loops.py`): `jensen`
+   UGUGCUU (default), `psuper` UUCAAGAGA, `trc` CUCGAG. Jensen is the default
+   for its low stem-sequence dependence, the safest property for a tool that
+   does not know the stem in advance.
+2. **Stem** - the 19-mer core is used as-is, so the guide validated upstream
+   (seed-Tm, asymmetry, off-target) is the guide the hairpin expresses. No
+   Dicer-substrate extension, hence no re-shift and no re-validation.
+3. **Orientation** - sense-loop-antisense only, modelled as an enum so AS can be
+   added without changing the construct's shape.
+4. **Processing regime** - Dicer-processed shRNA. AgoshRNA is out of scope and
+   not exposed as a mode; section 3 remains the record of why that boundary
+   matters.
+5. **Cloning context** - the bare hairpin insert (top and bottom DNA oligos)
+   plus a Pol III poly-T terminator, no vector-specific restriction overhangs.
+   The purine-at-+1 check (`starts_with_purine`) therefore lands here as a QC
+   flag; restriction-site avoidance stays with the wet lab, which adds the
+   sticky-end tails for its chosen vector.
+
+Each construct is scored rather than merely stamped: the stem and loop are
+folded to confirm the intended hairpin wins over competing structures
+(`folds_as_designed`), alongside the Pol III start, terminator-safety and
+homopolymer flags.
 
 ## 6. References
 
