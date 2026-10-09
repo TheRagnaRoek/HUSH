@@ -285,7 +285,7 @@ def construct_result(c: ShrnaConstruct) -> schemas.ConstructResult:
         folds_as_designed=c.folds_as_designed,
         fold_dg37=None if c.fold is None else c.fold.dg37,
         fold_tm_c=None if c.fold is None else c.fold.tm,
-        starts_with_g=c.starts_with_g,
+        starts_with_purine=c.starts_with_purine,
         premature_terminator_free=c.premature_terminator_free,
         max_homopolymer_run=c.max_homopolymer_run,
     )
@@ -302,6 +302,6 @@ def convert_response(result: ConvertResult) -> schemas.ConvertResponse:
         ),
         construct_count=len(constructs),
         fold_ok_count=sum(1 for c in constructs if c.folds_as_designed),
-        g_start_count=sum(1 for c in constructs if c.starts_with_g),
+        purine_start_count=sum(1 for c in constructs if c.starts_with_purine),
         constructs=[construct_result(c) for c in constructs],
     )

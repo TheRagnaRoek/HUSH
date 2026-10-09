@@ -8,7 +8,7 @@ emitted in the sense-loop-antisense orientation as the bare hairpin insert
 restriction sticky-end tails are added by the wet-lab for their chosen vector.
 
 Each construct is scored rather than template-stamped - the hairpin is folded to
-confirm it forms the intended stem-loop, and QC flags (Pol III 5'-G initiation,
+confirm it forms the intended stem-loop, and QC flags (Pol III 5'-A/G initiation,
 loop terminator-safety, homopolymer runs) are attached.
 
 Submodules:

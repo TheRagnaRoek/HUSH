@@ -103,10 +103,11 @@ export function ConstructViewer({
                 <div>
                   <div className="subhead">Fold QC</div>
                   <QcChips construct={construct} />
-                  {!construct.starts_with_g && (
+                  {!construct.starts_with_purine && (
                     <p className="hint" style={{ marginTop: 10 }}>
-                      Not initiating on G - for a Pol III (U6/H1) promoter, prefer a candidate
-                      starting with G or add a 5&prime;-G (tolerated at position 1).
+                      Not initiating on A or G - a human U6 or 7SK promoter starts most
+                      efficiently on a purine at position 1, so prefer a candidate
+                      starting with A or G.
                     </p>
                   )}
                 </div>

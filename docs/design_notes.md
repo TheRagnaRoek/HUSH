@@ -98,10 +98,10 @@ Enforced in `tests/test_thermo.py`.
 
 ### References
 
-- Primary: Xia, T. et al. (1998). Thermodynamic parameters for an expanded
+- Primary: Xia, T., SantaLucia, J., Burkard, M.E., Kierzek, R., Schroeder, S.J., Jiao, X., Cox, C., Turner, D.H. (1998). Thermodynamic parameters for an expanded
   nearest-neighbor model for formation of RNA duplexes with Watson-Crick base
   pairs. *Biochemistry* 37(42), 14719-14735. doi:10.1021/bi9809425
-- Freier, S.M. et al. (1986). Improved free-energy parameters for predictions of
+- Freier, S.M., Kierzek, R., Jaeger, J.A., Sugimoto, N., Caruthers, M.H., Neilson, T., Turner, D.H. (1986). Improved free-energy parameters for predictions of
   RNA duplex stability. *PNAS* 83(24), 9373-9377.
 - SantaLucia, J. & Hicks, D. (2004). The thermodynamics of DNA structural motifs.
   *Annu Rev Biophys Biomol Struct* 33, 415-440. (Tm formulation.)
@@ -184,10 +184,10 @@ step.
 
 - Primary: Naito, Y. et al. (2009). siDirect 2.0. *BMC Bioinformatics* 10, 392.
   doi:10.1186/1471-2105-10-392
-- Ui-Tei, K. et al. (2008). Thermodynamic stability and Watson-Crick base pairing
+- Ui-Tei, K., Naito, Y., Nishi, K., Juni, A., Saigo, K. (2008). Thermodynamic stability and Watson-Crick base pairing
   in the seed duplex... *Nucleic Acids Research* 36(22), 7100-7109.
   doi:10.1093/nar/gkn902
-- Freier, S.M. et al. (1986). *PNAS* 83(24), 9373-9377.
+- Freier, S.M., Kierzek, R., Jaeger, J.A., Sugimoto, N., Caruthers, M.H., Neilson, T., Turner, D.H. (1986). *PNAS* 83(24), 9373-9377.
 
 ---
 
@@ -353,7 +353,7 @@ and a check that neither sign convention is inverted. Enforced in
 
 - Primary: Khvorova, A., Reynolds, A., Jayasena, S.D. (2003). Functional siRNAs
   and miRNAs exhibit strand bias. *Cell* 115(2), 209-216.
-- Schwarz, D.S. et al. (2003). Asymmetry in the assembly of the RNAi enzyme
+- Schwarz, D.S., Hutvagner, G., Du, T., Xu, Z., Aronin, N., Zamore, P.D. (2003). Asymmetry in the assembly of the RNAi enzyme
   complex. *Cell* 115(2), 199-208.
 
 ---
@@ -408,7 +408,7 @@ tunable.
 
 - Primary: Groebe, D.R. & Uhlenbeck, O.C. (1988). Characterization of RNA hairpin
   loop stability. *Nucleic Acids Research* 16(24), 11725-11735.
-- Reynolds, A. et al. (2004). Rational siRNA design for RNA interference.
+- Reynolds, A., Leake, D., Boese, Q., Scaringe, S., Marshall, W.S., Khvorova, A. (2004). Rational siRNA design for RNA interference.
   *Nature Biotechnology* 22, 326-330.
 
 ---
@@ -483,8 +483,8 @@ functional). The fixture is `tests/data/amarzguioui_table3.tsv`; the check is in
 
 ### References
 
-- Primary (per rule): Ui-Tei, K. et al. (2004). *Nucleic Acids Research* 32(3),
-  936-948. | Reynolds, A. et al. (2004). *Nature Biotechnology* 22, 326-330. |
+- Primary (per rule): Ui-Tei, K., Naito, Y., Takahashi, F., Haraguchi, T., Ohki-Hamazaki, H., Juni, A., Ueda, R., Saigo, K. (2004). *Nucleic Acids Research* 32(3),
+  936-948. | Reynolds, A., Leake, D., Boese, Q., Scaringe, S., Marshall, W.S., Khvorova, A. (2004). *Nature Biotechnology* 22, 326-330. |
   Amarzguioui, M. & Prydz, H. (2004). *Biochem Biophys Res Commun* 316(4),
   1050-1058. doi:10.1016/j.bbrc.2004.02.157
 

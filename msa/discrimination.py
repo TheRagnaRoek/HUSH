@@ -79,15 +79,6 @@ References:
   Enhancement of allele discrimination by introduction of nucleotide mismatches
   into siRNA in allele-specific gene silencing by RNAi. PLoS ONE 3(5), e2248.
   doi:10.1371/journal.pone.0002248
-  NO LONGER USED. Formerly cited for "a second mismatch improves
-  discrimination", which put mismatch count at the top of the key. The second
-  mismatch there is engineered into the siRNA and mismatches both alleles, and
-  the natural SNP is central, so it does not support ranking a multi-mismatch
-  window above a well-placed single one. See docs/msa_ranking_note.md section 6.
-* Du, Q., Thonberg, H., Wang, J., Wahlestedt, C., Liang, Z. (2005). A systematic
-  analysis of the silencing effects of an active siRNA at all single-nucleotide
-  mismatched target sites. Nucleic Acids Research 33(5), 1671-1677.
-  doi:10.1093/nar/gki312
 """
 
 from __future__ import annotations

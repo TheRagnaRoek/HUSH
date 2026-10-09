@@ -22,7 +22,7 @@ export function QcChips({ construct }: { construct: ConstructResult }) {
           stem Tm <span className="v num">{construct.fold_tm_c}&deg;</span>
         </span>
       )}
-      {chip(construct.starts_with_g, "Pol III 5′-G", construct.starts_with_g ? "yes" : "no")}
+      {chip(construct.starts_with_purine, "Pol III 5′-A/G", construct.starts_with_purine ? "yes" : "no")}
       {chip(
         construct.premature_terminator_free,
         "no premature term",
