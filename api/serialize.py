@@ -11,11 +11,11 @@ from __future__ import annotations
 from core.selection import CandidateEvaluation, SelectionCriteria
 from core.sequence import BioSequence, DesignInput, SequencePanel
 from msa.discrimination import (
-    CONSISTENT_POSITIONS,
+    LOW_TOLERANCE_WINDOW,
     MULTI_MISMATCH,
     STRONGEST_POSITIONS,
     MismatchAssessment,
-    best_mismatch,
+    ordered_by_placement,
 )
 from msa.targeting import AlleleTargeting
 from msa.windows import WindowEvaluation
@@ -97,9 +97,17 @@ def _offtarget_hits(profile) -> list[int]:
 
 
 def _discrimination_from(
-    d: MismatchAssessment, count: int
+    d: MismatchAssessment,
+    count: int,
+    all_positions: tuple[MismatchAssessment, ...] = (),
 ) -> schemas.DiscriminationResult:
-    """One mismatch, with every criterion that sets its discrimination rank."""
+    """One mismatch, with every criterion that sets its placement rank.
+
+    all_positions carries that allele's differences in full, in ranking order.
+    The rank rests on `d` alone, so without it a client sees only the best-placed
+    difference and cannot weigh count against placement itself - which is exactly
+    the judgement msa.discrimination leaves to the user.
+    """
     return schemas.DiscriminationResult(
         guide_position=d.guide_position,
         mutation=d.mutation_type,
@@ -108,29 +116,36 @@ def _discrimination_from(
         region=d.region.value,
         sources_agree=d.sources_agree,
         strongest_position=d.guide_position in STRONGEST_POSITIONS,
-        consistent_position=d.guide_position in CONSISTENT_POSITIONS,
+        # Field name kept for wire compatibility; it now reports membership of
+        # the P9-P16 low-tolerance window rather than Schwarz's second tier.
+        consistent_position=d.guide_position in LOW_TOLERANCE_WINDOW,
         multi_mismatch=count >= MULTI_MISMATCH,
+        all_guide_positions=[a.guide_position for a in all_positions],
     )
 
 
 def _discrimination(window: WindowEvaluation) -> schemas.DiscriminationResult | None:
-    deciding = window.deciding_mismatch
-    if deciding is None:
+    ordered = window.deciding_mismatches
+    if not ordered:
         return None
-    return _discrimination_from(deciding, window.min_spare_mismatches or 0)
+    return _discrimination_from(
+        ordered[0], window.min_spare_mismatches or 0, ordered
+    )
 
 
 def _per_allele(window: WindowEvaluation) -> list[schemas.PerAlleleDiscrimination]:
     """Every spared allele's discrimination, weakest first."""
     out = []
     for allele, assessments in window.spared_alleles_by_discrimination:
-        best = best_mismatch(assessments)
+        ordered = ordered_by_placement(assessments)
         out.append(
             schemas.PerAlleleDiscrimination(
                 allele=allele,
                 diff_count=len(assessments),
                 discrimination=(
-                    None if best is None else _discrimination_from(best, len(assessments))
+                    None
+                    if not ordered
+                    else _discrimination_from(ordered[0], len(ordered), ordered)
                 ),
             )
         )

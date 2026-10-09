@@ -694,11 +694,16 @@ The **gate** ranks nothing - every window passes or does not, and keeps its full
 per-allele breakdown. The **ordering** of survivors is a separate layer:
 `msa.discrimination` places each difference against published measurements of
 which mismatches, at which guide positions, block silencing of the spared allele
-(Huang et al. 2009 for the exact base change, Schwarz et al. 2006 for region and
-position, Ohnishi et al. 2008 for a second mismatch). It is a lexicographic tuple
-of published facts, not a weighted score - no calibration data is invented - and a
-window is ranked by its **weakest** spared allele, the "weakest link" rule
-`min_spare_mismatches` already follows. A guide that sits *3' of the seed*
+(Huang et al. 2009 for the exact base change, Schwarz et al. 2006 for region,
+position and mismatch class, Du et al. 2005 for the tolerance regions). It is a
+lexicographic tuple of published facts, not a weighted score - no calibration data
+is invented - and a window is ranked by its **weakest** spared allele, the
+"weakest link" rule `min_spare_mismatches` already follows. The ranking turns on
+*placement* only: the **number** of differences is reported next to it and never
+weighed against it, because all three sources measure single mismatches and none
+of them says whether several poorly placed differences beat one well-placed
+difference. `docs/msa_ranking_note.md` carries the full argument, the criteria in
+order, and what changed from the first version. A guide that sits *3' of the seed*
 discriminates robustly while a seed mismatch is overwhelmed by concentration, so
 where a difference sits still matters enormously; the positions are recorded in
 target-window coordinates (`guide_position()` converts to the guide strand, which

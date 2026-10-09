@@ -122,6 +122,10 @@ def test_design_allele_specific_shape(client, target, panel):
     assert allele["spare_count"] == 2
     assert len(allele["per_allele"]) == 2
     assert allele["discrimination"]["strongest_position"] in (True, False)
+    # Placement and count are reported side by side, never combined: the client
+    # gets every difference, not only the one the rank rests on.
+    positions = allele["discrimination"]["all_guide_positions"]
+    assert positions and positions[0] == allele["discrimination"]["guide_position"]
 
 
 def test_design_target_specific_shape(client, target, panel):
