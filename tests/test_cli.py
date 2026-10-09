@@ -234,7 +234,7 @@ def test_design_allele_specific_shows_spare_margin(target_fasta, panel_fasta):
     assert "allele-specific" in result.stdout
     # Discriminating targeting adds the two per-candidate allele columns.
     assert "minDiff" in result.stdout
-    assert "disc" in result.stdout
+    assert "placement" in result.stdout
 
 
 def test_design_explicit_hit_and_spare(target_fasta, panel_fasta):
@@ -390,6 +390,9 @@ def test_design_panel_tsv_has_allele_columns(target_fasta, panel_fasta, tmp_path
     assert "allele_spare_count" in header
     assert "disc_strongest_position" in header
     assert "disc_multi_mismatch" in header
+    # Every difference to the weakest spared allele, not just the deciding one -
+    # the rank ignores all but the first, so the TSV has to carry the rest.
+    assert "disc_all_positions" in header
 
 
 # --------------------------------------------------------------------------- #

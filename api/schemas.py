@@ -232,15 +232,29 @@ class TargetingSummary(BaseModel):
 
 
 class DiscriminationResult(BaseModel):
+    """The best-placed difference to one spared allele, with its ranking criteria.
+
+    The rank rests on this one mismatch. all_guide_positions carries every
+    difference to that allele in ranking order, so a client can show the whole
+    set: placement and number are reported side by side and never combined (see
+    docs/msa_ranking_note.md).
+    """
+
     guide_position: int
     mutation: str
     mismatch_class: Optional[str] = None
-    huang_recommended: Optional[bool] = None
     region: str
     sources_agree: bool
+    huang_recommended: Optional[bool] = None
     strongest_position: bool
+    # Membership of the P9-P16 low-tolerance window. The name predates the
+    # window and is kept so existing clients keep parsing.
     consistent_position: bool
+    # Two or more differences, for comparison with the siDirect convention.
+    # Reported only; it is not part of the ranking.
     multi_mismatch: bool
+    # Defaulted, so a client written against the previous shape still validates.
+    all_guide_positions: list[int] = []
 
 
 class PerAlleleDiscrimination(BaseModel):
