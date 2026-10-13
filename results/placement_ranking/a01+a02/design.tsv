@@ -1,0 +1,4 @@
+region	start	end	guide_5to3	guide_overhang	passenger_5to3	passenger_overhang	gc_percent	rules_passed	seed_max_tm_c	hairpin_tm_c	homopolymer_max_run	offtarget_min_mismatch	offtarget_hits_0	offtarget_hits_1	offtarget_hits_2	offtarget_hits_3	allele_hit_max_mismatch	allele_spare_min_mismatch	allele_spare_count	disc_guide_position	disc_mutation	disc_mismatch_class	disc_huang_recommended	disc_region	disc_sources_agree	disc_strongest_position	disc_in_window	disc_multi_mismatch	disc_all_positions
+474-492	474	492	AGCUGCCAUGUCCGCCGCGGU	GU	CGCGGCGGACAUGGCAGCUCA	CA	73.7	--A			2						0	1	2	4	G>A	pyrimidine:purine	False	seed	True	False	False	False	P4
+476-494	476	494	UGAGCUGCCAUGUCCGCCGCG	CG	CGGCGGACAUGGCAGCUCAGA	GA	68.4	--A			2						0	1	2	6	G>A	pyrimidine:purine	False	seed	True	False	False	False	P6
+478-496	478	496	UCUGAGCUGCCAUGUCCGCCG	CG	GCGGACAUGGCAGCUCAGACC	CC	63.2	--A			2						0	1	2	8	G>A	pyrimidine:purine	False	seed	True	False	False	False	P8
