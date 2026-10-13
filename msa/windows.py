@@ -48,8 +48,8 @@ from typing import Iterable, Iterator
 
 from core.sirna import DEFAULT_LENGTH
 from msa.discrimination import MismatchAssessment, assess_mismatch
-from msa.discrimination import best_mismatch as _best_mismatch
 from msa.discrimination import discrimination_key as _allele_discrimination_key
+from msa.discrimination import ordered_by_placement as _ordered_by_placement
 from msa.msa_errors import MsaError
 from msa.targeting import AlleleTargeting
 from msa.variation import PanelVariation, SiteState
@@ -182,23 +182,40 @@ class WindowEvaluation:
         )
 
     @property
+    def deciding_mismatches(self) -> tuple[MismatchAssessment, ...]:
+        """Every difference to the weakest spared allele, best-placed first.
+
+        The rank rests on the first element alone (deciding_mismatch), so
+        without this the remaining differences would never reach the user. They
+        matter: a window with three mediocre differences may well be the safer
+        design than one with a single ideal difference, and msa.discrimination
+        deliberately does not decide that - no source measures it. Showing the
+        whole set is how that decision is handed back.
+
+        Empty when nothing is spared.
+        """
+        if not self.mismatch_assessments:
+            return ()
+        weakest = min(
+            self.mismatch_assessments.values(), key=_allele_discrimination_key
+        )
+        return _ordered_by_placement(weakest)
+
+    @property
     def deciding_mismatch(self) -> MismatchAssessment | None:
         """The single mismatch this window's rank rests on.
 
         The best-placed difference from the weakest spared allele - the one that
         sets discrimination_key. Reporting it lets a user see *why* a window
-        ranks where it does without unpacking every assessment.
+        ranks where it does without unpacking every assessment; see
+        deciding_mismatches for the rest of them.
 
         None when nothing is spared, or when the weakest allele has no
         difference at all (in which case the window does not discriminate and
         will not have been selected).
         """
-        if not self.mismatch_assessments:
-            return None
-        weakest = min(
-            self.mismatch_assessments.values(), key=_allele_discrimination_key
-        )
-        return _best_mismatch(weakest)
+        ordered = self.deciding_mismatches
+        return ordered[0] if ordered else None
 
     @property
     def region(self) -> str:

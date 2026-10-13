@@ -25,13 +25,13 @@ from core.offtarget import (
     DEFAULT_OFFTARGET_MIN_MISMATCH,
 )
 from msa.discrimination import (
-    CONSISTENT_POSITIONS,
+    LOW_TOLERANCE_WINDOW,
     MULTI_MISMATCH,
     STRONGEST_POSITIONS,
     GuideRegion,
     MismatchAssessment,
     MismatchClass,
-    best_mismatch,
+    ordered_by_placement,
 )
 from msa.targeting import AlleleTargeting, TargetingMode
 from msa.windows import DEFAULT_MIN_SPARE_MISMATCHES, WindowEvaluation
@@ -365,11 +365,11 @@ _CLASS_CODE = {
 
 
 def _position_tier(guide_position: int) -> str:
-    """S for a strongest position (P10/P16), C for a consistent one, else '-'."""
+    """S for a strongest position (P10/P13/P16), W inside the window, else '-'."""
     if guide_position in STRONGEST_POSITIONS:
         return "S"
-    if guide_position in CONSISTENT_POSITIONS:
-        return "C"
+    if guide_position in LOW_TOLERANCE_WINDOW:
+        return "W"
     return "-"
 
 
@@ -378,30 +378,49 @@ def _mismatch_code(d: MismatchAssessment) -> str:
 
     'P16 post H+ S pp' reads: guide position 16; 3' of the seed; listed in
     Huang's table for this base change (H+, vs H- not listed, H? ambiguous); a
-    strongest position (S; C = merely consistent, - = neither); purine:purine.
+    strongest position (S; W = inside the P9-P16 window, - = outside);
+    purine:purine.
     """
     huang = "H?" if d.huang_recommended is None else ("H+" if d.huang_recommended else "H-")
     cls = "?" if d.mismatch_class is None else _CLASS_CODE[d.mismatch_class]
     return f"P{d.guide_position} {_REGION_CODE[d.region]} {huang} {_position_tier(d.guide_position)} {cls}"
 
 
-def _discrimination_cell(window: WindowEvaluation) -> str:
-    """Full-criteria readout of the mismatch a window's discrimination rests on.
+def _other_positions(window: WindowEvaluation) -> str:
+    """The weakest allele's remaining differences, best-placed first.
 
-    See _mismatch_code for the encoding. The mismatch shown is the deciding one:
-    the best-placed difference from the weakest spared allele.
+    The rank rests on one mismatch, but the others are what let a user judge
+    count against placement - the trade-off msa.discrimination refuses to make.
+    Collapsing the row to the deciding mismatch alone would hide them.
+    """
+    rest = window.deciding_mismatches[1:]
+    if not rest:
+        return ""
+    return " +" + ",".join(f"P{a.guide_position}" for a in rest)
+
+
+def _discrimination_cell(window: WindowEvaluation) -> str:
+    """Full-criteria readout of the mismatch a window's discrimination rests on,
+    followed by the weakest allele's remaining difference positions.
+
+    See _mismatch_code for the encoding. 'P16 post H+ S pp +P11,P4' is a window
+    whose rank rests on P16 but which differs from that allele at three places.
     """
     deciding = window.deciding_mismatch
     if deciding is None:
         return "none"
-    return _mismatch_code(deciding)
+    return _mismatch_code(deciding) + _other_positions(window)
 
 
 def _discrimination_fields(window: WindowEvaluation) -> list[str]:
-    """The deciding mismatch as nine TSV fields. Empty ones where it has none."""
+    """The deciding mismatch as ten TSV fields. Empty ones where it has none.
+
+    The last field carries every difference to the weakest spared allele, in
+    ranking order, so a downstream reader is not left with the best one only.
+    """
     deciding = window.deciding_mismatch
     if deciding is None:
-        return [""] * 9
+        return [""] * 10
     huang = "" if deciding.huang_recommended is None else str(deciding.huang_recommended)
     count = window.min_spare_mismatches or 0
     return [
@@ -412,8 +431,9 @@ def _discrimination_fields(window: WindowEvaluation) -> list[str]:
         deciding.region.value,
         str(deciding.sources_agree),
         str(deciding.guide_position in STRONGEST_POSITIONS),
-        str(deciding.guide_position in CONSISTENT_POSITIONS),
+        str(deciding.guide_position in LOW_TOLERANCE_WINDOW),
         str(count >= MULTI_MISMATCH),
+        ",".join(f"P{a.guide_position}" for a in window.deciding_mismatches),
     ]
 
 
@@ -430,11 +450,11 @@ def _print_window_discrimination(window: WindowEvaluation) -> None:
         typer.echo("      (nothing spared - no discrimination to assess)")
         return
     for index, (allele, assessments) in enumerate(rows):
-        best = best_mismatch(assessments)
-        positions = ",".join(
-            f"P{a.guide_position}"
-            for a in sorted(assessments, key=lambda a: a.guide_position)
-        )
+        # Ranking order, not numeric order: the leftmost position is the one the
+        # allele's rank rests on, and the rest are what the ranking ignores.
+        ordered = ordered_by_placement(assessments)
+        best = ordered[0] if ordered else None
+        positions = ",".join(f"P{a.guide_position}" for a in ordered)
         code = _mismatch_code(best) if best is not None else "none"
         agree = "yes" if (best is not None and best.sources_agree) else "no"
         mutation = best.mutation_type if best is not None else ""
@@ -458,8 +478,9 @@ def render_discrimination_detail(
         _print_window_discrimination(window_by_pos[c.position])
     typer.secho(
         "  code: P<pos> region(post/seed/anch) Huang(H+/H-/H?) "
-        "position(S=strongest,C=consistent,-=other) class(pp/pu/up/uu); "
-        "agree = Huang and region concur.",
+        "position(S=P10/P13/P16, W=inside P9-P16, -=outside) class(pp/pu/up/uu); "
+        "agree = Huang and region concur. Positions are listed in ranking order, "
+        "the first one being what the allele's rank rests on.",
         fg=typer.colors.BRIGHT_BLACK,
     )
     if limit and len(selected) > limit:
@@ -492,7 +513,7 @@ def _print_table(
     if criteria.enabled_rule_names:
         header += f" {'rules':<5}"
     if show_spare:
-        header += f" {'minDiff':>7} {'disc':<17}"
+        header += f" {'minDiff':>7} {'placement':<26}"
     if criteria.use_seed_filter:
         header += f" {'seedTm':>7}"
     if criteria.use_offtarget_filter:
@@ -516,7 +537,7 @@ def _print_table(
             window = window_by_pos[c.position]
             margin = window.min_spare_mismatches
             row += f" {('none' if margin is None else str(margin)):>7}"
-            row += f" {_discrimination_cell(window):<17}"
+            row += f" {_discrimination_cell(window):<26}"
         if criteria.use_seed_filter:
             row += f" {e.seed.max_tm:>7.1f}"
         if criteria.use_offtarget_filter:
@@ -532,13 +553,20 @@ def _print_table(
         # an siRNA has to spare every one of them, so the one it distinguishes
         # least well is the one that decides.
         typer.secho(
-            "  minDiff and disc describe the weakest spared allele - the one this "
-            "window distinguishes least well.",
+            "  minDiff and placement describe the weakest spared allele - the one "
+            "this window distinguishes least well.",
             fg=typer.colors.BRIGHT_BLACK,
         )
         typer.secho(
-            "  disc: P<pos> region(post/seed/anch) Huang(H+/H-/H?) "
-            "position(S=strongest,C=consistent,-=other) class(pp/pu/up/uu).",
+            "  placement: P<pos> region(post/seed/anch) Huang(H+/H-/H?) "
+            "position(S=P10/P13/P16, W=inside P9-P16, -=outside) class(pp/pu/up/uu), "
+            "then '+' the allele's further differences.",
+            fg=typer.colors.BRIGHT_BLACK,
+        )
+        typer.secho(
+            "  Rows are ranked on the leading mismatch only. minDiff and the '+' "
+            "positions are reported, never weighed against placement - no source "
+            "measures that trade-off (docs/msa_ranking_note.md).",
             fg=typer.colors.BRIGHT_BLACK,
         )
         typer.secho(
@@ -587,10 +615,13 @@ def _write_design_tsv(
             "\tallele_spare_count"
             # The single mismatch the window's discrimination rank rests on:
             # the best-placed difference from the weakest spared allele, with
-            # every criterion that sets its rank.
+            # every criterion that sets its rank. disc_all_positions carries
+            # that allele's differences in full, in ranking order, because the
+            # rank itself ignores everything after the first.
             "\tdisc_guide_position\tdisc_mutation\tdisc_mismatch_class"
             "\tdisc_huang_recommended\tdisc_region\tdisc_sources_agree"
-            "\tdisc_strongest_position\tdisc_consistent_position\tdisc_multi_mismatch"
+            "\tdisc_strongest_position\tdisc_in_window\tdisc_multi_mismatch"
+            "\tdisc_all_positions"
         )
     lines = [header]
     for e in selected:

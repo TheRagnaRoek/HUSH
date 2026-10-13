@@ -298,6 +298,10 @@ class TestDiscrimination:
         weakest = window.mismatch_assessments["SPARE_WEAK"]
         assert window.discrimination_key == allele_discrimination_key(weakest)
 
+    def test_deciding_mismatch_leads_the_full_list(self, wide_variation):
+        window = self._window(wide_variation)
+        assert window.deciding_mismatches[0] is window.deciding_mismatch
+
     def test_spared_alleles_are_ordered_weakest_first(self, wide_variation):
         # The per-allele view a renderer walks: the deciding (weakest) allele
         # leads, so a reader sees why the window ranks where it does, then the
@@ -321,6 +325,7 @@ class TestDiscrimination:
         assert window.mismatch_assessments == {}
         assert window.discrimination_key is None
         assert window.deciding_mismatch is None
+        assert window.deciding_mismatches == ()
 
     def test_sorting_by_the_key_is_reproducible(self, wide_variation):
         criteria = WindowCriteria(
@@ -339,6 +344,54 @@ class TestDiscrimination:
             ]
 
         assert order(windows) == order(list(reversed(windows)))
+
+
+class TestEveryDifferenceIsReported:
+    """The rank rests on one mismatch, so the others have to reach the user some
+    other way - otherwise count cannot be weighed against placement at all."""
+
+    SEQ = "ATGCGTACGTTAGCCATTGCACGTAACGGATCATGCA"  # 37 nt
+    WIDE = 19
+    # Two differences to one spared allele: target 4 and 8, i.e. guide P15 and P11.
+    AT = (4, 8)
+
+    @pytest.fixture
+    def variation_two_diffs(self) -> PanelVariation:
+        target = BioSequence(self.SEQ, id="TARGET", moltype=MolType.DNA)
+        bases = list(self.SEQ)
+        for position in self.AT:
+            bases[position] = "A" if self.SEQ[position] != "A" else "C"
+        alignment = PanelAlignment.from_rows(
+            target,
+            [AlignedRow("HIT", self.SEQ), AlignedRow("SPARE_TWO", "".join(bases))],
+        )
+        return PanelVariation.from_alignment(alignment)
+
+    def _window(self, variation) -> WindowEvaluation:
+        criteria = WindowCriteria(
+            AlleleTargeting(hit={"HIT"}, spare=("SPARE_TWO",)), length=self.WIDE
+        )
+        return evaluate_window(variation, criteria, 0)
+
+    def test_both_differences_are_listed(self, variation_two_diffs):
+        window = self._window(variation_two_diffs)
+        positions = {a.guide_position for a in window.deciding_mismatches}
+        assert positions == {self.WIDE - p for p in self.AT} == {15, 11}
+
+    def test_the_list_is_ordered_by_placement(self, variation_two_diffs):
+        window = self._window(variation_two_diffs)
+        ordered = window.deciding_mismatches
+        assert ordered[0] is window.deciding_mismatch
+        assert allele_discrimination_key([ordered[0]]) >= allele_discrimination_key(
+            [ordered[1]]
+        )
+
+    def test_the_second_difference_does_not_change_the_rank(self, variation_two_diffs):
+        # The whole point: placement decides, the count is reported alongside.
+        window = self._window(variation_two_diffs)
+        best_only = [window.deciding_mismatch]
+        assert window.discrimination_key == allele_discrimination_key(best_only)
+        assert window.min_spare_mismatches == 2
 
 
 class TestRegions:
