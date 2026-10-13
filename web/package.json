@@ -1,0 +1,40 @@
+{
+  "name": "hush-web",
+  "version": "0.0.1",
+  "description": "HUSH Designer - the browser GUI for the allele-aware siRNA/shRNA pipeline (Project HIDE)",
+  "license": "CC-BY-4.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
+    "typecheck": "tsc --noEmit",
+    "gen:api": "openapi-typescript ${VITE_API_URL:-http://localhost:8000}/openapi.json -o src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.8",
+    "openapi-fetch": "^0.13.5",
+    "react": "^19.2.0",
+    "react-bootstrap": "^2.10.10",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/node": "^22.18.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^15.15.0",
+    "openapi-typescript": "^7.4.4",
+    "prettier": "^3.3.3",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.40.0",
+    "vite": "^7.0.0"
+  }
+}

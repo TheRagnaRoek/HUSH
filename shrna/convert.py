@@ -11,7 +11,7 @@ whichever vector they clone into.
 
 Unlike the naive templating of earlier tools, each construct is scored: the
 hairpin is folded (core.hairpin) to confirm it forms the intended stem-loop
-rather than a competing structure, and a few legible QC flags (Pol III 5'-G
+rather than a competing structure, and a few legible QC flags (Pol III 5'-A/G
 initiation, loop terminator-safety, homopolymer runs) are attached.
 
 Rationale and references in docs/shrna_design_note.md.
@@ -28,13 +28,13 @@ from core.sequence import BioSequence, MolType
 from core.sirna import SiRNACandidate
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold
 
-# A run of >= 4 U/T in the transcribed strand is read by Pol III as a
-# termination signal. The hairpin body (stem + loop, before the deliberate 3'
-# terminator) must not contain one - including at the loop/stem junctions, which
-# the upstream homopolymer gate cannot see.
+# A run of >= 4 U/T terminates Pol III (Bogenhagen & Brown 1981; Gao et al.
+# 2018). The hairpin body must not contain one, including at the loop/stem
+# junctions, which the upstream homopolymer gate cannot see.
 _POL3_TERMINATOR_RUN = "UUUU"
 
-# Minimum poly-T terminator length: Pol III needs a run of at least ~4-5 T.
+# Minimum poly-T terminator length: T4 is the minimal Pol III terminator, with
+# full efficiency at >= 6 T (Gao et al. 2018).
 MIN_TERMINATOR_LENGTH = 4
 DEFAULT_TERMINATOR_LENGTH = 6
 
@@ -99,8 +99,9 @@ class ShrnaConstruct:
         folds_as_designed: True when that most stable fold IS the intended
             stem (full core length) closing the intended loop - i.e. the
             construct does not prefer a competing structure.
-        starts_with_g: the transcript's 5' base is G (the U6 Pol III +1
-            preference; the graft-junction initiation requirement).
+        starts_with_purine: the transcript's 5' base is A or G, the bases a
+            human U6/7SK promoter initiates on efficiently at +1 (Gao et al.
+            2017, Transcription 8:275). A C or U start is flagged.
         premature_terminator_free: the hairpin body (stem + loop, before the 3'
             terminator) carries no >= 4 U run - including at the loop/stem
             junctions - that would terminate Pol III early.
@@ -118,7 +119,7 @@ class ShrnaConstruct:
     insert_bottom: BioSequence
     fold: HairpinFold | None
     folds_as_designed: bool
-    starts_with_g: bool
+    starts_with_purine: bool
     premature_terminator_free: bool
     max_homopolymer_run: int
 
@@ -126,7 +127,7 @@ class ShrnaConstruct:
         ok = "folds-as-designed" if self.folds_as_designed else "MISFOLD-RISK"
         return (
             f"ShrnaConstruct(region={self.region}, loop={self.loop_name}, "
-            f"{ok}, 5'={'G' if self.starts_with_g else 'non-G'})"
+            f"{ok}, 5'={'A/G' if self.starts_with_purine else 'C/U'})"
         )
 
 
@@ -183,7 +184,7 @@ def convert(
         insert_bottom=insert_bottom,
         fold=fold,
         folds_as_designed=folds_as_designed,
-        starts_with_g=hairpin_str[:1] == "G",
+        starts_with_purine=hairpin_str[:1] in ("A", "G"),
         premature_terminator_free=_POL3_TERMINATOR_RUN not in stem_loop,
         max_homopolymer_run=run,
     )

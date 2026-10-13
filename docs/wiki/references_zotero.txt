@@ -1,0 +1,122 @@
+HUSH references - bulk import into Zotero
+========================================
+
+HOW TO USE
+  Zotero toolbar -> the magic-wand icon ("Add Item by Identifier") -> click the
+  small arrow to expand it into a multi-line box -> paste BLOCK A below -> Enter.
+  Zotero fetches full, correct metadata for each line from CrossRef / PubMed /
+  arXiv. Do this instead of importing a hand-written BibTeX file, which would
+  carry whatever field errors the repo's own citations have.
+
+  BLOCK B has no machine identifier in the repo. Open each URL and use the Zotero
+  browser connector, or search the title in Zotero's "Add by Identifier" after
+  looking up its DOI.
+
+  Annotated, grouped versions of all of these - including what HUSH uses each one
+  for - are in references.md next to this file.
+
+
+BLOCK A - paste all of this at once
+-----------------------------------
+10.1038/nbt936
+10.1016/j.bbrc.2004.02.157
+10.1093/nar/gkn902
+10.1093/nar/gkp835
+10.1371/journal.pgen.0020140
+10.1371/journal.pone.0002248
+10.1021/bi9809425
+10.1186/1471-2105-10-392
+10.1038/nbt1118
+10.1038/35078107
+10.1093/emboj/20.23.6877
+10.1186/gb-2009-10-3-r25
+10.1093/nar/gkv1189
+10.1126/science.1068999
+10.2527/jas.2006-486
+10.1371/journal.pone.0043095
+10.1371/journal.pone.0056110
+10.1080/15476286.2019.1599259
+10.1007/978-1-0716-0716-9_13
+10.1007/s00109-005-0024-2
+10.1111/tan.70548
+10.1038/s41467-025-63863-8
+10.1101/2025.05.26.656188
+10.1101/2025.08.11.667724
+10.64898/2026.02.14.705949
+2503.04200
+14769950
+24332856
+10.1093/nar/gkh442
+10.1073/pnas.83.24.9373
+10.1146/annurev.biophys.32.110601.141800
+10.1016/s0092-8674(03)00801-8
+10.1016/s0092-8674(03)00759-1
+10.1093/nar/16.24.11725
+10.1016/j.cell.2015.06.029
+10.1016/j.cell.2012.10.036
+10.1261/rna.1894510
+10.1016/j.omtn.2023.06.010
+10.1093/bioadv/vbag075
+10.1016/j.cell.2006.01.040
+10.1016/0092-8674(81)90522-5
+10.1016/j.omtn.2017.11.006
+10.1080/21541264.2017.1322170
+10.1261/rna.2192803
+
+
+BLOCK B - capture these from their URL (no DOI/PMID recorded in the repo)
+------------------------------------------------------------------------
+Vert, J.P. et al. An accurate and interpretable model for siRNA efficacy
+prediction (DSIR).
+  https://biodev.cea.fr/DSIR/
+
+Silva et al. SSD - a free software for designing multimeric mono-, bi- and
+trivalent shRNAs.
+  https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7197978/
+
+pssRNAit: A Web Server for Designing Effective and Specific Plant siRNAs with
+Genome-Wide Off-Target Assessment. Plant Physiology 184(1), 65.
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC7479913/
+  https://academic.oup.com/plphys/article/184/1/65/6117836
+
+Improving the clinical safety of GalNAc-siRNA conjugates using seed-pairing
+destabilization. Nucleic Acids Research 50(12), 6656.
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC9262600/
+
+Ribofuranose-based GalNAc-conjugated siRNA enhances liver-targeted delivery and
+elicits robust RNAi-mediated gene silencing. Molecular Therapy Nucleic Acids.
+  https://www.cell.com/molecular-therapy-family/nucleic-acids/fulltext/S2162-2531(25)00355-5
+  https://www.cell.com/molecular-therapy-family/nucleic-acids/fulltext/S2162-2531(26)00042-9
+
+Advanced siRNA Designs Further Improve In Vivo Performance of GalNAc-siRNA
+Conjugates (ESC chemistry).
+  https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5910670/
+
+Suppression of HLA Expression by Lentivirus-mediated Gene Transfer of siRNA
+Cassettes and In Vivo Chemoselection to Enhance Hematopoietic Stem Cell
+Transplantation.
+  https://ncbi.nlm.nih.gov/pmc/articles/PMC2938774
+
+Genetically-modified immune cells comprising a microRNA-adapted shRNA
+(shRNAmiR). US patent 11384335.
+  https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/11384335
+
+InvivoGen siRNA Wizard.
+  https://sirnawizard.com/
+
+IPD-IMGT/HLA Database.
+  https://www.ebi.ac.uk/ipd/imgt/hla/
+
+
+
+BLOCK C - used in the repo but never cited; find a reference or drop the mention
+-------------------------------------------------------------------------------
+GGGenome          siDirect's k-mismatch search engine, discussed at length in
+                  docs/offtarget_design_note.md.
+Gusfield          the center-star construction msa/align_star.py is built on,
+                  including its factor-2 sum-of-pairs bound.
+Dharmacon siDESIGN  named in docs/seed_offtarget_design_note.md as computing raw
+                  seed frequency.
+RefSeq H_sapiens/mRNA_Prot  the specific NCBI FTP dataset the index builder pulls.
+bowtie1 Artistic License / bowtie2 GPLv3  the licensing argument in
+                  docs/offtarget_design_note.md section 2.

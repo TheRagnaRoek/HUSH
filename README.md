@@ -195,7 +195,7 @@ stem-loop scaffold in the sense-loop-antisense orientation. Output is the bare
 hairpin insert as top/bottom DNA oligos plus a Pol III poly-T terminator - it is
 vector-agnostic, so add your vector's restriction sticky-end tails before
 cloning. Each construct is folded to confirm it forms the intended stem-loop (not
-a competing structure), with QC flags for Pol III 5'-G initiation, loop/stem
+a competing structure), with QC flags for Pol III 5'-A/G initiation, loop/stem
 terminator-safety, and homopolymer runs.
 
 ```bash
@@ -243,6 +243,13 @@ DELETE /sessions/{id}
 
 Sessions are an in-memory warm cache (lost on restart), not a database.
 
+## Web GUI
+
+A browser front-end (React + Vite + TypeScript) renders this API as a guided,
+allele-aware design workflow with a construct viewer. It lives in
+[`web/`](web/README.md) and runs against the FastAPI backend above (it also opens
+on sample data with no backend). See [`web/README.md`](web/README.md) to develop it.
+
 ## Benchmarking against siDirect
 
 siDirect is HUSH's gold-standard reference; on matched settings the rule
@@ -264,6 +271,7 @@ shrna/   shRNA conversion (stage 4: loops, convert)
 service/ Orchestration layer (HushSession) the CLI and API render over
 app/     CLI: one-shot commands (app.cli) + interactive shell (app.shell)
 api/     HTTP API (FastAPI): schemas, serialize, store, app (optional extra)
+web/     Browser GUI (React + Vite + TypeScript) over the API - see web/README.md
 data/    Example inputs and benchmarking fixtures
 tools/   Developer utilities (build_offtarget_db.py, compare_sidirect.py)
 docs/    Concept dossier and design notes

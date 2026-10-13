@@ -1,0 +1,81 @@
+/**
+ * View model for the window alignment. The API currently surfaces, per spared
+ * allele, only the DECIDING mismatch (PerAlleleDiscrimination.discrimination)
+ * and a diff_count - not the full per-base window of each panel member. So an
+ * API-derived alignment is marked `complete: false` and shows just the deciding
+ * mismatch per allele, placed from its guide position.
+ *
+ * TODO(api): surface the aligned window (or full mismatch list) for each panel
+ * member so this can show every differing column; sample data already carries
+ * that richer shape to demonstrate the intended view.
+ */
+
+import type { CandidateResult, DiscriminationResult } from "../api/types";
+
+export interface AlnMismatch {
+  /** 0-based column on the sense/target window. */
+  col: number;
+  from: string;
+  to: string;
+  disc: DiscriminationResult;
+}
+
+export interface AlnAllele {
+  name: string;
+  diff: number;
+  weak: boolean;
+  mism: AlnMismatch[];
+}
+
+export interface AlignmentModel {
+  target: string; // sense window core (= passenger core)
+  guide: string; // guide core, 5'->3'
+  alleles: AlnAllele[];
+  complete: boolean; // false => only deciding mismatches are shown
+}
+
+/** Full per-base enrichment for an allele (sample data / post-API-addition). */
+export interface AlleleEnrichment {
+  name: string;
+  diff: number;
+  weak: boolean;
+  mism: AlnMismatch[];
+}
+
+function core(seq: string, overhang: string): string {
+  const n = overhang ? overhang.length : 0;
+  return n > 0 ? seq.slice(0, seq.length - n) : seq;
+}
+
+/** Parse a "G>A" mutation string into [from, to]; tolerant of odd input. */
+function parseMut(mutation: string): [string, string] {
+  const m = /([A-Za-z])\s*[>/-]\s*([A-Za-z])/.exec(mutation);
+  return m ? [m[1].toUpperCase(), m[2].toUpperCase()] : ["?", "?"];
+}
+
+export function buildAlignment(
+  candidate: CandidateResult,
+  enrichment?: AlleleEnrichment[],
+): AlignmentModel {
+  const target = core(candidate.passenger_5to3, candidate.passenger_overhang);
+  const guide = core(candidate.guide_5to3, candidate.guide_overhang);
+  const L = target.length;
+
+  if (enrichment && enrichment.length > 0) {
+    return { target, guide, alleles: enrichment, complete: true };
+  }
+
+  // API-derived: one deciding mismatch per spared allele, column inferred from
+  // the guide position (guide is antisense; sense col = L - guide_position).
+  const perAllele = candidate.allele?.per_allele ?? [];
+  const alleles: AlnAllele[] = perAllele.map((pa, i) => {
+    const mism: AlnMismatch[] = [];
+    if (pa.discrimination) {
+      const [from, to] = parseMut(pa.discrimination.mutation);
+      const col = Math.min(Math.max(L - pa.discrimination.guide_position, 0), L - 1);
+      mism.push({ col, from, to, disc: pa.discrimination });
+    }
+    return { name: pa.allele, diff: pa.diff_count, weak: i === 0, mism };
+  });
+  return { target, guide, alleles, complete: false };
+}
