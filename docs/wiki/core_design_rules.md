@@ -28,15 +28,41 @@ Schwarz et al. 2003 (complex assembly, terminal base pairs).
 
 ## 3. The duplex HUSH designs
 
-*To write:* short and factual - a 19-bp paired core with symmetric 2-nt 3'
-overhangs, i.e. 21-nt synthesized strands, and the strand naming convention
-(sense/passenger, antisense/guide, both stored 5'->3'). This section exists so the
-positional numbering used in sections 4-6 is unambiguous.
+HUSH's canonical duplex is a 19-nt fully paired core carrying a symmetric 2-nt
+3' overhang on each strand, that is, 21-nt synthesized strands (Elbashir,
+Harborth et al. 2001). Three numbers are routinely conflated in the literature
+and this page keeps them apart: **19** is the paired core, the RISC-relevant and
+thermodynamically active region every filter operates on; **21** is the strand a
+vendor synthesizes, core plus overhang; **23** is a different measurement again,
+either an mRNA target-site footprint or a Dicer-substrate design. The 2-nt 3'
+overhang is the most efficient arrangement, and 2'-deoxythymidine is tolerated
+there (Elbashir, Martinez et al. 2001), which is why HUSH offers a `dtdt`
+overhang alongside its target-derived `natural` default. Strand naming is used
+consistently below: sense (passenger) matches the mRNA target site, antisense
+(guide) is its reverse complement and the strand loaded into RISC, and both are
+stored 5'->3'. All positional numbering in sections 4-6 is 1-based from the 5'
+end of the named strand.
 
-Cite: Elbashir, Harborth et al. 2001 (canonical duplex);
-Elbashir, Martinez et al. 2001 (2-nt 3' overhang optimal, dTdT tolerated).
+The core length defaults to 19, following siDirect (Naito et al. 2004, 2009),
+and is tunable over 19-24 with the range enforced rather than silently accepted.
+Holding it at 19 is more than convention: all three rule sets below are defined
+and validated on the 19-nt duplex, with position-specific criteria indexed
+against it (Ui-Tei et al. 2004; Reynolds et al. 2004; Amarzguioui & Prydz 2004),
+so enlarging the core feeds those scorers inputs their authors never specified.
+The overhang is modelled as a separate 2-nt feature tracked apart from the core,
+and no filter - rules, GC, seed, hairpin or homopolymer - ever sees it; the seed
+keys off guide positions 2-8 from the 5' end, which a 3' overhang does not
+touch. On a longer core the original criteria stop being unambiguous, and HUSH
+resolves that only partly: the 3'-anchored parts of Reynolds (the 15-19 window
+and position 19) follow the actual 3' terminus while its internal positions (3,
+10, 13) stay absolute from the 5' end, and the Ui-Tei constants are not rescaled
+at all. One case is still unsettled: the W19 and G19 motifs of Amarzguioui read
+absolute position 19, while the A/U differential in that same score is
+terminus-anchored, so above 19 nt the two readings diverge. A 19-mer is
+unaffected, since every reading coincides there.
 
-Implementation: `core.sirna`.
+Implementation: `core.sirna` (`DEFAULT_LENGTH`, `CANONICAL_MIN_LENGTH` /
+`CANONICAL_MAX_LENGTH`, `OVERHANG_LENGTH`, `OverhangPolicy`).
 
 ---
 
