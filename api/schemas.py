@@ -20,6 +20,7 @@ from core.hairpin import DEFAULT_INTERNAL_TM_THRESHOLD_C
 from core.offtarget import (
     DEFAULT_OFFTARGET_MAX_MISMATCH,
     DEFAULT_OFFTARGET_MIN_MISMATCH,
+    DEFAULT_SELF_MIN_COVERAGE,
 )
 from core.rules import AMARZGUIOUI_DEFAULT_THRESHOLD, REYNOLDS_DEFAULT_THRESHOLD
 from core.seed import SEED_TM_THRESHOLD_C
@@ -87,9 +88,13 @@ class DesignParamsSchema(BaseModel):
     offtarget_db: Optional[str] = None
     offtarget_min_mismatch: int = DEFAULT_OFFTARGET_MIN_MISMATCH
     offtarget_max_mismatch: int = DEFAULT_OFFTARGET_MAX_MISMATCH
-    offtarget_self_accession: Optional[str] = None
-    # bowtie_path is deliberately absent: this API has no authentication, so it
-    # must not take an executable path from the wire. The CLI keeps the flag.
+    offtarget_self_accessions: list[str] = Field(default_factory=list)
+    resolve_offtarget_self: bool = True
+    offtarget_self_coverage: float = DEFAULT_SELF_MIN_COVERAGE
+    # bowtie_path and offtarget_self_fasta are deliberately absent: this API has
+    # no authentication, so it must not take an executable path or an arbitrary
+    # file to read from the wire. The CLI keeps both flags. Self resolution still
+    # runs here - it reads the uploaded target and panel, not the filesystem.
 
     use_gc_filter: bool = False
     gc_min: float = 0.30
@@ -129,7 +134,9 @@ class DesignParamsSchema(BaseModel):
             offtarget_db=Path(self.offtarget_db) if self.offtarget_db else None,
             offtarget_min_mismatch=self.offtarget_min_mismatch,
             offtarget_max_mismatch=self.offtarget_max_mismatch,
-            offtarget_self_accession=self.offtarget_self_accession,
+            offtarget_self_accessions=tuple(self.offtarget_self_accessions),
+            resolve_offtarget_self=self.resolve_offtarget_self,
+            offtarget_self_coverage=self.offtarget_self_coverage,
             use_gc_filter=self.use_gc_filter,
             gc_min=self.gc_min,
             gc_max=self.gc_max,
@@ -215,7 +222,12 @@ class CriteriaSummary(BaseModel):
     seed_tm_threshold_c: Optional[float] = None
     offtarget_filter: bool
     offtarget_min_mismatch: Optional[int] = None
-    offtarget_self_accession: Optional[str] = None
+    # The transcripts the gate counted as the design's own, and how they were
+    # found. An empty list on an active filter means every hit counted.
+    offtarget_self_accessions: list[str] = Field(default_factory=list)
+    offtarget_self_declared: int = 0
+    offtarget_self_resolved: int = 0
+    offtarget_self_coverage: Optional[float] = None
     gc_filter: bool
     gc_min: Optional[float] = None
     gc_max: Optional[float] = None

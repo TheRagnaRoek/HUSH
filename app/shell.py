@@ -95,6 +95,13 @@ def _build_design_parser() -> _ShellArgParser:
     p.add_argument("--offtarget-min-mismatch", type=int)
     p.add_argument("--offtarget-max-mismatch", type=int)
     p.add_argument("--offtarget-self-accession")
+    p.add_argument("--offtarget-self-fasta")
+    p.add_argument(
+        "--offtarget-resolve-self",
+        dest="offtarget_resolve_self",
+        action=argparse.BooleanOptionalAction,
+    )
+    p.add_argument("--offtarget-self-coverage", type=float)
     p.add_argument("--bowtie-path")
     p.add_argument("--gc", action=argparse.BooleanOptionalAction)
     p.add_argument("--gc-min", type=float)
@@ -165,7 +172,14 @@ def apply_design_flags(params: DesignParams, tokens: list[str]) -> DesignParams:
     take("offtarget_db", "offtarget_db", Path)
     take("offtarget_min_mismatch", "offtarget_min_mismatch")
     take("offtarget_max_mismatch", "offtarget_max_mismatch")
-    take("offtarget_self_accession", "offtarget_self_accession")
+    take(
+        "offtarget_self_accession",
+        "offtarget_self_accessions",
+        lambda v: tuple(split_ids(v)),
+    )
+    take("offtarget_self_fasta", "offtarget_self_fasta", Path)
+    take("offtarget_resolve_self", "resolve_offtarget_self")
+    take("offtarget_self_coverage", "offtarget_self_coverage", lambda v: v / 100.0)
     take("bowtie_path", "bowtie_path")
     take("gc", "use_gc_filter")
     take("gc_min", "gc_min", lambda v: v / 100.0)
@@ -490,6 +504,21 @@ class HushShell:
         if p.use_offtarget_filter and p.offtarget_db is not None:
             off = f"on ({p.offtarget_db})"
         typer.echo(f"  off-target:      {off}")
+        if p.use_offtarget_filter:
+            # The owned set itself is only known once a design has run; these
+            # are the inputs it will be built from.
+            own = []
+            if p.offtarget_self_accessions:
+                own.append(f"{len(p.offtarget_self_accessions)} named")
+            if p.resolve_offtarget_self:
+                own.append(
+                    f"homology >= {p.offtarget_self_coverage * 100:.0f}% k-mers"
+                )
+            if p.offtarget_self_fasta is not None:
+                own.append(f"+ {p.offtarget_self_fasta.name}")
+            typer.echo(
+                f"  own txs:         {', '.join(own) or 'nothing excluded'}"
+            )
         typer.echo(
             f"  GC window:       {'%.0f-%.0f%%' % (p.gc_min * 100, p.gc_max * 100) if p.use_gc_filter else 'off'}"
         )

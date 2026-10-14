@@ -61,9 +61,13 @@ restart and evicted under pressure.
 `offtarget_min_mismatch`, `targeting`, `sort` and so on. See
 [cli.md](cli.md) for every field and its default.
 
-One deliberate difference: **`bowtie_path` is not accepted over HTTP.** The API
-has no authentication and must not take an executable path from the wire. The
-CLI keeps the flag.
+Two deliberate differences: **`bowtie_path` and `offtarget_self_fasta` are not
+accepted over HTTP.** The API has no authentication, so it must not take an
+executable path or an arbitrary file to read from the wire. The CLI keeps both
+flags. Resolution of the design's own transcripts still runs here - it reads the
+uploaded target and panel, not the filesystem - and
+`offtarget_self_accessions`, `resolve_offtarget_self` and
+`offtarget_self_coverage` are accepted as usual.
 
 ## Responses
 
@@ -75,6 +79,14 @@ never has to recompute a verdict.
 `offtarget_skipped` reports whether the run was unreferenced. Treat it as
 load-bearing: an empty off-target hit count means "not checked", not "nothing
 found". See [design-rules.md](design-rules.md#transcriptome-off-target).
+
+The criteria summary carries `offtarget_self_accessions` (the transcripts the
+gate counted as the design's own), with `offtarget_self_declared` /
+`offtarget_self_resolved` saying how they were found and
+`offtarget_self_coverage` the threshold used. An empty list on an active filter
+means every hit counted against every candidate, which on a gene family is a
+broken run rather than a clean one - see
+[What the design owns](design-rules.md#what-the-design-owns).
 
 A convert response separates what survived from what was withheld:
 

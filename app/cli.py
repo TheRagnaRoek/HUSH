@@ -25,6 +25,7 @@ from core.inputs import build_design_input, load_sequences
 from core.offtarget import (
     DEFAULT_OFFTARGET_MAX_MISMATCH,
     DEFAULT_OFFTARGET_MIN_MISMATCH,
+    DEFAULT_SELF_MIN_COVERAGE,
 )
 from core.reference import (
     DEFAULT_BASE_URL,
@@ -260,6 +261,23 @@ def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
     return "".join(parts) or "-"
 
 
+def _describe_self(own) -> str:
+    """One line on the transcripts the off-target gate counts as the design's own."""
+    if not own:
+        return "none excluded - every hit counts against a candidate"
+    parts = []
+    if own.declared:
+        parts.append(f"{len(own.declared)} named")
+    if own.resolved:
+        parts.append(
+            f"{len(own.resolved)} by homology >= {own.min_coverage * 100:.0f}% k-mers"
+        )
+    shown = ", ".join(sorted(own.accessions)[:4]).upper()
+    if len(own) > 4:
+        shown += ", ..."
+    return f"{len(own)} excluded ({'; '.join(parts)}): {shown}"
+
+
 def _print_criteria(
     criteria: SelectionCriteria,
     targeting: AlleleTargeting | None = None,
@@ -294,11 +312,11 @@ def _print_criteria(
     typer.echo(f"  seed Tm:    {seed}")
     if criteria.use_offtarget_filter:
         off = f"reject nearest < {criteria.offtarget_min_mismatch} mismatch(es)"
-        if criteria.offtarget_self_accession:
-            off += f" (self: {criteria.offtarget_self_accession})"
     else:
         off = "off"
     typer.echo(f"  off-target: {off}")
+    if criteria.use_offtarget_filter:
+        typer.echo(f"  own txs:    {_describe_self(criteria.offtarget_self_transcripts)}")
     gc = (
         f"{criteria.gc_min * 100:.0f}-{criteria.gc_max * 100:.0f}%"
         if criteria.use_gc_filter
@@ -714,6 +732,21 @@ def render_design_result(
             "      --no-offtarget to accept an unreferenced run knowingly.",
             fg=typer.colors.YELLOW,
         )
+    criteria = result.criteria
+    if criteria.use_offtarget_filter and not criteria.offtarget_self_transcripts:
+        typer.secho(
+            "  [!] NO SELF EXCLUDED - the off-target gate is counting the "
+            "target's own\n      transcript against every candidate.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        typer.secho(
+            "      Nothing identified the design's own transcripts, so the gate\n"
+            "      is measuring on-target homology, not off-target risk. Name "
+            "them\n      with --offtarget-self-accession, or leave\n"
+            "      --offtarget-resolve-self on so homology finds them.",
+            fg=typer.colors.YELLOW,
+        )
     typer.echo("")
     _print_criteria(result.criteria, result.targeting, result.min_spare_mismatches)
     typer.echo("")
@@ -809,8 +842,29 @@ def design_cmd(
     ),
     offtarget_self_accession: Optional[str] = typer.Option(
         None, "--offtarget-self-accession",
-        help="Accession of the target's own transcript to exclude from off-target "
-        "hits (auto-detected from the FASTA header when omitted).",
+        help="Accessions of the design's own transcripts, excluded from "
+        "off-target hits (comma-separated; e.g. NM_002116,NR_001434). Added to "
+        "whatever the FASTA header and the homology resolution below find.",
+    ),
+    offtarget_self_fasta: Optional[Path] = typer.Option(
+        None, "--offtarget-self-fasta",
+        help="FASTA whose entries count as the design's own sequence, resolved "
+        "to reference transcripts by homology. Use it to name a whole allele "
+        "family the target and panel do not already cover.",
+    ),
+    offtarget_resolve_self: bool = typer.Option(
+        True, "--offtarget-resolve-self/--no-offtarget-resolve-self",
+        help="Resolve the design's own transcripts by homology to the target, "
+        "the panel and --offtarget-self-fasta. On by default, and the only "
+        "mechanism that works for a gene family (HLA-A spans five RefSeq "
+        "transcripts plus its alternate-haplotype copies).",
+    ),
+    offtarget_self_coverage: float = typer.Option(
+        DEFAULT_SELF_MIN_COVERAGE * 100.0, "--offtarget-self-coverage",
+        help="Percent of a design sequence's k-mers a reference transcript must "
+        "match exactly to count as the design's own. Lower widens the family "
+        "(10 keeps the target locus, its reference duplicates and its closest "
+        "paralogs); raise it to count only the target gene itself.",
     ),
     bowtie_path: str = typer.Option(
         "bowtie", "--bowtie-path", help="Path to the bowtie executable.",
@@ -995,7 +1049,14 @@ def design_cmd(
         offtarget_db=offtarget_db,
         offtarget_min_mismatch=offtarget_min_mismatch,
         offtarget_max_mismatch=offtarget_max_mismatch,
-        offtarget_self_accession=offtarget_self_accession,
+        offtarget_self_accessions=(
+            tuple(split_ids(offtarget_self_accession))
+            if offtarget_self_accession is not None
+            else ()
+        ),
+        offtarget_self_fasta=offtarget_self_fasta,
+        resolve_offtarget_self=offtarget_resolve_self,
+        offtarget_self_coverage=offtarget_self_coverage / 100.0,
         bowtie_path=bowtie_path,
         use_gc_filter=gc,
         gc_min=gc_min / 100.0,

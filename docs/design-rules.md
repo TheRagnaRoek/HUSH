@@ -87,8 +87,63 @@ This is the safety floor and the one gate that consults reality rather than a
 sequence-intrinsic proxy: it asks whether the guide has a near-match anywhere
 else in the human transcriptome. A candidate is rejected when its nearest
 off-target carries fewer than `--offtarget-min-mismatch` mismatches (2 by
-default, which matches siDirect on the PDCD1 benchmark). The target's own
-transcript is excluded, auto-detected from the FASTA header.
+default, which matches siDirect on the PDCD1 benchmark).
+
+### What the design owns
+
+"Anywhere else" has to be defined, and for a gene family it cannot be defined by
+one accession. A guide is meant to match its target; on HLA it is also meant to
+match the family, and the reference carries the locus more than once. HLA-A is
+five RefSeq transcripts (`NM_002116`, `NM_001242758`, `NR_001434`,
+`XM_041680767`, `XM_041680768`) before any alternate-haplotype assembly copy is
+counted. A gate that excludes one of them measures on-target homology, not
+off-target risk: with nothing excluded, every candidate on HLA-A\*01, A\*02 and
+A\*03 is rejected, and naming a single accession by hand lifts seven production
+scenarios from 3 to 5 surviving candidates out of 107. That is not a quality
+signal, it is the wrong question.
+
+So the owned set is a set (`core.offtarget.SelfTranscripts`), filled from three
+sources, unioned:
+
+* `--offtarget-self-accession`, a comma-separated list of accessions, matched
+  version-insensitively (`NM_002116` covers `NM_002116.8`).
+* the RefSeq accession in the target's own FASTA header, when it has one. IMGT
+  allele headers such as `HLA-A02:01:01:01` do not, which is why this route
+  alone left HLA runs with nothing excluded.
+* homology resolution (on by default, `--offtarget-resolve-self`): the target,
+  every panel member and any `--offtarget-self-fasta` entry is tiled into its
+  k-mers, and a reference transcript is owned when at least
+  `--offtarget-self-coverage` percent of one input's distinct k-mers align to it
+  exactly. Coverage is judged per input, so a short panel member is not diluted
+  by a long target.
+
+Panel members seed resolution because they are intended targets: a pan-allele
+design means to hit them. This does not weaken an allele-specific design -
+discrimination between alleles is the [allele stage](#allele-targeting)'s
+job, enforced at a resolution the transcriptome does not have, since every
+HLA-A allele maps onto the same RefSeq transcripts.
+
+The default coverage of 10% comes from the measured distribution on the four
+bundled HLA-A alleles. Exact 19-mer coverage of the reference by one allele is
+sharply clustered: 5 transcripts above 25% (HLA-A itself, the same five on all
+four alleles), roughly 100-140 between 10% and 25% (alternate-haplotype copies
+of the locus and the closest class I paralogs), then a tail of transcripts
+sharing one or two k-mers, which are genuine off-targets and stay in. Raising
+the threshold above 25% narrows the set to the target gene; lowering it below 5%
+starts absorbing incidental matches. Sequence is the only signal available, so
+an alternate-haplotype copy of the target gene and a true paralog are separated
+only by how much of the target they carry - a bowtie index stores accessions,
+not gene symbols.
+
+On the seven original wet-lab scenarios this is the difference between a gate
+that rejects everything and a gate that reports real homology: the A\*02
+target-specific design goes from 0 surviving candidates to 36, and the wet-lab
+pick at region 497-515 passes with its nearest off-target 2 mismatches away and
+no hit closer than that.
+
+**An empty owned set is never silent.** A run with the filter on and nothing
+excluded prints a `NO SELF EXCLUDED` warning naming the consequence, because a
+silent "nothing is self" is what made this invisible in the first place.
 
 The reference is built once with `hush reference build`, which fetches the
 RefSeq human mRNA set, runs `bowtie-build`, and writes a manifest recording the

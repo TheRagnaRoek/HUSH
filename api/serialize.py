@@ -152,6 +152,18 @@ def _per_allele(window: WindowEvaluation) -> list[schemas.PerAlleleDiscriminatio
     return out
 
 
+def _self_summary(own) -> dict:
+    """The self-transcript fields of a criteria summary."""
+    if own is None:
+        return {}
+    return {
+        "offtarget_self_accessions": sorted(a.upper() for a in own.accessions),
+        "offtarget_self_declared": len(own.declared),
+        "offtarget_self_resolved": len(own.resolved),
+        "offtarget_self_coverage": own.min_coverage,
+    }
+
+
 def criteria_summary(criteria: SelectionCriteria) -> schemas.CriteriaSummary:
     return schemas.CriteriaSummary(
         rules=[n.replace("_", "-") for n in criteria.enabled_rule_names],
@@ -162,7 +174,7 @@ def criteria_summary(criteria: SelectionCriteria) -> schemas.CriteriaSummary:
         offtarget_min_mismatch=(
             criteria.offtarget_min_mismatch if criteria.use_offtarget_filter else None
         ),
-        offtarget_self_accession=criteria.offtarget_self_accession,
+        **_self_summary(criteria.offtarget_self_transcripts),
         gc_filter=criteria.use_gc_filter,
         gc_min=criteria.gc_min if criteria.use_gc_filter else None,
         gc_max=criteria.gc_max if criteria.use_gc_filter else None,

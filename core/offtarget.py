@@ -6,8 +6,13 @@ and drops candidates whose nearest off-target is a near-perfect match; this modu
 is HUSH's open, offline equivalent of that search. For each candidate it looks for
 near-complementary sites in a reference transcriptome, reports the off-target
 profile (nearest-match mismatch count and hit counts by mismatch level, on both
-strands, with the intended transcript excluded), and exposes an optional gate that
-rejects a candidate whose nearest off-target sits below a mismatch threshold.
+strands, with the design's own transcripts excluded), and exposes an optional gate
+that rejects a candidate whose nearest off-target sits below a mismatch threshold.
+
+What a design owns is a set, not one accession (SelfTranscripts): a gene family
+spans several reference transcripts, and the reference also carries
+alternate-haplotype copies of the same locus. resolve_self_transcripts finds that
+set by exact k-mer coverage, which is what makes the gate usable on HLA.
 
 This is distinct from core.seed, which is a *seed-mediated* off-target proxy (a
 sequence-intrinsic Tm). Here we search for direct full-length homology.
@@ -35,6 +40,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Protocol, runtime_checkable
@@ -58,6 +64,12 @@ DEFAULT_OFFTARGET_MIN_MISMATCH = 2
 DEFAULT_OFFTARGET_MAX_MISMATCH = 3
 BOWTIE_MAX_V = 3
 
+# Share of a design sequence's k-mers a reference transcript must carry exactly
+# before it counts as self rather than an off-target. 0.10 keeps the target gene
+# together with the alternate-haplotype copies of its locus and its closest
+# paralogs; docs/design-rules.md records the measured coverage distribution.
+DEFAULT_SELF_MIN_COVERAGE = 0.10
+
 
 def _to_dna(seq: str) -> str:
     """Uppercase and spell a read as DNA (U -> T) for matching against a database.
@@ -73,9 +85,64 @@ def _base_accession(accession: str) -> str:
     return accession.split(".", 1)[0].strip().lower()
 
 
-def _same_accession(a: str, b: str) -> bool:
-    """True when two accessions name the same transcript, version aside."""
-    return bool(a) and bool(b) and _base_accession(a) == _base_accession(b)
+def _accession_set(values: Iterable[str] | str | None) -> frozenset[str]:
+    """Normalise accessions into a base-form set; a bare string counts as one."""
+    if values is None:
+        return frozenset()
+    if isinstance(values, str):
+        values = [values]
+    return frozenset(_base_accession(v) for v in values if v and v.strip())
+
+
+@dataclass(frozen=True)
+class SelfTranscripts:
+    """The reference transcripts a design owns, and so does not count against it.
+
+    A guide is meant to match its target, and on a multigene family it is also
+    meant to match the family: for HLA, every allele of the target gene plus the
+    alternate-haplotype copies the reference carries of the same locus is an
+    intended hit, not an off-target. Allele-level discrimination stays the MSA
+    stage's job (msa.windows), at a resolution the transcriptome cannot reach;
+    this set only keeps the transcriptome gate from rejecting a candidate for
+    hitting what it was designed to hit.
+
+    'declared' is what the caller named by accession, 'resolved' what the
+    homology search found (resolve_self_transcripts). Both are normalised to a
+    version-less base, so NM_002116.8 and NM_002116 are one transcript.
+    """
+
+    declared: frozenset[str] = frozenset()
+    resolved: frozenset[str] = frozenset()
+    min_coverage: float | None = None
+
+    @staticmethod
+    def of(
+        declared: Iterable[str] | str | None = None,
+        resolved: Iterable[str] | str | None = None,
+        min_coverage: float | None = None,
+    ) -> "SelfTranscripts":
+        """Build from raw accessions, normalising each to its base form."""
+        return SelfTranscripts(
+            declared=_accession_set(declared),
+            resolved=_accession_set(resolved),
+            min_coverage=min_coverage,
+        )
+
+    @property
+    def accessions(self) -> frozenset[str]:
+        return self.declared | self.resolved
+
+    def __len__(self) -> int:
+        return len(self.accessions)
+
+    def __contains__(self, accession: str) -> bool:
+        return _base_accession(accession) in self.accessions
+
+    def __repr__(self) -> str:
+        return (
+            f"SelfTranscripts(n={len(self)}, declared={len(self.declared)}, "
+            f"resolved={len(self.resolved)}, min_coverage={self.min_coverage})"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -374,20 +441,86 @@ def _parse_bowtie_line(line: str) -> tuple[str, OffTargetHit]:
 # --------------------------------------------------------------------------- #
 
 
+def _tiles(sequence: str, length: int) -> set[str]:
+    """Every distinct k-mer of 'length' in a sequence, DNA-spelled."""
+    seq = _to_dna(sequence)
+    return {seq[i : i + length] for i in range(len(seq) - length + 1)}
+
+
+def resolve_self_transcripts(
+    searcher: OffTargetSearcher,
+    sequences: Iterable[str],
+    length: int,
+    min_coverage: float = DEFAULT_SELF_MIN_COVERAGE,
+) -> frozenset[str]:
+    """Reference transcripts the design's own sequences cover, by exact k-mer share.
+
+    Each input (the target, and normally every panel member) is tiled into its
+    k-mers of 'length'; a transcript is self when at least min_coverage of one
+    input's distinct tiles align to it with no mismatch. Coverage is judged per
+    input rather than pooled, so a long target cannot dilute a short panel
+    member out of its own family.
+
+    Sequence is the only signal available: a bowtie index stores accessions, not
+    gene symbols, so an alternate-haplotype copy of the target gene and a true
+    paralog are separated only by how much of the target they carry.
+    """
+    if not 0 < min_coverage <= 1:
+        raise ValueError(f"min_coverage must be in (0, 1], got {min_coverage}.")
+    if length < 1:
+        raise ValueError(f"length must be >= 1, got {length}.")
+
+    tiled = [tiles for tiles in (_tiles(s, length) for s in sequences) if tiles]
+    if not tiled:
+        return frozenset()
+    pooled = sorted(set().union(*tiled))
+
+    # One batched pass when the backend offers it (bowtie), else per-read search.
+    lookup = (
+        searcher.precompute(pooled) if hasattr(searcher, "precompute") else searcher
+    )
+    exact = {
+        tile: {
+            _base_accession(h.accession)
+            for h in lookup.search(tile)
+            if h.mismatches == 0
+        }
+        for tile in pooled
+    }
+
+    resolved: set[str] = set()
+    for tiles in tiled:
+        covered: Counter[str] = Counter()
+        for tile in tiles:
+            covered.update(exact[tile])
+        floor = min_coverage * len(tiles)
+        resolved.update(acc for acc, n in covered.items() if n >= floor)
+    return frozenset(resolved)
+
+
+def _as_self(
+    spec: "SelfTranscripts | Iterable[str] | str | None",
+) -> SelfTranscripts | None:
+    """Accept a SelfTranscripts, a bare accession, or an iterable of them."""
+    if spec is None or isinstance(spec, SelfTranscripts):
+        return spec
+    return SelfTranscripts.of(declared=spec)
+
+
 def _exclude_self(
-    hits: list[OffTargetHit], self_accession: str | None
+    hits: list[OffTargetHit], self_transcripts: SelfTranscripts | None
 ) -> list[OffTargetHit]:
-    """Drop hits to the candidate's own source transcript (siDirect's behaviour)."""
-    if not self_accession:
+    """Drop hits to the transcripts the design owns (siDirect's rule, as a set)."""
+    if not self_transcripts:
         return hits
-    return [h for h in hits if not _same_accession(h.accession, self_accession)]
+    return [h for h in hits if h.accession not in self_transcripts]
 
 
 def evaluate_offtarget(
     candidate: SiRNACandidate,
     searcher: OffTargetSearcher,
     threshold: int = DEFAULT_OFFTARGET_MIN_MISMATCH,
-    self_accession: str | None = None,
+    self_transcripts: "SelfTranscripts | Iterable[str] | str | None" = None,
 ) -> OffTargetProfile:
     """Off-target profile of a candidate against a reference, both strands, self out.
 
@@ -397,10 +530,9 @@ def evaluate_offtarget(
     the passenger side the antisense read.
     """
     max_mm = searcher.max_mismatch
-    guide_hits = _exclude_self(searcher.search(candidate.sense.seq), self_accession)
-    passenger_hits = _exclude_self(
-        searcher.search(candidate.antisense.seq), self_accession
-    )
+    own = _as_self(self_transcripts)
+    guide_hits = _exclude_self(searcher.search(candidate.sense.seq), own)
+    passenger_hits = _exclude_self(searcher.search(candidate.antisense.seq), own)
     return OffTargetProfile(
         guide_min_mismatch=_min_mismatch(guide_hits),
         guide_counts=_counts(guide_hits, max_mm),

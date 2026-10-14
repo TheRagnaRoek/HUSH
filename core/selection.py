@@ -34,6 +34,7 @@ from core.offtarget import (
     DEFAULT_OFFTARGET_MIN_MISMATCH,
     OffTargetProfile,
     OffTargetSearcher,
+    SelfTranscripts,
     evaluate_offtarget,
 )
 from core.rules import (
@@ -125,12 +126,14 @@ class SelectionCriteria:
         use_seed_filter, seed_tm_threshold: the siDirect seed-duplex off-target
             Tm filter, applied to both strands.
         use_offtarget_filter, offtarget_min_mismatch, offtarget_searcher,
-            offtarget_self_accession: the transcriptome homology off-target
+            offtarget_self_transcripts: the transcriptome homology off-target
             filter. Rejects a candidate whose nearest off-target (on either
-            strand, excluding its own source transcript) has fewer than
+            strand, excluding the transcripts the design owns) has fewer than
             offtarget_min_mismatch mismatches. Needs a searcher (a reference
             database handle); distinct from the seed filter above, which is a
-            sequence-intrinsic proxy rather than a database search.
+            sequence-intrinsic proxy rather than a database search. The owned
+            set is a SelfTranscripts, since a gene family is several
+            transcripts; the service layer resolves it.
         use_hairpin_filter, hairpin_tm_max: a standalone internal-structure gate -
             reject a candidate whose most stable self-hairpin melts above
             hairpin_tm_max. Distinct from Reynolds criterion (its internal-repeat
@@ -166,7 +169,7 @@ class SelectionCriteria:
     use_offtarget_filter: bool = False
     offtarget_min_mismatch: int = DEFAULT_OFFTARGET_MIN_MISMATCH
     offtarget_searcher: OffTargetSearcher | None = None
-    offtarget_self_accession: str | None = None
+    offtarget_self_transcripts: SelfTranscripts | None = None
 
     use_hairpin_filter: bool = False
     hairpin_tm_max: float = DEFAULT_INTERNAL_TM_THRESHOLD_C
@@ -331,7 +334,7 @@ def evaluate(
             candidate,
             criteria.offtarget_searcher,
             threshold=criteria.offtarget_min_mismatch,
-            self_accession=criteria.offtarget_self_accession,
+            self_transcripts=criteria.offtarget_self_transcripts,
         )
         offtarget_pass = offtarget.passes
     else:

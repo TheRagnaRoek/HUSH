@@ -33,7 +33,9 @@ export interface DesignParams {
   offtarget_db?: string | null;
   offtarget_min_mismatch?: number;
   offtarget_max_mismatch?: number;
-  offtarget_self_accession?: string | null;
+  offtarget_self_accessions?: string[];
+  resolve_offtarget_self?: boolean;
+  offtarget_self_coverage?: number; // fraction in (0, 1]
   bowtie_path?: string;
 
   use_gc_filter?: boolean;
@@ -111,7 +113,10 @@ export interface CriteriaSummary {
   seed_tm_threshold_c?: number | null;
   offtarget_filter: boolean;
   offtarget_min_mismatch?: number | null;
-  offtarget_self_accession?: string | null;
+  offtarget_self_accessions?: string[];
+  offtarget_self_declared?: number;
+  offtarget_self_resolved?: number;
+  offtarget_self_coverage?: number | null;
   gc_filter: boolean;
   gc_min?: number | null;
   gc_max?: number | null;

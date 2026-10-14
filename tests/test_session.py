@@ -11,6 +11,7 @@ import pytest
 
 import service.session as session_mod
 from core.errors import HushError
+from core.offtarget import BruteForceSearcher
 from core.sequence import MolType
 from msa.targeting import TargetingMode
 from service import AlleleTargetingSpec, DesignParams, HushSession
@@ -360,3 +361,135 @@ def test_discrimination_sort_without_a_panel_is_rejected(demo_lowgc_fasta):
     session.load_target(demo_lowgc_fasta)
     with pytest.raises(ValueError):
         session.design(DesignParams(sort="discrimination"))
+
+
+# --------------------------------------------------------------------------- #
+# off-target self resolution
+# --------------------------------------------------------------------------- #
+
+# An IMGT-named target, as the bundled HLA files are: no RefSeq accession sits
+# in the header, so nothing but homology can tell the gate what the design owns.
+_IMGT_TARGET = "ATGCTTAGCCGATTACAGAGTCTAGGCATTACCGTAAGGCTTCAGAGGTCATTACGGCAT"
+_IMGT_ALLELE = _IMGT_TARGET[:30] + "A" + _IMGT_TARGET[31:]  # one allelic difference
+_SELF_TRANSCRIPT = "NM_900001.1"
+
+
+class _StubBackend(BruteForceSearcher):
+    """A brute-force searcher standing in for bowtie, batched interface included."""
+
+    def precompute(self, reads):
+        return self
+
+
+@pytest.fixture
+def stub_index(monkeypatch, tmp_path):
+    """Point the session's bowtie backend at an in-memory two-transcript reference."""
+    refs = [
+        (_SELF_TRANSCRIPT, _IMGT_TARGET),  # the design's own transcript
+        ("NM_900002.1", "TTTAAACCCGGGAAATTTCCCGGGAAATTTCCCGGGAAATTT"),
+    ]
+    monkeypatch.setattr(
+        session_mod,
+        "BowtieSearcher",
+        lambda prefix, max_mismatch=3, bowtie_path="bowtie": _StubBackend(
+            refs, max_mismatch=max_mismatch
+        ),
+    )
+    return tmp_path / "index"
+
+
+def _imgt_session(tmp_path, with_panel=True):
+    path = tmp_path / "allele.fasta"
+    path.write_text(f">HLA-A02:01:01:01\n{_IMGT_TARGET}\n", encoding="ascii")
+    session = HushSession()
+    session.load_target(path)
+    if with_panel:
+        panel = tmp_path / "panel.fasta"
+        panel.write_text(f">HLA-A24:02:01:01\n{_IMGT_ALLELE}\n", encoding="ascii")
+        session.load_panel(panel)
+    return session
+
+
+def _bare_params(stub_index, **overrides):
+    # Only the off-target gate is under test here.
+    return DesignParams(
+        use_ui_tei=False, use_reynolds=False, use_amarzguioui=False,
+        use_seed_filter=False, use_homopolymer_filter=False,
+        offtarget_db=stub_index, **overrides,
+    )
+
+
+def test_imgt_target_resolves_its_own_transcript(stub_index, tmp_path):
+    # The regression: an IMGT header yields no accession, so before resolution
+    # the gate counted the target's own transcript against every candidate.
+    session = _imgt_session(tmp_path)
+    result = session.design(_bare_params(stub_index))
+    own = result.criteria.offtarget_self_transcripts
+    assert _SELF_TRANSCRIPT in own
+    assert own.resolved  # found by homology, not by the header
+    assert not own.declared
+    assert result.selected
+
+
+def test_panel_members_seed_resolution(stub_index, tmp_path):
+    # A panel member is an intended target, so its transcripts are owned too.
+    with_panel = _imgt_session(tmp_path).design(_bare_params(stub_index))
+    assert _SELF_TRANSCRIPT in with_panel.criteria.offtarget_self_transcripts
+
+
+def test_resolution_can_be_turned_off(stub_index, tmp_path):
+    # Without resolution the gate is back to measuring on-target homology: the
+    # target's own transcript is a 0-mismatch hit, so nothing survives.
+    session = _imgt_session(tmp_path)
+    result = session.design(
+        _bare_params(stub_index, resolve_offtarget_self=False)
+    )
+    assert not result.criteria.offtarget_self_transcripts
+    assert not result.selected
+
+
+def test_declared_accessions_are_a_list(stub_index, tmp_path):
+    session = _imgt_session(tmp_path)
+    result = session.design(
+        _bare_params(
+            stub_index,
+            offtarget_self_accessions=("NM_900001", "NM_900002.3"),
+            resolve_offtarget_self=False,
+        )
+    )
+    own = result.criteria.offtarget_self_transcripts
+    assert len(own) == 2
+    assert "NM_900002" in own  # version-insensitive
+    assert result.selected
+
+
+def test_self_fasta_declares_a_family_by_sequence(stub_index, tmp_path):
+    # A self FASTA covers sequences that are neither the target nor the panel.
+    family = tmp_path / "family.fasta"
+    family.write_text(f">HLA-A01:01:01:01\n{_IMGT_TARGET}\n", encoding="ascii")
+    session = _imgt_session(tmp_path, with_panel=False)
+    result = session.design(
+        _bare_params(stub_index, offtarget_self_fasta=family)
+    )
+    assert _SELF_TRANSCRIPT in result.criteria.offtarget_self_transcripts
+
+
+def test_coverage_threshold_is_carried_on_the_criteria(stub_index, tmp_path):
+    session = _imgt_session(tmp_path)
+    result = session.design(_bare_params(stub_index, offtarget_self_coverage=0.4))
+    assert result.criteria.offtarget_self_transcripts.min_coverage == 0.4
+
+
+def test_refseq_header_still_contributes(stub_index, tmp_path):
+    # A RefSeq-named target keeps the old header route, now alongside resolution.
+    path = tmp_path / "refseq.fasta"
+    path.write_text(
+        f">NM_900001.8 Homo sapiens demo transcript, mRNA\n{_IMGT_TARGET}\n",
+        encoding="ascii",
+    )
+    session = HushSession()
+    session.load_target(path)
+    result = session.design(
+        _bare_params(stub_index, resolve_offtarget_self=False)
+    )
+    assert result.criteria.offtarget_self_transcripts.declared == {"nm_900001"}
