@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="web/public/hush_logo.svg" alt="HUSH" width="420">
+</p>
+
 # HUSH
 
 **H**uman genome **U**niversal **S**ilencing **H**airpin-designer - an
@@ -61,6 +65,15 @@ python -m venv .venv
 # Windows:  .venv\Scripts\activate
 # POSIX:    source .venv/bin/activate
 pip install -e ".[dev,api]"
+```
+
+To install the exact versions HUSH was built and tested with, use the lockfile
+instead - this is what the container does, and what to use when reproducing
+results:
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pip install --no-deps -e .
 ```
 
 Pure pip, with one external dependency: **bowtie1**, used only for the
@@ -170,6 +183,44 @@ cd web && npm run dev  # GUI on :5173, proxying the API
 Interactive API docs are at `/docs`, the OpenAPI schema at `/openapi.json`. See
 [`docs/api.md`](docs/api.md) and [`web/README.md`](web/README.md).
 
+## Reproducing the results
+
+Three claims, each reproducible from a clean checkout. Install from the
+lockfile first so the versions match.
+
+**1. The rule pre-screen reproduces siDirect.** siDirect is HUSH's
+gold-standard reference; on matched settings the pre-screen reproduces its
+picks candidate-for-candidate.
+
+```bash
+python tools/compare_sidirect.py \
+  --sidirect data/testing/siDirect_PDCD1-CDS.ods \
+  --hush data/testing/pdcd1_hush_relaxed.tsv
+```
+
+**2. Allele-aware design on a real HLA target.** A GC-rich class I CDS, which
+is why the seed filter is relaxed here:
+
+```bash
+hush design data/hla_a01.fasta --no-seed -o selected.tsv
+hush convert selected.tsv -o shrna.tsv
+```
+
+Both runs print a funnel showing how many candidates clear each gate, so the
+numbers are auditable rather than asserted. Designs run without a reference
+index are labelled `UNREFERENCED RUN`; build the reference first for the
+off-target gate to participate.
+
+**3. The test suite**, including the 46-siRNA Amarzguioui Table 3
+exact-reproduction fixture:
+
+```bash
+pytest -q
+```
+
+The bowtie parity test skips when `bowtie` is absent, so run it in the
+container to exercise that path - see [`docs/development.md`](docs/development.md).
+
 ## Pipeline
 
 | Stage | Module | Status |
@@ -207,17 +258,6 @@ tests/    pytest suite
 docker/   Dockerfile and launcher wrappers
 ```
 
-## Benchmarking against siDirect
-
-siDirect is HUSH's gold-standard reference; on matched settings the rule
-pre-screen reproduces its picks candidate-for-candidate.
-
-```bash
-python tools/compare_sidirect.py \
-  --sidirect data/testing/siDirect_PDCD1-CDS.ods \
-  --hush data/testing/pdcd1_hush_relaxed.tsv
-```
-
 ## Development
 
 ```bash
@@ -227,6 +267,25 @@ cd web && npm run typecheck && npm run lint
 
 The bowtie parity test skips when `bowtie` is not on PATH. See
 [`docs/development.md`](docs/development.md).
+
+## Data, models and disclosure
+
+**No AI or machine-learning model is used.** HUSH is a deterministic,
+rule-based pipeline: every verdict comes from a published criterion or a
+thermodynamic calculation, and the same input always gives the same output. No
+model is trained, fine-tuned or called at runtime, and no commercial model API
+is contacted. An ML efficacy layer was considered and deliberately left out of
+scope; the reasoning is in [`docs/design-rules.md`](docs/design-rules.md).
+
+**No large files live in this repository.** The only bulky artefact is the
+transcriptome off-target index, which is built on the user's machine by
+`hush reference build` directly from NCBI's RefSeq FTP. It is not redistributed
+here, so the reference always matches a RefSeq release the user can name, and
+the index manifest records exactly which one.
+
+**Dependencies are pinned.** `requirements.txt`, `requirements-dev.txt` and
+`web/package-lock.json` record the exact versions used; `pyproject.toml` holds
+the supported ranges.
 
 ## License
 
