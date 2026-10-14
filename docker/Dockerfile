@@ -41,6 +41,13 @@ RUN apt-get update \
 RUN useradd --create-home --uid 10001 hush
 
 WORKDIR /app
+
+# Dependencies from the lockfile first, in their own layer: it is cached until
+# requirements.txt changes, and it pins the environment to exactly what was
+# tested rather than re-resolving ranges at build time.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY pyproject.toml README.md LICENSE ./
 COPY core/ core/
 COPY msa/ msa/
@@ -49,7 +56,7 @@ COPY service/ service/
 COPY app/ app/
 COPY api/ api/
 COPY data/ data/
-RUN pip install --no-cache-dir ".[api]"
+RUN pip install --no-cache-dir --no-deps .
 
 COPY --from=web /web/dist /app/web
 

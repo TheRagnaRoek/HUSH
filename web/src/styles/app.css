@@ -72,12 +72,12 @@ a {
   gap: 11px;
   min-width: 0;
 }
+/* The wordmark is a fixed-height image; its own colours carry both themes,
+   so it is not tinted. */
 .brand .logo {
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 23px;
-  letter-spacing: 0.01em;
-  color: var(--brand);
+  display: block;
+  height: 32px;
+  width: auto;
 }
 .brand .sep {
   color: var(--grey);
@@ -124,6 +124,10 @@ a {
   height: 7px;
   border-radius: 50%;
   background: var(--good);
+}
+/* No engine reachable: the app is on sample data, not live results. */
+.status .dot.off {
+  background: var(--grey);
 }
 
 /* workflow rail */

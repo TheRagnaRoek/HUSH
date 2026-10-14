@@ -1,0 +1,66 @@
+# CI for the iGEM GitLab copy, mirroring .github/workflows/ci.yml.
+#
+# The GitHub repository is where development happens; this keeps the iGEM-hosted
+# repository a live copy with visible checks rather than a dead mirror.
+
+stages:
+  - test
+  - build
+
+default:
+  interruptible: true
+
+python:
+  stage: test
+  image: python:3.12-slim-bookworm
+  before_script:
+    # bowtie1 so the off-target parity test runs instead of skipping itself.
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends bowtie git
+    - pip install --quiet -r requirements.txt -r requirements-dev.txt
+    - pip install --quiet --no-deps .
+  script:
+    - python -m pytest -q
+  cache:
+    key:
+      files:
+        - requirements.txt
+        - requirements-dev.txt
+    paths:
+      - .cache/pip
+
+web:
+  stage: test
+  image: node:22-alpine
+  before_script:
+    - cd web
+    - npm ci
+  script:
+    - npm run typecheck
+    - npm run lint
+    - npm run build
+  cache:
+    key:
+      files:
+        - web/package-lock.json
+    paths:
+      - web/node_modules
+
+# The Dockerfile is a shipped artefact: if it stops building, the distribution
+# is broken. This needs a runner with Docker-in-Docker, which not every GitLab
+# instance provides, so it is allowed to fail rather than blocking the pipeline.
+image-build:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  allow_failure: true
+  script:
+    - docker build -f docker/Dockerfile -t hush:ci .
+    - docker run --rm hush:ci hush --help
+    - docker run --rm hush:ci bowtie --version
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
