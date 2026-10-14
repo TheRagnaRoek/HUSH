@@ -56,7 +56,7 @@ export interface SessionValue {
   busy: boolean;
   error: string | null;
 
-  runDesign: () => Promise<void>;
+  runDesign: (override?: Partial<DesignParams>) => Promise<void>;
   runConvert: () => Promise<void>;
 }
 

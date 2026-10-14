@@ -101,35 +101,41 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return res.id;
   }, [targetFasta, panelFasta]);
 
-  const runDesign = useCallback(async () => {
-    setError(null);
-    if (!targetFasta.trim()) {
-      // No input provided: stay on the representative sample.
-      setDesign(sampleDesign);
-      setSelectedRegion(sampleDesign.selected[0]?.region ?? null);
-      setOffline(true);
-      setStep("candidates");
-      return;
-    }
-    setBusy(true);
-    try {
-      const id = await ensureSession();
-      const res = await sessionDesign(id, params);
-      setDesign(res);
-      setSelectedRegion(res.selected[0]?.region ?? null);
-      setConvert(null);
-      setOffline(false);
-      setStep("candidates");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setDesign(sampleDesign);
-      setSelectedRegion(sampleDesign.selected[0]?.region ?? null);
-      setOffline(true);
-      setStep("candidates");
-    } finally {
-      setBusy(false);
-    }
-  }, [targetFasta, ensureSession, params]);
+  const runDesign = useCallback(
+    async (override?: Partial<DesignParams>) => {
+      setError(null);
+      // Applied here as well as sent, so the criteria step reflects what ran.
+      const effective = override ? { ...params, ...override } : params;
+      if (override) setParams(effective);
+      if (!targetFasta.trim()) {
+        // No input provided: stay on the representative sample.
+        setDesign(sampleDesign);
+        setSelectedRegion(sampleDesign.selected[0]?.region ?? null);
+        setOffline(true);
+        setStep("candidates");
+        return;
+      }
+      setBusy(true);
+      try {
+        const id = await ensureSession();
+        const res = await sessionDesign(id, effective);
+        setDesign(res);
+        setSelectedRegion(res.selected[0]?.region ?? null);
+        setConvert(null);
+        setOffline(false);
+        setStep("candidates");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setDesign(sampleDesign);
+        setSelectedRegion(sampleDesign.selected[0]?.region ?? null);
+        setOffline(true);
+        setStep("candidates");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [targetFasta, ensureSession, params],
+  );
 
   const runConvert = useCallback(async () => {
     setError(null);
