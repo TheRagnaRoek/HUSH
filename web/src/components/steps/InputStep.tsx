@@ -76,7 +76,9 @@ export function InputStep() {
             <dt>Molecule</dt>
             <dd>{moltype}</dd>
             <dt>Length</dt>
-            <dd className="num">{length != null ? `${length} nt` : "-"}</dd>
+            <dd className="num">
+              {length != null ? `${length} ${moltype === "protein" ? "aa" : "nt"}` : "-"}
+            </dd>
             <dt>GC content</dt>
             <dd className="num">{gc != null ? `${gc}%` : "-"}</dd>
             <dt>Panel</dt>

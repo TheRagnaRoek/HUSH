@@ -115,6 +115,15 @@ export function validateFasta(text: string, kind: "target" | "panel"): FastaSumm
 
   const first = records[0];
   const moltype = classify(first?.seq ?? "");
+  if (moltype === "protein") {
+    // The engine rejects this too, but only once a design is run - by which
+    // point the user has been through targeting and criteria for nothing.
+    errors.push(
+      kind === "target"
+        ? "This looks like a protein sequence. Design needs the coding transcript, so resolve it to its mRNA/CDS first."
+        : "Panel members must be nucleotide sequences; this looks like protein.",
+    );
+  }
   return {
     ok: errors.length === 0,
     records,
