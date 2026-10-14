@@ -2,7 +2,22 @@ import { CandidateList } from "../candidates/CandidateList";
 import { Funnel } from "../candidates/Funnel";
 import { ConstructViewer } from "../viewer/ConstructViewer";
 import { terminatorString } from "../../lib/loops";
+import { RELAXED_HLA_PATCH } from "../../lib/params";
 import { useSession } from "../../session/useSession";
+
+/** The gate fewest candidates cleared: the one to loosen first.
+ *
+ * Funnel counts are per-gate and independent, not cumulative, so the
+ * smallest is the narrowest gate. 'selected' is the outcome, not a gate.
+ */
+function narrowestGate(
+  funnel: Record<string, number>,
+): { name: string; passed: number } | null {
+  const gates = Object.entries(funnel).filter(([name]) => name !== "selected");
+  if (gates.length === 0) return null;
+  const [name, passed] = gates.reduce((a, b) => (b[1] < a[1] ? b : a));
+  return { name, passed };
+}
 
 export function CandidatesStep() {
   const {
@@ -16,12 +31,22 @@ export function CandidatesStep() {
     offline,
     error,
     setStep,
+    params,
+    runDesign,
+    busy,
   } = useSession();
 
   if (!design) return null;
   const rank = design.selected.findIndex((c) => c.region === selectedRegion) + 1;
   const targetId = inspect?.target.id ?? design.target.id;
   const terminator = terminatorString(convert?.terminator_length);
+  // Only worth nudging about a real run: the sample always has candidates,
+  // and after a failed call the error banner is the thing to read. Hidden while
+  // busy because applying the preset flips params before the re-run returns,
+  // which would otherwise swap the button for advice to go and do it manually.
+  const emptyRun = !offline && !error && !busy && design.selected.length === 0;
+  const narrowest = emptyRun ? narrowestGate(design.funnel) : null;
+  const seedIsOn = params.use_seed_filter;
 
   return (
     <div className="workspace">
@@ -34,9 +59,59 @@ export function CandidatesStep() {
         </p>
       </div>
 
-      {error && <div className="banner err">API error: {error}. Showing sample data.</div>}
+      {error && (
+        <div className="banner err">
+          Your design did not run: {error} The results below are representative
+          sample data, not your target.
+        </div>
+      )}
       {offline && !error && (
-        <div className="banner">Showing representative sample data - no backend connected.</div>
+        <div className="banner">
+          Representative sample data. Load a target in step 1 and run a design to
+          see your own results.
+        </div>
+      )}
+
+      {emptyRun && (
+        <div className="callout warn">
+          <span className="ic">{"\u26A0"}</span>
+          <span>
+            <b>No candidate cleared every gate.</b>
+            {narrowest && (
+              <>
+                {" "}The narrowest was <b>{narrowest.name}</b>, which{" "}
+                {narrowest.passed} of {design.candidate_count} passed.
+              </>
+            )}
+            {seedIsOn ? (
+              <>
+                {" "}The seed filter is the siDirect standard but deliberately
+                strict - on a GC-rich target it can reject everything.
+                <br />
+                <button
+                  type="button"
+                  className="mini-btn"
+                  disabled={busy}
+                  onClick={() => void runDesign(RELAXED_HLA_PATCH)}
+                >
+                  {busy ? "Running..." : "Apply the relaxed preset and re-run"}
+                </button>
+              </>
+            ) : (
+              <>
+                {" "}Loosen it in{" "}
+                <button
+                  type="button"
+                  className="linkbtn"
+                  onClick={() => setStep("criteria")}
+                >
+                  step 3
+                </button>{" "}
+                and run again.
+              </>
+            )}
+          </span>
+        </div>
       )}
 
       <div className="split">

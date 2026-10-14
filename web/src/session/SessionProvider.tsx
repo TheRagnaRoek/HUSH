@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createSession,
   inspect as apiInspect,
@@ -56,6 +56,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const sessionId = useRef<string | null>(null);
 
+  // Keep the inspect summary in step with the typed inputs. The targeting
+  // step reads its panel members from here, so a stale inspect offers
+  // allele ids that are not in the user's panel. Debounced because the
+  // textareas report every keystroke.
+  useEffect(() => {
+    if (!targetFasta.trim()) {
+      setInspect(sampleInspect);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      apiInspect({
+        target_fasta: targetFasta,
+        panel_fasta: panelFasta.trim() ? panelFasta : null,
+      })
+        .then((res) => {
+          if (!cancelled) setInspect(res);
+        })
+        .catch(() => {
+          // Better to show nothing than someone else's panel.
+          if (!cancelled) setInspect(null);
+        });
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [targetFasta, panelFasta]);
+
   const ensureSession = useCallback(async (): Promise<string> => {
     if (sessionId.current) return sessionId.current;
     const res = await createSession({
@@ -72,35 +101,41 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return res.id;
   }, [targetFasta, panelFasta]);
 
-  const runDesign = useCallback(async () => {
-    setError(null);
-    if (!targetFasta.trim()) {
-      // No input provided: stay on the representative sample.
-      setDesign(sampleDesign);
-      setSelectedRegion(sampleDesign.selected[0]?.region ?? null);
-      setOffline(true);
-      setStep("candidates");
-      return;
-    }
-    setBusy(true);
-    try {
-      const id = await ensureSession();
-      const res = await sessionDesign(id, params);
-      setDesign(res);
-      setSelectedRegion(res.selected[0]?.region ?? null);
-      setConvert(null);
-      setOffline(false);
-      setStep("candidates");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setDesign(sampleDesign);
-      setSelectedRegion(sampleDesign.selected[0]?.region ?? null);
-      setOffline(true);
-      setStep("candidates");
-    } finally {
-      setBusy(false);
-    }
-  }, [targetFasta, ensureSession, params]);
+  const runDesign = useCallback(
+    async (override?: Partial<DesignParams>) => {
+      setError(null);
+      // Applied here as well as sent, so the criteria step reflects what ran.
+      const effective = override ? { ...params, ...override } : params;
+      if (override) setParams(effective);
+      if (!targetFasta.trim()) {
+        // No input provided: stay on the representative sample.
+        setDesign(sampleDesign);
+        setSelectedRegion(sampleDesign.selected[0]?.region ?? null);
+        setOffline(true);
+        setStep("candidates");
+        return;
+      }
+      setBusy(true);
+      try {
+        const id = await ensureSession();
+        const res = await sessionDesign(id, effective);
+        setDesign(res);
+        setSelectedRegion(res.selected[0]?.region ?? null);
+        setConvert(null);
+        setOffline(false);
+        setStep("candidates");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setDesign(sampleDesign);
+        setSelectedRegion(sampleDesign.selected[0]?.region ?? null);
+        setOffline(true);
+        setStep("candidates");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [targetFasta, ensureSession, params],
+  );
 
   const runConvert = useCallback(async () => {
     setError(null);
