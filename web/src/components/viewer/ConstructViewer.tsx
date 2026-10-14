@@ -102,36 +102,16 @@ export function ConstructViewer({
                 guideOverhang={construct.guide_overhang}
                 terminator={terminator}
               />
-              <div className="buildgrid">
-                <div>
-                  <div className="subhead">Fold</div>
-                  {construct.fold_structure ? (
-                    <>
-                      <div className="dotbracket num" title="Dot-bracket notation">
-                        {construct.fold_structure}
-                      </div>
-                      <p className="hint">
-                        Dot-bracket over the hairpin body: {construct.loop_seq.length}
-                        -nt loop closed by a{" "}
-                        {(construct.fold_structure.match(/\(/g) ?? []).length}-bp stem.
-                        Paste it into any RNA structure viewer.
-                      </p>
-                    </>
-                  ) : (
-                    <p className="hint">This construct folds into no stable hairpin.</p>
-                  )}
-                </div>
-                <div>
-                  <div className="subhead">Fold QC</div>
-                  <QcChips construct={construct} />
-                  {!construct.starts_with_purine && (
-                    <p className="hint" style={{ marginTop: 10 }}>
-                      Not initiating on A or G - a human U6 or 7SK promoter starts most
-                      efficiently on a purine at position 1, so prefer a candidate
-                      starting with A or G.
-                    </p>
-                  )}
-                </div>
+              <div className="buildblock">
+                <div className="subhead">Fold QC</div>
+                <QcChips construct={construct} />
+                {!construct.starts_with_purine && (
+                  <p className="hint" style={{ marginTop: 10 }}>
+                    Not initiating on A or G - a human U6 or 7SK promoter starts most
+                    efficiently on a purine at position 1, so prefer a candidate
+                    starting with A or G.
+                  </p>
+                )}
               </div>
               <div className="divider" />
               <div className="subhead">
