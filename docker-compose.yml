@@ -9,7 +9,7 @@
 services:
   # The GUI and API on one port. Open http://localhost:8000 once it is up.
   hush:
-    image: ${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:latest}
+    image: ${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:1.0.0}
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -24,7 +24,7 @@ services:
   # One-shot reference build: fetch the RefSeq human transcriptome and run
   # bowtie-build into the shared volume. Several GB, and needs a network.
   reference-build:
-    image: ${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:latest}
+    image: ${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:1.0.0}
     build:
       context: .
       dockerfile: docker/Dockerfile
