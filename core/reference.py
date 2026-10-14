@@ -149,6 +149,20 @@ def build_index(
 
     outdir = Path(outdir) if outdir is not None else reference_dir()
     outdir.mkdir(parents=True, exist_ok=True)
+    if not os.access(outdir, os.W_OK):
+        # A volume created by an older image carries that image's uid, which the
+        # current one is not. Reading the index still works, so this only bites
+        # on a rebuild - and it bites as a bare EACCES partway through.
+        uid = getattr(os, "geteuid", lambda: None)()
+        who = f" (uid {uid})" if uid is not None else ""
+        raise ReferenceBuildError(
+            f"{outdir} is not writable by this user{who}. A reference volume "
+            "created by an older HUSH image is owned by a different uid. Take "
+            "ownership of it once:\n"
+            "  docker run --rm --user root -v <volume>:/data/reference <image> "
+            "chown -R 10001:10001 /data/reference\n"
+            "or point --outdir at a fresh volume."
+        )
     workdir = outdir / "_download"
     workdir.mkdir(exist_ok=True)
     fasta = outdir / f"{index_name}.fasta"
