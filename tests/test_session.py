@@ -15,6 +15,7 @@ from core.sequence import MolType
 from msa.targeting import TargetingMode
 from service import AlleleTargetingSpec, DesignParams, HushSession
 from service.results import ConvertResult, DesignResult, InspectResult
+from shrna.convert import ShrnaOptions
 from service.session import sort_selection
 
 _ALLELE_1 = "HLA-DEMO*01:01"  # a member id in hla_panel_example.fasta
@@ -293,8 +294,13 @@ def test_convert_uses_last_design_selection(demo_lowgc_fasta):
     result = session.design()
     converted = session.convert()
     assert isinstance(converted, ConvertResult)
-    assert len(converted.constructs) == len(result.selected)
+    # Every selected candidate is accounted for: converted, or withheld by a
+    # conversion filter. Nothing disappears between the two stages.
+    assert converted.total_converted == len(result.selected)
+    assert len(converted.constructs) + len(converted.dropped) == len(result.selected)
     assert all(c.hairpin_rna.moltype is MolType.RNA for c in converted.constructs)
+    assert all(c.premature_terminator_free for c in converted.constructs)
+    assert not any(c.premature_terminator_free for c in converted.dropped)
 
 
 def test_convert_without_design_raises(target_fasta):
@@ -302,3 +308,55 @@ def test_convert_without_design_raises(target_fasta):
     session.load_target(target_fasta)
     with pytest.raises(HushError):
         session.convert()
+
+
+# --------------------------------------------------------------------------- #
+# conversion filters
+# --------------------------------------------------------------------------- #
+
+
+def test_convert_withholds_premature_terminators_by_default(demo_lowgc_fasta):
+    session = HushSession()
+    session.load_target(demo_lowgc_fasta)
+    session.design()
+    filtered = session.convert()
+    kept = session.convert(ShrnaOptions(drop_premature_terminators=False))
+    # Opting out returns everything; the default is a strict subset of it.
+    assert not kept.dropped
+    assert len(kept.constructs) == filtered.total_converted
+    assert len(filtered.constructs) < len(kept.constructs)
+    assert all(c.premature_terminator_free for c in filtered.constructs)
+    assert not any(c.premature_terminator_free for c in filtered.dropped)
+
+
+def test_apply_convert_filters_is_a_partition():
+    options = ShrnaOptions()
+    constructs = [
+        SimpleNamespace(premature_terminator_free=True),
+        SimpleNamespace(premature_terminator_free=False),
+        SimpleNamespace(premature_terminator_free=True),
+    ]
+    result = session_mod.apply_convert_filters(constructs, options)
+    assert len(result.constructs) == 2
+    assert len(result.dropped) == 1
+    assert result.total_converted == 3
+
+
+# --------------------------------------------------------------------------- #
+# sort_selection guards
+# --------------------------------------------------------------------------- #
+
+
+def test_unknown_sort_mode_is_rejected(demo_lowgc_fasta):
+    session = HushSession()
+    session.load_target(demo_lowgc_fasta)
+    with pytest.raises(ValueError):
+        session.design(DesignParams(sort="nonesuch"))
+
+
+def test_discrimination_sort_without_a_panel_is_rejected(demo_lowgc_fasta):
+    # Nothing is spared without a panel, so there is no discrimination to rank.
+    session = HushSession()
+    session.load_target(demo_lowgc_fasta)
+    with pytest.raises(ValueError):
+        session.design(DesignParams(sort="discrimination"))

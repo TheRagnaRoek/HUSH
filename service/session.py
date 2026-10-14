@@ -28,7 +28,7 @@ from msa.align_star import align_star
 from msa.targeting import AlleleTargeting
 from msa.variation import PanelVariation
 from msa.windows import WindowCriteria, evaluate_windows
-from shrna.convert import ShrnaOptions, convert_candidate
+from shrna.convert import ShrnaConstruct, ShrnaOptions, convert_candidate
 
 from service.params import AlleleTargetingSpec, DesignParams
 from service.results import ConvertResult, DesignResult, InspectResult
@@ -126,6 +126,24 @@ def sort_selection(selected, sort, window_by_pos, targeting):
             -e.candidate.position,
         ),
         reverse=True,
+    )
+
+
+def apply_convert_filters(
+    constructs: list[ShrnaConstruct], options: ShrnaOptions
+) -> ConvertResult:
+    """Apply the conversion filters and package the result.
+
+    Shared by the session and the one-shot CLI so both withhold the same
+    constructs. Withheld constructs ride along on the result.
+    """
+    dropped: list[ShrnaConstruct] = []
+    if options.drop_premature_terminators:
+        kept = [c for c in constructs if c.premature_terminator_free]
+        dropped = [c for c in constructs if not c.premature_terminator_free]
+        constructs = kept
+    return ConvertResult(
+        constructs=constructs, options=options, dropped=dropped
     )
 
 
@@ -335,7 +353,11 @@ class HushSession:
 
         With no candidates given, the selected candidates of the most recent
         design run are used, so a session can design then convert without a TSV
-        round-trip. The 19-bp core is preserved unchanged.
+        round-trip. Each candidate's full strands are carried over, core plus
+        3' overhang, so the hairpin expresses the guide that was validated.
+
+        Constructs the conversion filters withhold are returned on the result
+        rather than discarded; ordering is inherited from the design run.
         """
         options = options or ShrnaOptions()
         if candidates is None:
@@ -345,4 +367,4 @@ class HushSession:
                 )
             candidates = [e.candidate for e in self._last_design.selected]
         constructs = [convert_candidate(c, options) for c in candidates]
-        return ConvertResult(constructs=constructs, options=options)
+        return apply_convert_filters(constructs, options)

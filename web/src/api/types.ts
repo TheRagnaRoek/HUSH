@@ -201,6 +201,8 @@ export interface ConstructResult {
   starts_with_purine: boolean;
   premature_terminator_free: boolean;
   max_homopolymer_run: number;
+  sense_overhang: string;
+  guide_overhang: string;
 }
 
 export interface ConvertResponse {
@@ -208,9 +210,12 @@ export interface ConvertResponse {
   loop_seq: string;
   terminator_length?: number | null;
   construct_count: number;
+  converted_count: number;
+  withheld_count: number;
   fold_ok_count: number;
   purine_start_count: number;
   constructs: ConstructResult[];
+  withheld: ConstructResult[];
 }
 
 export interface SessionResponse {

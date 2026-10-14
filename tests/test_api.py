@@ -211,7 +211,12 @@ def test_session_lifecycle(client, demo_target):
     assert client.get(f"/sessions/{sid}").json()["has_last_design"] is True
     converted = client.post(f"/sessions/{sid}/convert", json={"loop": "jensen"})
     assert converted.status_code == 200
-    assert converted.json()["construct_count"] == len(designed.json()["selected"])
+    body = converted.json()
+    # Conversion accounts for every selected candidate, kept or withheld.
+    assert body["converted_count"] == len(designed.json()["selected"])
+    assert body["construct_count"] + body["withheld_count"] == body["converted_count"]
+    assert len(body["constructs"]) == body["construct_count"]
+    assert len(body["withheld"]) == body["withheld_count"]
 
     assert client.delete(f"/sessions/{sid}").status_code == 204
     assert client.get(f"/sessions/{sid}").status_code == 404
