@@ -1,7 +1,7 @@
 /**
  * Gate catalogue for the criteria step. Each gate maps to fields on DesignParams
  * (api/types.ts); GateRow renders a toggle + controls bound to those fields.
- * Help text is distilled from docs/design_options.md.
+ * Help text is distilled from docs/cli.md.
  */
 import type { DesignParams } from "../../api/types";
 

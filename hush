@@ -1,6 +1,0 @@
-#!/usr/bin/env sh
-# HUSH launcher (POSIX) - runs the CLI from the project's venv without needing
-# to activate it. Works from any working directory: the script resolves its own
-# folder (the repo root), where .venv lives.
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$here/.venv/bin/hush" "$@"

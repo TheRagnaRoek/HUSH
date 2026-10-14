@@ -239,7 +239,7 @@ class DiscriminationResult(BaseModel):
     The rank rests on this one mismatch. all_guide_positions carries every
     difference to that allele in ranking order, so a client can show the whole
     set: placement and number are reported side by side and never combined (see
-    docs/msa_ranking_note.md).
+    docs/design-rules.md).
     """
 
     guide_position: int

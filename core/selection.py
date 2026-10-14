@@ -19,7 +19,7 @@ the rules. The standalone GC filter is separate from Reynolds' internal GC
 criterion (fixed at the published 30-52%). Nothing is ranked: selected candidates
 are returned in target-position order.
 
-Rationale in docs/design_notes.md (selection section).
+Rationale in docs/design-rules.md.
 """
 
 from __future__ import annotations

@@ -30,7 +30,7 @@ Scope and deferrals:
 * The scoring parameters are project defaults, not published constants. They are
   exposed so a caller can state them explicitly rather than inherit them.
 
-Rationale and the validation record belong in docs/design_notes.md once this
+Rationale and the validation record belong in docs/design-rules.md once this
 unit is reviewed.
 """
 

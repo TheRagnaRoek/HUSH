@@ -9,9 +9,9 @@ so no odfpy/pandas dependency is needed.
 Usage:
     python tools/compare_sidirect.py --sidirect results.ods --hush hush.tsv
 
-Note: HUSH-only candidates are expected until the transcriptome off-target
-filter lands (see the WIP note printed with the diff); siDirect drops candidates
-with near-perfect off-targets, which HUSH cannot yet detect.
+Note: run HUSH with its transcriptome off-target check active for a like-for-
+like diff. Without a reference, HUSH keeps candidates siDirect drops for having
+near-perfect off-targets, so the HUSH-only list will be longer than it should be.
 """
 
 from __future__ import annotations
@@ -165,9 +165,9 @@ def diff(sidirect: dict, hush: dict) -> int:
                   "on-target/rule differences,\n        not missing off-target "
                   "detection; investigate any remainder.")
         else:
-            print("  NOTE: expected while the transcriptome off-target filter is off; "
-                  "run with\n        hush design --offtarget to drop near-perfect-"
-                  "off-target candidates.")
+            print("  NOTE: expected when HUSH ran unreferenced; build the "
+                  "reference with\n        hush reference build, then re-run "
+                  "the design to drop near-perfect-off-target candidates.")
 
     print(f"\n== siDirect-ONLY (HUSH missed) : {len(sid_only)} ==")
     for g in sid_only:

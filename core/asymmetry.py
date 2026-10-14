@@ -17,7 +17,7 @@ IS DEFINED - the module returns a measured quantity and its sign, since turning
 kcal/mol into a cut-off needs efficacy data HUSH does not have.
 
 Primary source: Khvorova et al. 2003; Schwarz et al. 2003. Rationale, the
-stacking_terms choice, and the proxy-agreement check are in docs/design_notes.md
+stacking_terms choice, and the proxy-agreement check are in docs/design-rules.md
 (asymmetry section).
 """
 

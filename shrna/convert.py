@@ -14,7 +14,7 @@ hairpin is folded (core.hairpin) to confirm it forms the intended stem-loop
 rather than a competing structure, and a few legible QC flags (Pol III 5'-A/G
 initiation, loop terminator-safety, homopolymer runs) are attached.
 
-Rationale and references in docs/shrna_design_note.md.
+Rationale and references in docs/shrna-conversion.md.
 """
 
 from __future__ import annotations

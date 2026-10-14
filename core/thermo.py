@@ -18,7 +18,7 @@ the caller picks. Watson-Crick pairs only, 1 M NaCl, no salt correction.
 
 Primary source: Xia et al. 1998. Model, the two-parameter-set rationale, the
 symmetry-derivation of the tables, and the Biopython cross-check are in
-docs/design_notes.md (thermo section).
+docs/design-rules.md.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ _RNA_COMPLEMENT = {"A": "U", "U": "A", "G": "C", "C": "G"}
 # Keyed by the top-strand 5'->3' dinucleotide (the partner is implied by WC
 # pairing). Only these 10 steps are independent; _expand_by_symmetry derives the
 # other 6 by reverse-complement, so no value is typed twice. Values are
-# (dH kcal/mol, dS cal/mol/K), 1 M NaCl. See docs/design_notes.md (thermo).
+# (dH kcal/mol, dS cal/mol/K), 1 M NaCl. See docs/design-rules.md.
 
 _XIA_1998_PUBLISHED: dict[str, tuple[float, float]] = {
     "AA": (-6.82, -19.0),   # AA/UU

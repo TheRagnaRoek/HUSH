@@ -583,7 +583,7 @@ def _print_table(
         typer.secho(
             "  Rows are ranked on the leading mismatch only. minDiff and the '+' "
             "positions are reported, never weighed against placement - no source "
-            "measures that trade-off (docs/msa_ranking_note.md).",
+            "measures that trade-off (docs/design-rules.md).",
             fg=typer.colors.BRIGHT_BLACK,
         )
         typer.secho(

@@ -33,7 +33,7 @@ What this module deliberately does NOT do:
   differences outweigh one well-placed difference. Any threshold would assert
   something the literature does not support. The count is reported next to the
   ranking (MULTI_MISMATCH, WindowEvaluation.min_spare_mismatches) and left to
-  the user; see docs/msa_ranking_note.md for the full argument.
+  the user; see docs/design-rules.md for the full argument.
 * It does not claim a highly ranked candidate will be silent on the spared
   allele. Du found 73% of singly mismatched targets still significantly
   silenced: a difference is necessary for discrimination, not sufficient.
@@ -197,7 +197,7 @@ LOW_TOLERANCE_WINDOW = DU_LOW_TOLERANCE | frozenset({16})
 # This is NOT a ranking criterion and must not become one without a source. All
 # three papers measure single mismatches; none of them weighs several poorly
 # placed differences against one well-placed difference. See the module
-# docstring and docs/msa_ranking_note.md.
+# docstring and docs/design-rules.md.
 MULTI_MISMATCH = 2
 
 
