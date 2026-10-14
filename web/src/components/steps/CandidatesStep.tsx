@@ -34,9 +34,17 @@ export function CandidatesStep() {
         </p>
       </div>
 
-      {error && <div className="banner err">API error: {error}. Showing sample data.</div>}
+      {error && (
+        <div className="banner err">
+          Your design did not run: {error} The results below are representative
+          sample data, not your target.
+        </div>
+      )}
       {offline && !error && (
-        <div className="banner">Showing representative sample data - no backend connected.</div>
+        <div className="banner">
+          Representative sample data. Load a target in step 1 and run a design to
+          see your own results.
+        </div>
       )}
 
       <div className="split">

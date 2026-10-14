@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createSession,
   inspect as apiInspect,
@@ -55,6 +55,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sessionId = useRef<string | null>(null);
+
+  // Keep the inspect summary in step with the typed inputs. The targeting
+  // step reads its panel members from here, so a stale inspect offers
+  // allele ids that are not in the user's panel. Debounced because the
+  // textareas report every keystroke.
+  useEffect(() => {
+    if (!targetFasta.trim()) {
+      setInspect(sampleInspect);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      apiInspect({
+        target_fasta: targetFasta,
+        panel_fasta: panelFasta.trim() ? panelFasta : null,
+      })
+        .then((res) => {
+          if (!cancelled) setInspect(res);
+        })
+        .catch(() => {
+          // Better to show nothing than someone else's panel.
+          if (!cancelled) setInspect(null);
+        });
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [targetFasta, panelFasta]);
 
   const ensureSession = useCallback(async (): Promise<string> => {
     if (sessionId.current) return sessionId.current;

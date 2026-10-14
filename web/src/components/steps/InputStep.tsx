@@ -93,7 +93,7 @@ export function InputStep() {
           <div className="callout cyan">
             <span className="ic">{"ⓘ"}</span>
             <span>
-              <b>GC-rich target.</b> At {gc}% GC this behaves like a classic HLA case - the seed
+              <b>GC-rich target.</b> At {gc?.toFixed(1)}% GC this behaves like a classic HLA case - the seed
               filter may reject every candidate. HUSH will suggest relaxing it in the criteria step.
             </span>
           </div>

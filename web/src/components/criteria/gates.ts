@@ -75,7 +75,7 @@ export const GATES: GateDef[] = [
     id: "offtarget",
     name: "Transcriptome off-target",
     def: "on",
-    sub: "bowtie search of the reference transcriptome, served server-side",
+    sub: "bowtie search of the reference transcriptome built by 'hush reference build'",
     what: "A bowtie search of the reference transcriptome; rejects a guide whose nearest off-target has fewer than N mismatches.",
     opt: "Optimal: on, min 2 (matches siDirect on the PDCD1 benchmark).",
     control: "offtarget",
