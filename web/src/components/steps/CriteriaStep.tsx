@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { GateRow } from "../criteria/GateRow";
+import { OwnedTranscripts } from "../criteria/SelfTranscripts";
 import { GATES } from "../criteria/gates";
 import { RELAXED_HLA_PATCH } from "../../lib/params";
 import { useSession } from "../../session/useSession";
 
 export function CriteriaStep() {
-  const { setStep, runDesign, busy, params, updateParams, inspect } = useSession();
+  const { setStep, runDesign, busy, params, updateParams, inspect, design, expert } =
+    useSession();
   const [presetApplied, setPresetApplied] = useState(false);
   const gc = inspect?.target.gc_percent;
 
@@ -27,9 +29,22 @@ export function CriteriaStep() {
 
       <div>
         {GATES.map((g) => (
-          <GateRow key={g.id} gate={g} params={params} update={updateParams} />
+          <GateRow
+            key={g.id}
+            gate={g}
+            params={params}
+            update={updateParams}
+            expert={expert}
+          />
         ))}
+        {design && <OwnedTranscripts criteria={design.criteria} />}
       </div>
+      {design && (
+        <p className="hint">
+          The own-transcript set is from the last run; changing the off-target gate
+          applies to the next one.
+        </p>
+      )}
 
       <div className="divider" />
       <div className="callout warn">

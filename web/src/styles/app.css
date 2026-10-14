@@ -507,6 +507,21 @@ a {
 .callout.cyan .ic {
   color: var(--cyan-ink);
 }
+.callout.bad {
+  background: var(--bad-soft);
+  margin-bottom: 14px;
+}
+.callout.bad .ic {
+  color: var(--bad);
+}
+.callout.bad .mini-btn {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.callout.bad .mini-btn:hover {
+  background: var(--bad);
+  color: #fff;
+}
 .callout b {
   color: var(--fg);
   font-family: var(--font-title);
@@ -707,6 +722,10 @@ button.allele.hit:hover {
 .gate .ctl select {
   width: auto;
 }
+.gate .ctl input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .gate .ctl .ruleset {
   display: inline-flex;
   align-items: center;
@@ -756,6 +775,49 @@ button.allele.hit:hover {
   margin-top: 7px;
   color: var(--good);
   font-weight: 500;
+}
+
+/* step 3: the off-target gate's own-transcript set */
+.owned {
+  border-top: 1px solid var(--line);
+  padding: 14px 0 2px;
+}
+.owned-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  font-family: var(--font-lead);
+  color: var(--muted);
+}
+.owned-k {
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg);
+}
+.owned-v b {
+  color: var(--fg);
+  font-weight: 600;
+}
+.owned-v.empty {
+  color: var(--bad);
+  font-weight: 600;
+}
+.owned-list {
+  margin-top: 9px;
+  background: var(--inset);
+  border-radius: 11px;
+  padding: 12px 14px;
+}
+.owned-acc {
+  max-height: 160px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+  word-break: break-word;
 }
 
 /* step 4 split */

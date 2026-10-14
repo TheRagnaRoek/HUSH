@@ -1,5 +1,6 @@
 import { CandidateList } from "../candidates/CandidateList";
 import { Funnel } from "../candidates/Funnel";
+import { NoSelfExcludedCallout } from "../criteria/SelfTranscripts";
 import { ConstructViewer } from "../viewer/ConstructViewer";
 import { terminatorString } from "../../lib/loops";
 import { RELAXED_HLA_PATCH } from "../../lib/params";
@@ -71,6 +72,13 @@ export function CandidatesStep() {
           see your own results.
         </div>
       )}
+
+      {/* Before the empty-run advice: an unowned transcript set is the usual
+          reason a run looks like it has no good candidates. */}
+      <NoSelfExcludedCallout
+        criteria={design.criteria}
+        onOpenCriteria={() => setStep("criteria")}
+      />
 
       {emptyRun && (
         <div className="callout warn">

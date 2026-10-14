@@ -11,11 +11,13 @@ function NumberInput({
   onCommit,
   step,
   label,
+  disabled,
 }: {
   value: number;
   onCommit: (n: number) => void;
   step?: number;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <input
@@ -23,6 +25,7 @@ function NumberInput({
       step={step}
       aria-label={label}
       value={value}
+      disabled={disabled}
       onChange={(e) => {
         const n = e.target.valueAsNumber;
         if (!Number.isNaN(n)) onCommit(n);
@@ -35,10 +38,12 @@ function GateControl({
   gate,
   params,
   update,
+  expert,
 }: {
   gate: GateDef;
   params: DesignParams;
   update: Update;
+  expert: boolean;
 }) {
   switch (gate.control) {
     case "rules":
@@ -101,7 +106,10 @@ function GateControl({
           />
         </span>
       );
-    case "offtarget":
+    case "offtarget": {
+      // Own-transcript resolution is expert-only: the defaults are the measured
+      // ones, and a wizard user changing them silently breaks the gate.
+      const resolve = params.resolve_offtarget_self ?? true;
       return (
         <span className="ctl">
           min mm{" "}
@@ -110,8 +118,28 @@ function GateControl({
             onCommit={(n) => update({ offtarget_min_mismatch: Math.round(n) })}
             label="min mismatch"
           />
+          {expert && (
+            <>
+              <label className="ruleset">
+                <input
+                  type="checkbox"
+                  checked={resolve}
+                  onChange={(e) => update({ resolve_offtarget_self: e.target.checked })}
+                />{" "}
+                resolve own
+              </label>
+              <NumberInput
+                value={Math.round((params.offtarget_self_coverage ?? 0.1) * 100)}
+                onCommit={(n) => update({ offtarget_self_coverage: n / 100 })}
+                label="own transcript k-mer coverage percent"
+                disabled={!resolve}
+              />
+              % k-mers
+            </>
+          )}
         </span>
       );
+    }
     case "gc":
       return (
         <span className="ctl">
@@ -177,10 +205,12 @@ export function GateRow({
   gate,
   params,
   update,
+  expert = false,
 }: {
   gate: GateDef;
   params: DesignParams;
   update: Update;
+  expert?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -219,7 +249,7 @@ export function GateRow({
         <span className="default">{gate.def}</span>
       </div>
       <div className="right">
-        <GateControl gate={gate} params={params} update={update} />
+        <GateControl gate={gate} params={params} update={update} expert={expert} />
         <button
           type="button"
           className="why"

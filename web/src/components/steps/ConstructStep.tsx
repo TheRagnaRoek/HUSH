@@ -1,3 +1,4 @@
+import { NoSelfExcludedCallout } from "../criteria/SelfTranscripts";
 import { ConstructViewer } from "../viewer/ConstructViewer";
 import { ScaffoldOptions } from "../viewer/ScaffoldOptions";
 import { terminatorString } from "../../lib/loops";
@@ -32,6 +33,8 @@ export function ConstructStep() {
           candidates step, opened straight to the shRNA build.
         </p>
       </div>
+
+      <NoSelfExcludedCallout criteria={design.criteria} />
 
       <div className="funnel-h">Scaffold options</div>
       <ScaffoldOptions />

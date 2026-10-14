@@ -67,6 +67,24 @@ export const sampleInspect: InspectResponse = {
   },
 };
 
+/** The transcripts a default HLA-A run owns, so the off-target gate does not
+ * count them against a candidate: the five RefSeq entries for the locus itself,
+ * plus the closest class I paralogs. Trimmed to stay readable - a real run at
+ * 10% k-mer coverage resolves well over a hundred, mostly alternate-haplotype
+ * copies of the locus (docs/design-rules.md, "What the design owns"). */
+const SELF_TRANSCRIPTS = [
+  "NM_002116",
+  "NM_001242758",
+  "NR_001434",
+  "XM_041680767",
+  "XM_041680768",
+  "NM_005514",
+  "NM_002117",
+  "NM_005516",
+  "NM_018950",
+  "NM_002127",
+];
+
 export const sampleDesign: DesignResponse = {
   target: sampleInspect.target,
   length: 19,
@@ -79,6 +97,10 @@ export const sampleDesign: DesignResponse = {
     seed_filter: false,
     offtarget_filter: true,
     offtarget_min_mismatch: 2,
+    offtarget_self_accessions: SELF_TRANSCRIPTS,
+    offtarget_self_declared: 0,
+    offtarget_self_resolved: SELF_TRANSCRIPTS.length,
+    offtarget_self_coverage: 0.1,
     gc_filter: true,
     gc_min: 0.3,
     gc_max: 0.52,

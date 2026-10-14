@@ -3,8 +3,9 @@ import type { DesignParams } from "../api/types";
 /**
  * The best-practice default paradigm, matching the backend DesignParamsSchema
  * defaults (api/schemas.py): all three rule sets by union, seed + homopolymer +
- * transcriptome off-target on, GC / hairpin / asymmetry off, 19-nt natural
- * duplex. GC bounds are fractions in [0, 1], as the API expects.
+ * transcriptome off-target on, own-transcript resolution on, GC / hairpin /
+ * asymmetry off, 19-nt natural duplex. GC bounds and the own-transcript
+ * coverage are fractions in [0, 1], as the API expects.
  */
 export const DEFAULT_PARAMS: DesignParams = {
   length: 19,
@@ -20,6 +21,11 @@ export const DEFAULT_PARAMS: DesignParams = {
 
   use_offtarget_filter: true,
   offtarget_min_mismatch: 2,
+  // Nothing named by hand; homology resolves the design's own transcripts at the
+  // measured 10% k-mer coverage (docs/design-rules.md, "What the design owns").
+  offtarget_self_accessions: [],
+  resolve_offtarget_self: true,
+  offtarget_self_coverage: 0.1,
 
   use_homopolymer_filter: true,
   max_homopolymer_run: 3,

@@ -1,5 +1,6 @@
 import type { CandidateResult, CriteriaSummary } from "../../api/types";
 import { CLS, discToken } from "../../lib/disc";
+import { ownedSet } from "../criteria/ownedSet";
 
 const RULE_NAMES = ["Ui-Tei", "Reynolds", "Amarzguioui"];
 
@@ -23,6 +24,10 @@ export function ScoreReport({
   const d = weakest?.discrimination ?? candidate.allele?.discrimination ?? null;
   const gcMaxPct = (criteria.gc_max ?? 0.52) * 100;
   const gcOk = candidate.gc_percent <= gcMaxPct;
+  // An active gate that owns nothing counted the target gene against this
+  // candidate, so its mismatch verdict is not an off-target verdict.
+  const own = ownedSet(criteria);
+  const offtargetDot = offtargetSkipped ? "info" : own?.empty ? "warn" : "pass";
 
   return (
     <div className="vpane">
@@ -64,7 +69,7 @@ export function ScoreReport({
         </div>
 
         <div className="srow">
-          <span className={`vd ${offtargetSkipped ? "info" : "pass"}`} />
+          <span className={`vd ${offtargetDot}`} />
           <span className="sk">Transcriptome off-target</span>
           <span className="sv">
             {offtargetSkipped ? (
@@ -79,6 +84,20 @@ export function ScoreReport({
                     <span className="mono">{candidate.offtarget_hits.join(" / ")}</span>.
                   </>
                 )}
+                {own &&
+                  (own.empty ? (
+                    <>
+                      {" "}
+                      <b>No transcript was excluded as this design&apos;s own</b>, so the
+                      target gene itself is among those hits.
+                    </>
+                  ) : (
+                    <>
+                      {" "}
+                      Excludes <b>{own.count}</b> own transcript
+                      {own.count === 1 ? "" : "s"}.
+                    </>
+                  ))}
               </>
             )}
           </span>
