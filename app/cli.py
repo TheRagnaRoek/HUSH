@@ -1138,7 +1138,7 @@ def _write_convert_tsv(path: Path, constructs: list) -> None:
         "region\tstart\tend\tloop_name\tloop_seq\torientation\thairpin_rna_5to3\t"
         "insert_top_dna_5to3\tinsert_bottom_dna_5to3\tfolds_as_designed\t"
         "fold_dg37\tfold_tm_c\tstarts_with_purine\tpremature_terminator_free\t"
-        "max_homopolymer_run\tsense_overhang\tguide_overhang\tfold_structure"
+        "max_homopolymer_run\tsense_overhang\tguide_overhang"
     )
     lines = [header]
     for c in constructs:
@@ -1162,7 +1162,6 @@ def _write_convert_tsv(path: Path, constructs: list) -> None:
             str(c.max_homopolymer_run),
             c.sense_overhang,
             c.guide_overhang,
-            c.fold_structure,
         ]
         lines.append("\t".join(fields))
     path.write_text("\n".join(lines) + "\n", encoding="ascii")

@@ -132,27 +132,6 @@ class HairpinFold:
     dg37: float
     tm: float
 
-    def dot_bracket(self, length: int) -> str:
-        """This fold in dot-bracket notation, over a sequence of 'length' nt.
-
-        The standard way to hand a secondary structure to anything else, and
-        the only notation most RNA tools read. Unpaired everywhere except the
-        two stem arms, which is the whole topology a hairpin has.
-        """
-        end = self.stem_start + 2 * self.stem_length + len(self.loop)
-        if self.stem_start < 0 or end > length:
-            raise ValueError(
-                f"fold (stem {self.stem_length}bp at {self.stem_start}, loop "
-                f"{len(self.loop)}nt) does not fit in {length} nt."
-            )
-        pairs = ["."] * length
-        opening = self.stem_start
-        closing = self.stem_start + self.stem_length + len(self.loop)
-        for i in range(self.stem_length):
-            pairs[opening + i] = "("
-            pairs[closing + i] = ")"
-        return "".join(pairs)
-
     def __repr__(self) -> str:
         return (
             f"HairpinFold(stem={self.stem_length}bp@{self.stem_start}, "

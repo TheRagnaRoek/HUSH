@@ -274,27 +274,3 @@ def test_the_other_loops_convert_with_overhangs(loop_name):
     assert c.loop_name == loop_name
     assert LOOPS[loop_name].seq in c.hairpin_rna.seq
     assert c.insert_bottom.seq == c.insert_top.reverse_complement().seq
-
-
-def test_construct_carries_its_fold_as_dot_bracket():
-    # The notation covers the folded body only - the 3' tail is single-stranded
-    # and never enters the fold search.
-    sense, antisense = _pair(CLEAN)
-    c = convert(
-        sense, antisense, region="1-19", start=0, end=19,
-        sense_overhang="CC", guide_overhang="UU",
-    )
-    body_len = len(sense) + 2 + len(LOOPS["jensen"].seq) + len(antisense)
-    assert len(c.fold_structure) == body_len
-    assert c.fold_structure.count("(") == c.fold_structure.count(")") == len(sense)
-    assert c.hairpin_rna.seq.startswith(sense.seq)
-
-
-def test_a_construct_that_folds_into_nothing_has_no_structure():
-    sense = _sense("A" * 19)
-    c = convert(sense, sense.reverse_complement(), region="1-19", start=0, end=19)
-    if c.fold is None:
-        assert c.fold_structure == ""
-    else:
-        assert len(c.fold_structure) > 0
-

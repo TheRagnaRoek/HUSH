@@ -67,13 +67,11 @@ checks (and if you later switch to an openapi-fetch generated client). Keep
 
 ## Deferred (follow-ups, gated on backend additions)
 
-- ~~**fornac** real stem-loop fold~~ - dropped, and nothing replaces it in the
-  client. The schematic it would have replaced was a fixed drawing that never
-  varied between constructs, so it went; the segment blocks already show the
-  construct's layout, and a force-directed viewer buys little for the single
-  hairpin HUSH emits. The structure is still available as data: `fold_structure`
-  on `ConvertResponse` and in the shRNA TSV, in dot-bracket notation that pastes
-  into any RNA tool.
+- ~~**fornac** real stem-loop fold~~ - dropped, along with the schematic it
+  would have replaced. That drawing was fixed geometry that never varied
+  between constructs. The segment blocks already show the construct's layout
+  and the fold's numbers are in the QC chips, so nothing draws the structure
+  now; a force-directed viewer buys little for the single hairpin HUSH emits.
 - **Nightingale** panel-MSA + protein-position tab - needs the aligned panel
   windows surfaced. The alignment currently shows each spared allele's deciding
   mismatch (`buildAlignment`, marked `complete: false`); sample data shows the
