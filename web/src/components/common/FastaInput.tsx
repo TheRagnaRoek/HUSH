@@ -117,7 +117,7 @@ export function FastaInput({
           <div className="fstatus ok">
             {"✓"} {summary.recordCount} sequence{summary.recordCount === 1 ? "" : "s"}
             {" · "}
-            {summary.length} nt {"· "}
+            {summary.length} {summary.moltype === "protein" ? "aa" : "nt"} {"· "}
             {summary.moltype}
             {summary.gcPercent != null ? ` · ${summary.gcPercent}% GC` : ""}
             {summary.warnings.map((w) => (
