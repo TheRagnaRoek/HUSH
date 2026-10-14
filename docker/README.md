@@ -48,21 +48,6 @@ in the index's manifest. To pin an exact reference rather than the live release,
 pass `--base-url` an archived RefSeq release directory. To use a different
 reference entirely, build it yourself and point `--offtarget-db` at the prefix.
 
-## Upgrading from an older image
-
-A reference volume built by an older HUSH image is owned by that image's user,
-not this one. Designs are unaffected, because reading the index does not need
-write access, but **rebuilding the reference into that volume fails**. HUSH
-reports this up front rather than part-way through a multi-gigabyte download.
-
-Take ownership of the existing volume once:
-
-```bash
-docker run --rm --user root -v hush_hush_ref:/data/reference   ghcr.io/theragnaroek/hush:latest chown -R 10001:10001 /data/reference
-```
-
-Or simply build into a fresh volume and drop the old one once you are happy.
-
 ## The CLI
 
 The image's default command serves the GUI. Pass a command to use the CLI
