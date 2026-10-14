@@ -83,7 +83,6 @@ A convert response separates what survived from what was withheld:
 | `constructs` | Constructs that passed the conversion filters |
 | `withheld` | Constructs withheld, with their QC flags intact |
 | `construct_count` / `withheld_count` | Their sizes |
-| `fold_structure` (per construct) | The fold in dot-bracket notation over the hairpin body, or empty if it folds into nothing |
 | `converted_count` | The total built, before filtering |
 
 `construct_count + withheld_count == converted_count` always holds, so nothing
