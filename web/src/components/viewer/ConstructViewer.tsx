@@ -4,7 +4,6 @@ import { buildAlignment, type AlleleEnrichment } from "../../lib/alignment";
 import { AlignmentTrack } from "./AlignmentTrack";
 import { ConstructSchematic } from "./ConstructSchematic";
 import { DiscriminationBreakdown } from "./DiscriminationBreakdown";
-import { HairpinFold } from "./HairpinFold";
 import { OligoRow } from "./OligoRow";
 import { QcChips } from "./QcChips";
 import { ScoreReport } from "./ScoreReport";
@@ -103,19 +102,16 @@ export function ConstructViewer({
                 guideOverhang={construct.guide_overhang}
                 terminator={terminator}
               />
-              <div className="buildgrid">
-                <HairpinFold construct={construct} />
-                <div>
-                  <div className="subhead">Fold QC</div>
-                  <QcChips construct={construct} />
-                  {!construct.starts_with_purine && (
-                    <p className="hint" style={{ marginTop: 10 }}>
-                      Not initiating on A or G - a human U6 or 7SK promoter starts most
-                      efficiently on a purine at position 1, so prefer a candidate
-                      starting with A or G.
-                    </p>
-                  )}
-                </div>
+              <div className="buildblock">
+                <div className="subhead">Fold QC</div>
+                <QcChips construct={construct} />
+                {!construct.starts_with_purine && (
+                  <p className="hint" style={{ marginTop: 10 }}>
+                    Not initiating on A or G - a human U6 or 7SK promoter starts most
+                    efficiently on a purine at position 1, so prefer a candidate
+                    starting with A or G.
+                  </p>
+                )}
               </div>
               <div className="divider" />
               <div className="subhead">

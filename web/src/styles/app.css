@@ -1325,17 +1325,8 @@ button.allele.hit:hover {
   margin-bottom: 3px;
   font-weight: 600;
 }
-.buildgrid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 26px;
-  align-items: center;
+.buildblock {
   margin-bottom: 8px;
-}
-@media (max-width: 640px) {
-  .buildgrid {
-    grid-template-columns: 1fr;
-  }
 }
 .qc {
   display: flex;

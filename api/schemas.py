@@ -326,6 +326,7 @@ class ConstructResult(BaseModel):
     max_homopolymer_run: int
     sense_overhang: str
     guide_overhang: str
+    fold_structure: str
 
 
 class ConvertResponse(BaseModel):

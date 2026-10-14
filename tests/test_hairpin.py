@@ -127,3 +127,45 @@ class TestRealHlaTarget:
         # is neither all-True nor all-False here.
         assert any(verdicts)
         assert not all(verdicts)
+
+
+# --------------------------------------------------------------------------- #
+# dot-bracket notation
+# --------------------------------------------------------------------------- #
+
+
+class TestDotBracket:
+    def test_describes_the_fold_it_was_found_in(self):
+        seq = "GGGGGCCCAAAGGGCCCCC"
+        fold = most_stable_hairpin(seq)
+        assert fold is not None
+        db = fold.dot_bracket(len(seq))
+
+        assert len(db) == len(seq)
+        assert db.count("(") == db.count(")") == fold.stem_length
+        assert db.count(".") == len(seq) - 2 * fold.stem_length
+        # The unpaired run sits exactly where the loop does.
+        assert db[fold.stem_start + fold.stem_length :][: len(fold.loop)] == "." * len(fold.loop)
+
+    def test_is_balanced_when_read_left_to_right(self):
+        seq = "GGGGGCCCAAAGGGCCCCC"
+        db = most_stable_hairpin(seq).dot_bracket(len(seq))
+        depth = 0
+        for ch in db:
+            depth += 1 if ch == "(" else -1 if ch == ")" else 0
+            assert depth >= 0, "a closing bracket preceded its opening one"
+        assert depth == 0
+
+    def test_pads_a_fold_that_sits_inside_a_longer_sequence(self):
+        fold = HairpinFold(
+            stem_start=3, stem_length=4, loop="AAAA", dh=0.0, ds=0.0, dg37=0.0, tm=0.0
+        )
+        assert fold.dot_bracket(20) == "..." + "((((" + "...." + "))))" + "....."
+
+    def test_rejects_a_length_the_fold_cannot_fit_in(self):
+        fold = HairpinFold(
+            stem_start=0, stem_length=5, loop="AAAA", dh=0.0, ds=0.0, dg37=0.0, tm=0.0
+        )
+        with pytest.raises(ValueError):
+            fold.dot_bracket(13)  # needs 14
+

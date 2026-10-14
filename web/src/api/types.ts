@@ -203,6 +203,7 @@ export interface ConstructResult {
   max_homopolymer_run: number;
   sense_overhang: string;
   guide_overhang: string;
+  fold_structure: string;
 }
 
 export interface ConvertResponse {
