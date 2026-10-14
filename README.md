@@ -21,21 +21,32 @@ Interference through Disguise and Erasure).
 
 ## Quickstart
 
-The container carries everything, including the `bowtie1` binary the off-target
-check needs:
+From a clone of this repository, with nothing else installed but Docker:
 
 ```bash
-docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:latest hush reference build
-docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:latest
+docker compose run --rm reference-build   # one-time, see below
+docker compose up hush
 ```
 
-Then open <http://localhost:8000> for the web GUI. The first command is a
-one-time setup step, described next; the second serves the GUI and the HTTP API
-together on one port. For the CLI instead:
+Then open <http://localhost:8000> for the web GUI. Compose builds the image
+from this repository's own Dockerfile, so these commands depend on nothing but
+the source you already have. The container carries everything else, including
+the `bowtie1` binary the off-target check needs.
+
+A prebuilt image is published for convenience. It is pinned to an exact
+version, never a moving tag, so a given revision of this repository always
+names the image built from it:
+
+```bash
+docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0 hush reference build
+docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0
+```
+
+For the CLI rather than the GUI:
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work -v hush_ref:/data/reference \
-  ghcr.io/theragnaroek/hush:latest hush design mytarget.fasta -o selected.tsv
+  ghcr.io/theragnaroek/hush:1.0.0 hush design mytarget.fasta -o selected.tsv
 ```
 
 See [`docker/README.md`](docker/README.md) for Compose, the launcher wrappers and
@@ -242,6 +253,7 @@ container to exercise that path - see [`docs/development.md`](docs/development.m
 | [`docs/api.md`](docs/api.md) | HTTP endpoints and request/response shapes |
 | [`docs/development.md`](docs/development.md) | Tests, layout, conventions |
 | [`docker/README.md`](docker/README.md) | Running and building the container |
+| [`docs/igem-mirror.md`](docs/igem-mirror.md) | The frozen iGEM GitLab copy |
 
 ## Project layout
 

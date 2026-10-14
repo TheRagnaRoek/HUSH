@@ -11,19 +11,23 @@ Docker volume and every later run finds it automatically.
 
 ## Quickstart
 
-```bash
-docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:latest hush reference build
-docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:latest
-```
-
-Then open <http://localhost:8000>. The first command is the one-time reference
-fetch; the second serves the GUI and the API together on port 8000.
-
-With Compose, from the repository root:
+From the repository root, building from source:
 
 ```bash
 docker compose run --rm reference-build
 docker compose up hush
+```
+
+Then open <http://localhost:8000>. The first command is the one-time reference
+fetch; the second serves the GUI and the API together on port 8000. Compose
+builds from `docker/Dockerfile` when the image is not already present, so this
+needs no registry access.
+
+The same two steps against the published image, pinned to an exact version:
+
+```bash
+docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0 hush reference build
+docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0
 ```
 
 ## The reference, and why it matters
@@ -40,7 +44,7 @@ column, so an empty hit count can never be mistaken for "no off-targets found".
 Check what you have:
 
 ```bash
-docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:latest hush reference status
+docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0 hush reference status
 ```
 
 That reports the RefSeq release, the bowtie version and the build date recorded
@@ -58,7 +62,7 @@ reports this up front rather than part-way through a multi-gigabyte download.
 Take ownership of the existing volume once:
 
 ```bash
-docker run --rm --user root -v hush_hush_ref:/data/reference   ghcr.io/theragnaroek/hush:latest chown -R 10001:10001 /data/reference
+docker run --rm --user root -v hush_hush_ref:/data/reference   ghcr.io/theragnaroek/hush:1.0.0 chown -R 10001:10001 /data/reference
 ```
 
 Or simply build into a fresh volume and drop the old one once you are happy.
@@ -70,7 +74,7 @@ instead:
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work -v hush_ref:/data/reference \
-  ghcr.io/theragnaroek/hush:latest hush design mytarget.fasta -o selected.tsv
+  ghcr.io/theragnaroek/hush:1.0.0 hush design mytarget.fasta -o selected.tsv
 ```
 
 Mounting the current directory at `/work` is what lets HUSH read your real files
@@ -109,7 +113,7 @@ hush() { /path/to/HUSH/docker/hush.sh "$@"; }
 
 ```bash
 docker run --rm -it -v hush_ref:/data/reference -v "$PWD:/work" -w /work \
-  ghcr.io/theragnaroek/hush:latest bash
+  ghcr.io/theragnaroek/hush:1.0.0 bash
 ```
 
 `hush`, `bowtie` and `bowtie-build` are all on `PATH`.

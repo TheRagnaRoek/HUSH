@@ -7,7 +7,7 @@
 #   ./docker/hush.sh design mytarget.fasta
 # The reference is found automatically, so no --offtarget-db is needed.
 # Override the image or volume name with the HUSH_IMAGE / HUSH_REF_VOLUME env vars.
-image="${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:latest}"
+image="${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:1.0.0}"
 ref="${HUSH_REF_VOLUME:-hush_hush_ref}"
 
 # Attach an interactive TTY only when stdin and stdout are terminals, so

@@ -12,6 +12,7 @@ pages go deeper.
 | [api.md](api.md) | Call HUSH over HTTP |
 | [development.md](development.md) | Run the tests, or work on the code |
 | [../docker/README.md](../docker/README.md) | Run or build the container |
+| [igem-mirror.md](igem-mirror.md) | Produce the frozen iGEM GitLab copy, and why it is pinned |
 
 ## Two things worth knowing up front
 

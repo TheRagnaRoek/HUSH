@@ -8,7 +8,7 @@
 # The reference is found automatically, so no --offtarget-db is needed.
 # Override the image or volume name with the HUSH_IMAGE / HUSH_REF_VOLUME env vars.
 $ErrorActionPreference = 'Stop'
-$image = if ($env:HUSH_IMAGE) { $env:HUSH_IMAGE } else { "ghcr.io/theragnaroek/hush:latest" }
+$image = if ($env:HUSH_IMAGE) { $env:HUSH_IMAGE } else { "ghcr.io/theragnaroek/hush:1.0.0" }
 $ref   = if ($env:HUSH_REF_VOLUME) { $env:HUSH_REF_VOLUME } else { 'hush_hush_ref' }
 
 # Attach an interactive TTY only at a real console, so 'hush shell' (a REPL that
