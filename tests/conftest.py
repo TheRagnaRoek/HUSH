@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES_DIR = REPO_ROOT / "data" / "examples"
+DATA_DIR = REPO_ROOT / "data"
+EXAMPLES_DIR = DATA_DIR / "examples"
 TEST_DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
@@ -32,7 +33,7 @@ def panel_fasta() -> Path:
 @pytest.fixture
 def hla_a01_fasta() -> Path:
     """A real HLA-A*01:01 coding sequence (IPD-IMGT/HLA HLA00001)."""
-    return EXAMPLES_DIR / "hla_a01.fasta"
+    return DATA_DIR / "hla_a01.fasta"
 
 
 @pytest.fixture
