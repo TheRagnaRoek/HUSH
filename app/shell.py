@@ -125,6 +125,9 @@ def _build_convert_parser() -> _ShellArgParser:
     p.add_argument("--loop")
     p.add_argument("--terminator", action=argparse.BooleanOptionalAction)
     p.add_argument("--terminator-length", type=int)
+    p.add_argument(
+        "--drop-premature-terminators", action=argparse.BooleanOptionalAction
+    )
     return p
 
 
@@ -199,6 +202,9 @@ def apply_convert_flags(tokens: list[str]) -> ShrnaOptions:
         loop=loop,
         include_terminator=provided.get("terminator", True),
         terminator_length=provided.get("terminator_length", DEFAULT_TERMINATOR_LENGTH),
+        drop_premature_terminators=provided.get(
+            "drop_premature_terminators", True
+        ),
     )
 
 
@@ -222,7 +228,9 @@ Commands:
   assess [region]       show every spared allele's discrimination for the last design
                         (all selected, or just <region> e.g. 6-24)
   convert [flags]       convert the last design's selected candidates to shRNA
-                        (flags: --loop, --terminator/--no-terminator, --terminator-length)
+                        (flags: --loop, --terminator/--no-terminator,
+                        --terminator-length,
+                        --drop-premature-terminators/--keep-premature-terminators)
   save <dir>            write design.tsv (and shrna.tsv, if converted) into <dir>
   help                  show this help
   quit / exit           leave the shell

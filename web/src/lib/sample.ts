@@ -261,6 +261,8 @@ const CONSTRUCTS: ConstructResult[] = [
     starts_with_purine: false,
     premature_terminator_free: true,
     max_homopolymer_run: 2,
+    sense_overhang: "",
+    guide_overhang: "",
   },
   {
     region: "476-494",
@@ -278,6 +280,8 @@ const CONSTRUCTS: ConstructResult[] = [
     starts_with_purine: false,
     premature_terminator_free: true,
     max_homopolymer_run: 3,
+    sense_overhang: "",
+    guide_overhang: "",
   },
   {
     region: "478-496",
@@ -295,6 +299,8 @@ const CONSTRUCTS: ConstructResult[] = [
     starts_with_purine: true,
     premature_terminator_free: true,
     max_homopolymer_run: 3,
+    sense_overhang: "",
+    guide_overhang: "",
   },
 ];
 
@@ -305,7 +311,10 @@ export const sampleConvert: ConvertResponse = {
   construct_count: CONSTRUCTS.length,
   fold_ok_count: CONSTRUCTS.filter((c) => c.folds_as_designed).length,
   purine_start_count: CONSTRUCTS.filter((c) => c.starts_with_purine).length,
+  converted_count: CONSTRUCTS.length,
+  withheld_count: 0,
   constructs: CONSTRUCTS,
+  withheld: [],
 };
 
 export function constructForRegion(region: string): ConstructResult | undefined {

@@ -153,12 +153,14 @@ class ConvertOptionsSchema(BaseModel):
     loop: str = DEFAULT_LOOP
     include_terminator: bool = True
     terminator_length: int = DEFAULT_TERMINATOR_LENGTH
+    drop_premature_terminators: bool = True
 
     def to_domain(self) -> ShrnaOptions:
         return ShrnaOptions(
             loop=get_loop(self.loop),
             include_terminator=self.include_terminator,
             terminator_length=self.terminator_length,
+            drop_premature_terminators=self.drop_premature_terminators,
         )
 
 
@@ -322,6 +324,8 @@ class ConstructResult(BaseModel):
     starts_with_purine: bool
     premature_terminator_free: bool
     max_homopolymer_run: int
+    sense_overhang: str
+    guide_overhang: str
 
 
 class ConvertResponse(BaseModel):
@@ -331,7 +335,10 @@ class ConvertResponse(BaseModel):
     construct_count: int
     fold_ok_count: int
     purine_start_count: int
+    converted_count: int
+    withheld_count: int
     constructs: list[ConstructResult]
+    withheld: list[ConstructResult] = []
 
 
 class SessionResponse(BaseModel):

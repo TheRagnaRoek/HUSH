@@ -8,7 +8,7 @@ terminals, colours, or wire formats.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from core.selection import CandidateEvaluation, SelectionCriteria
 from core.sequence import BioSequence, DesignInput
@@ -57,7 +57,18 @@ class DesignResult:
 
 @dataclass
 class ConvertResult:
-    """The stem-loop shRNA constructs built from a set of siRNA candidates."""
+    """The stem-loop shRNA constructs built from a set of siRNA candidates.
+
+    'constructs' is what survived conversion; 'dropped' is every construct
+    withheld by a conversion filter, kept so a renderer can say what went
+    and why rather than silently returning a shorter list.
+    """
 
     constructs: list[ShrnaConstruct]
     options: ShrnaOptions
+    dropped: list[ShrnaConstruct] = field(default_factory=list)
+
+    @property
+    def total_converted(self) -> int:
+        """Constructs built, before any conversion filter."""
+        return len(self.constructs) + len(self.dropped)

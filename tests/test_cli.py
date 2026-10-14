@@ -2,7 +2,8 @@
 
 from typer.testing import CliRunner
 
-from app.cli import app
+from app.cli import _duplex_from_row, app
+from service import DesignParams, HushSession
 
 runner = CliRunner()
 
@@ -429,8 +430,11 @@ def test_convert_writes_tsv_with_expected_columns_and_rows(target_fasta, tmp_pat
     assert lines[0].startswith("region\tstart\tend\tloop_name\tloop_seq")
     assert "insert_top_dna_5to3" in lines[0]
     assert "folds_as_designed" in lines[0]
-    # One construct per selected candidate in the input TSV.
-    assert len(lines) - 1 == len(sel.read_text(encoding="ascii").splitlines()) - 1
+    assert "sense_overhang" in lines[0] and "guide_overhang" in lines[0]
+    # At most one construct per selected candidate: the terminator filter may
+    # withhold some, and the run reports how many.
+    rows_in = len(sel.read_text(encoding="ascii").splitlines()) - 1
+    assert 0 < len(lines) - 1 <= rows_in
 
 
 def test_convert_bottom_oligo_is_reverse_complement_of_top(target_fasta, tmp_path):
@@ -457,3 +461,60 @@ def test_convert_rejects_non_design_tsv(tmp_path):
     result = runner.invoke(app, ["convert", str(bad)])
     assert result.exit_code == 1
     assert "Convert error" in result.output
+
+
+def test_duplex_from_row_recovers_the_core_and_both_overhangs():
+    # The guide overhang has its own column because under the natural policy it
+    # comes from the opposite, upstream flank - it is not the passenger's
+    # reverse-complement and cannot be re-derived.
+    row = {
+        "passenger_5to3": "GCACCGUCAAGGCUGAGACAC",
+        "passenger_overhang": "AC",
+        "guide_overhang": "AA",
+    }
+    sense, antisense, sense_oh, guide_oh = _duplex_from_row(row)
+    assert sense.seq == "GCACCGUCAAGGCUGAGAC"
+    assert antisense.seq == sense.reverse_complement().seq
+    assert sense_oh == "AC"
+    assert guide_oh == "AA"
+
+
+def test_duplex_from_row_keeps_a_lowercase_dtdt_overhang():
+    row = {
+        "passenger_5to3": "GCACCGUCAAGGCUGAGACtt",
+        "passenger_overhang": "tt",
+        "guide_overhang": "tt",
+    }
+    sense, _, sense_oh, guide_oh = _duplex_from_row(row)
+    assert sense.seq == "GCACCGUCAAGGCUGAGAC"
+    assert sense_oh == "tt" and guide_oh == "tt"
+
+
+def test_convert_requires_the_guide_overhang_column(tmp_path):
+    bad = tmp_path / "old.tsv"
+    bad.write_text(
+        "region\tstart\tend\tpassenger_5to3\tpassenger_overhang\n"
+        "1-19\t1\t19\tGCACCGUCAAGGCUGAGACAC\tAC\n",
+        encoding="ascii",
+    )
+    result = runner.invoke(app, ["convert", str(bad)])
+    assert result.exit_code == 1
+    assert "guide_overhang" in result.output
+
+
+def test_convert_from_tsv_matches_the_in_session_conversion(target_fasta, tmp_path):
+    # The TSV round-trip must rebuild exactly what the session converts in
+    # memory, overhangs included, or the two frontends disagree.
+    sel = _design_tsv(target_fasta, tmp_path)
+    out = tmp_path / "shrna.tsv"
+    assert runner.invoke(app, ["convert", str(sel), "-o", str(out)]).exit_code == 0
+    lines = out.read_text(encoding="ascii").splitlines()
+    hairpin_col = lines[0].split("\t").index("hairpin_rna_5to3")
+    from_tsv = [line.split("\t")[hairpin_col] for line in lines[1:]]
+
+    session = HushSession()
+    session.load_target(target_fasta)
+    session.design(DesignParams(use_seed_filter=False, use_offtarget_filter=False))
+    in_session = [c.hairpin_rna.seq for c in session.convert().constructs]
+
+    assert from_tsv == in_session

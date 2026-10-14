@@ -41,6 +41,7 @@
   --seg-loop: #0b93a4;
   --seg-anti: #e30222;
   --seg-term: #58607a;
+  --seg-oh: #b07d5a;
   --font-ui: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-title: "Be Vietnam Pro", "DM Sans", system-ui, sans-serif;
   --font-lead: "Lato", system-ui, sans-serif;
@@ -84,6 +85,7 @@
     --seg-loop: #2bc3d6;
     --seg-anti: #f5324a;
     --seg-term: #8891a8;
+    --seg-oh: #d9a37c;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.42);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     color-scheme: dark;
@@ -123,6 +125,7 @@
   --seg-loop: #2bc3d6;
   --seg-anti: #f5324a;
   --seg-term: #8891a8;
+  --seg-oh: #d9a37c;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.42);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   color-scheme: dark;

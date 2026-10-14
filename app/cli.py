@@ -50,7 +50,7 @@ from app.parsing import (
 )
 from service.params import AlleleTargetingSpec, DesignParams
 from service.results import ConvertResult, DesignResult
-from service.session import HushSession
+from service.session import HushSession, apply_convert_filters
 from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions, convert
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold, get_loop
 
@@ -1017,7 +1017,14 @@ def _parse_loop(spec: str) -> LoopScaffold:
 
 
 # Columns the converter needs from a 'hush design' TSV to rebuild the core.
-_DESIGN_TSV_REQUIRED = {"region", "start", "end", "passenger_5to3", "passenger_overhang"}
+_DESIGN_TSV_REQUIRED = {
+    "region",
+    "start",
+    "end",
+    "passenger_5to3",
+    "passenger_overhang",
+    "guide_overhang",
+}
 
 
 def _read_design_tsv(path: Path) -> list[dict[str, str]]:
@@ -1042,18 +1049,28 @@ def _read_design_tsv(path: Path) -> list[dict[str, str]]:
     return rows
 
 
-def _core_from_row(row: dict[str, str]) -> tuple[BioSequence, BioSequence]:
-    """Rebuild the (sense, antisense) duplex core from one design-TSV row.
+def _duplex_from_row(
+    row: dict[str, str],
+) -> tuple[BioSequence, BioSequence, str, str]:
+    """Rebuild the duplex core and both 3' overhangs from a design-TSV row.
 
     The passenger strand as ordered is the core plus its 3' overhang; stripping
     the recorded overhang leaves the paired core (the mRNA-matching sense
-    strand), and the guide is its reverse-complement.
+    strand), and the guide core is its reverse-complement. Both overhangs are
+    read from their own columns: under the natural policy the guide overhang
+    comes from the opposite, upstream flank, so it is not the passenger's
+    reverse-complement and cannot be re-derived.
     """
     passenger_full = row["passenger_5to3"]
-    overhang = row["passenger_overhang"]
-    core_str = passenger_full[: len(passenger_full) - len(overhang)] if overhang else passenger_full
+    sense_overhang = row["passenger_overhang"]
+    guide_overhang = row["guide_overhang"]
+    core_str = (
+        passenger_full[: len(passenger_full) - len(sense_overhang)]
+        if sense_overhang
+        else passenger_full
+    )
     sense = BioSequence(core_str, moltype=MolType.RNA)
-    return sense, sense.reverse_complement()
+    return sense, sense.reverse_complement(), sense_overhang, guide_overhang
 
 
 def _print_convert_table(constructs: list, options: ShrnaOptions, limit: int) -> None:
@@ -1095,7 +1112,7 @@ def _write_convert_tsv(path: Path, constructs: list) -> None:
         "region\tstart\tend\tloop_name\tloop_seq\torientation\thairpin_rna_5to3\t"
         "insert_top_dna_5to3\tinsert_bottom_dna_5to3\tfolds_as_designed\t"
         "fold_dg37\tfold_tm_c\tstarts_with_purine\tpremature_terminator_free\t"
-        "max_homopolymer_run"
+        "max_homopolymer_run\tsense_overhang\tguide_overhang"
     )
     lines = [header]
     for c in constructs:
@@ -1117,6 +1134,8 @@ def _write_convert_tsv(path: Path, constructs: list) -> None:
             str(c.starts_with_purine),
             str(c.premature_terminator_free),
             str(c.max_homopolymer_run),
+            c.sense_overhang,
+            c.guide_overhang,
         ]
         lines.append("\t".join(fields))
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
@@ -1143,9 +1162,18 @@ def render_convert_result(result: ConvertResult, limit: int) -> None:
 
     constructs = result.constructs
     if not constructs:
-        typer.secho(
-            "No constructs to show - nothing was converted.", fg=typer.colors.YELLOW
-        )
+        if result.dropped:
+            typer.secho(
+                f"All {len(result.dropped)} construct(s) were withheld: a "
+                "premature Pol III terminator in the hairpin body. Try another "
+                "loop (--loop), or --keep-premature-terminators to inspect them.",
+                fg=typer.colors.YELLOW,
+            )
+        else:
+            typer.secho(
+                "No constructs to show - nothing was converted.",
+                fg=typer.colors.YELLOW,
+            )
         return
 
     fold_ok = sum(1 for c in constructs if c.folds_as_designed)
@@ -1154,6 +1182,13 @@ def render_convert_result(result: ConvertResult, limit: int) -> None:
     typer.echo(f"  constructs:        {len(constructs)}")
     typer.echo(f"  fold as designed:  {fold_ok}")
     typer.echo(f"  5'-A/G (U6 Pol III): {purine_start}")
+    if result.dropped:
+        typer.secho(
+            f"  withheld:          {len(result.dropped)} of "
+            f"{result.total_converted} (premature Pol III terminator in the "
+            "hairpin body; --keep-premature-terminators to see them)",
+            fg=typer.colors.YELLOW,
+        )
     typer.echo("")
     _print_convert_table(constructs, options, limit)
 
@@ -1177,6 +1212,12 @@ def convert_cmd(
         DEFAULT_TERMINATOR_LENGTH, "--terminator-length",
         help="Length of the poly-T terminator run (>= 4 when included).",
     ),
+    drop_premature_terminators: bool = typer.Option(
+        True,
+        "--drop-premature-terminators/--keep-premature-terminators",
+        help="Withhold constructs whose hairpin body carries a premature "
+        "Pol III terminator (>= 4 U). On by default.",
+    ),
     limit: int = typer.Option(
         20, "--limit", "-n", help="Max constructs to print (0 = all)."
     ),
@@ -1187,8 +1228,8 @@ def convert_cmd(
     """Convert selected siRNA candidates into stem-loop shRNA constructs.
 
     Reads a 'hush design -o' TSV and, for each selected candidate, grafts its
-    19-bp duplex core (unchanged) onto the chosen loop as a sense-loop-antisense
-    hairpin. The bare insert is emitted as top/bottom DNA oligos plus a Pol III
+    full strands (paired core plus 3' overhang) onto the chosen loop as a
+    sense-loop-antisense hairpin. The bare insert is emitted as top/bottom DNA oligos plus a Pol III
     poly-T terminator - vector-agnostic, so add your vector's restriction
     sticky-end tails before cloning. Each construct is folded to confirm it forms
     the intended stem-loop, and QC flags (Pol III 5'-A/G start, loop
@@ -1200,11 +1241,12 @@ def convert_cmd(
             loop=loop_scaffold,
             include_terminator=terminator,
             terminator_length=terminator_length,
+            drop_premature_terminators=drop_premature_terminators,
         )
         rows = _read_design_tsv(selected)
         constructs = []
         for row in rows:
-            sense, antisense = _core_from_row(row)
+            sense, antisense, sense_oh, guide_oh = _duplex_from_row(row)
             constructs.append(
                 convert(
                     sense,
@@ -1212,6 +1254,8 @@ def convert_cmd(
                     region=row["region"],
                     start=int(row["start"]) - 1,
                     end=int(row["end"]),
+                    sense_overhang=sense_oh,
+                    guide_overhang=guide_oh,
                     options=options,
                 )
             )
@@ -1219,11 +1263,14 @@ def convert_cmd(
         typer.secho(f"Convert error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    render_convert_result(ConvertResult(constructs=constructs, options=options), limit)
+    result = apply_convert_filters(constructs, options)
+    render_convert_result(result, limit)
 
     if output is not None:
-        _write_convert_tsv(output, constructs)
-        typer.echo(f"\nWrote {len(constructs)} construct(s) to {output}")
+        _write_convert_tsv(output, result.constructs)
+        typer.echo(
+            f"\nWrote {len(result.constructs)} construct(s) to {output}"
+        )
 
 
 @app.command("shell")

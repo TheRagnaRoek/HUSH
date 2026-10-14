@@ -18,11 +18,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "build", label: "shRNA construct" },
 ];
 
-function stripOverhang(seq: string, overhang: string): string {
-  const n = overhang ? overhang.length : 0;
-  return n > 0 ? seq.slice(0, seq.length - n) : seq;
-}
-
 export function ConstructViewer({
   candidate,
   construct,
@@ -50,8 +45,16 @@ export function ConstructViewer({
   useEffect(() => setTab(startTab), [startTab, candidate.region]);
 
   const model = buildAlignment(candidate, enrichment);
-  const sense = stripOverhang(candidate.passenger_5to3, candidate.passenger_overhang);
-  const antisense = stripOverhang(candidate.guide_5to3, candidate.guide_overhang);
+  // The hairpin encodes both strands in full, so the schematic shows the
+  // cores and their overhangs as separate segments rather than hiding them.
+  const sense = candidate.passenger_5to3.slice(
+    0,
+    candidate.passenger_5to3.length - candidate.passenger_overhang.length,
+  );
+  const antisense = candidate.guide_5to3.slice(
+    0,
+    candidate.guide_5to3.length - candidate.guide_overhang.length,
+  );
 
   return (
     <div>
@@ -94,8 +97,10 @@ export function ConstructViewer({
             <>
               <ConstructSchematic
                 sense={sense}
+                senseOverhang={construct.sense_overhang}
                 loop={construct.loop_seq}
                 antisense={antisense}
+                guideOverhang={construct.guide_overhang}
                 terminator={terminator}
               />
               <div className="buildgrid">
