@@ -13,7 +13,7 @@ Strand conventions match core.sirna: sense/passenger and antisense/guide are bot
 stored 5'->3'; each rule is evaluated on whichever strand it is naturally defined
 for. The exact scoring of each set - and where Reynolds and Amarzguioui differ
 from the common simplifications, plus the Table-3 validation - is in
-docs/design_notes.md (rules section).
+docs/design-rules.md.
 
 Primary sources: Ui-Tei et al. 2004; Reynolds et al. 2004; Amarzguioui & Prydz
 2004.
@@ -158,7 +158,7 @@ def ui_tei(candidate: SiRNACandidate) -> UiTeiResult:
 # (additive), and -1 for 'G' at 13 and for 'G'/'C' at 19; score runs -2..+10,
 # and >= 6 predicts functional. Longer cores anchor the 3' parts to the actual
 # terminus and keep the internal ones at absolute positions. Full scoring and the
-# position-19 gradient: docs/design_notes.md (rules section).
+# position-19 gradient: docs/design-rules.md.
 REYNOLDS_MIN_LENGTH = 19
 
 # GC content window (fraction, inclusive bounds).
@@ -329,7 +329,7 @@ def reynolds(
 # score = motif points + differential. DT3 is measured 3' END MINUS 5' END over
 # the three terminal base pairs - the sign is easy to invert; functional siRNAs
 # score POSITIVE. All 46 siRNAs of the paper's Table 3 reproduce exactly (DT3,
-# motifs, total). Derivation, sign rationale and validation: docs/design_notes.md
+# motifs, total). Derivation, sign rationale and validation: docs/design-rules.md
 # (rules section).
 
 AMARZGUIOUI_MIN_LENGTH = 19

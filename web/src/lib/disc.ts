@@ -1,6 +1,6 @@
 /**
  * Decode a DiscriminationResult (api) into the compact `disc` token and into
- * plain language. The grading follows docs/design_options.md: guide position,
+ * plain language. The grading follows docs/cli.md: guide position,
  * region (seed / 3'-of-seed / anchor), whether Huang et al. list the exact base
  * change, the position tier (strongest / consistent), and the mismatch class.
  */

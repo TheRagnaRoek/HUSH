@@ -4,7 +4,7 @@ Framework-agnostic, already-parsed design/convert requests. A CLI turns flag
 strings into these; a future HTTP layer turns JSON into these; the service
 itself speaks only this vocabulary. Fields mirror the tunable pipeline knobs and
 default to the best-practice paradigm (see 'hush design --help' and
-docs/design_options.md). GC bounds are fractions here, not percent.
+docs/cli.md). GC bounds are fractions here, not percent.
 """
 
 from __future__ import annotations

@@ -19,6 +19,6 @@ Submodules:
 
 Wired into the CLI as ``hush convert``, which reads the ``hush design`` TSV so
 the two stages compose without re-running design. Scope and references are in
-docs/shrna_design_note.md; the miR-30 / miR-E scaffold is deliberately out of
+docs/shrna-conversion.md; the miR-30 / miR-E scaffold is deliberately out of
 scope.
 """

@@ -1,2 +1,0 @@
-region	start	end	loop_name	loop_seq	orientation	hairpin_rna_5to3	insert_top_dna_5to3	insert_bottom_dna_5to3	folds_as_designed	fold_dg37	fold_tm_c	starts_with_purine	premature_terminator_free	max_homopolymer_run
-437-455	437	455	jensen	UGUGCUU	sa	AUUACAUCGCCCUGAAAGAUGUGCUUUCUUUCAGGGCGAUGUAAUUUUUUU	ATTACATCGCCCTGAAAGATGTGCTTTCTTTCAGGGCGATGTAATTTTTTT	AAAAAAATTACATCGCCCTGAAAGAAAGCACATCTTTCAGGGCGATGTAAT	True	-31.39	98.46	True	True	3

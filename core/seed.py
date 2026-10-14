@@ -13,8 +13,9 @@ filter is a benchmark, believed over-conservative; treat it as fixed.
 
 Primary source: Naito et al. 2009 (siDirect 2.0). Design rationale, the exact
 formula, the validation against siDirect's published figures, and the
-over-conservatism critique are in docs/design_notes.md (seed section) and
-docs/seed_offtarget_design_note.md. Read those before changing any constant here.
+over-conservatism critique are in docs/design-rules.md; the dated design
+notes behind it are on the archive/design-notes branch. Read those before
+changing any constant here.
 """
 
 from __future__ import annotations

@@ -47,10 +47,7 @@ data/reference/*.ebwtl
 data/reference/_download/
 data/cache/
 
-# HUSH: local benchmark scratch - HUSH design outputs and siDirect exports that
-# are not part of the committed fixtures (tracked ones like
-# data/siDirect_PDCD1-CDS.ods stay tracked; these are local-only).
-data/HLA_HUSH.tsv
-data/example_HUSH.tsv
-data/siDirect_HLA01.ods
-data/siDirect_example.ods
+# HUSH: local benchmark scratch. The committed fixtures under data/testing/ stay
+# tracked; anything else a benchmark run drops in data/ is local-only.
+data/*_HUSH.tsv
+data/*.ods

@@ -14,8 +14,7 @@ or bulges), so internal structure is if anything under-estimated - the
 conservative direction for a filter that rewards its absence.
 
 Primary source: Groebe & Uhlenbeck 1988 (loop stability); Reynolds et al. 2004
-(the criterion). Full model and assumptions in docs/design_notes.md (hairpin
-section).
+(the criterion). Full model and assumptions in docs/design-rules.md.
 """
 
 from __future__ import annotations
