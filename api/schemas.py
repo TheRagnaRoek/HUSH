@@ -88,7 +88,8 @@ class DesignParamsSchema(BaseModel):
     offtarget_min_mismatch: int = DEFAULT_OFFTARGET_MIN_MISMATCH
     offtarget_max_mismatch: int = DEFAULT_OFFTARGET_MAX_MISMATCH
     offtarget_self_accession: Optional[str] = None
-    bowtie_path: str = "bowtie"
+    # bowtie_path is deliberately absent: this API has no authentication, so it
+    # must not take an executable path from the wire. The CLI keeps the flag.
 
     use_gc_filter: bool = False
     gc_min: float = 0.30
@@ -129,7 +130,6 @@ class DesignParamsSchema(BaseModel):
             offtarget_min_mismatch=self.offtarget_min_mismatch,
             offtarget_max_mismatch=self.offtarget_max_mismatch,
             offtarget_self_accession=self.offtarget_self_accession,
-            bowtie_path=self.bowtie_path,
             use_gc_filter=self.use_gc_filter,
             gc_min=self.gc_min,
             gc_max=self.gc_max,

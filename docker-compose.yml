@@ -1,21 +1,36 @@
-# HUSH containerized off-target tooling.
+# HUSH, run locally from the published image.
 #
-# The image (docker/Dockerfile) carries bowtie1, so bowtie is never installed by
-# hand. The RefSeq off-target index is built once into the named volume
-# `hush_ref` and reused from there - by the build job below now, and by the
-# hosted design backend later.
+#   docker compose run --rm reference-build   # once: fetch the RefSeq reference
+#   docker compose up hush                    # then: GUI + API on :8000
+#
+# Both services share the `hush_ref` volume, so the reference is built once and
+# every later run finds it automatically. Set HUSH_IMAGE to use a local build
+# instead of the published image.
 services:
-  # One-shot index build: fetch the RefSeq human transcriptome and run
-  # bowtie-build into the shared volume. Run it with:
-  #   docker compose run --rm build-index
-  build-index:
+  # The GUI and API on one port. Open http://localhost:8000 once it is up.
+  hush:
+    image: ${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:latest}
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: hush:latest
+    ports:
+      - "8000:8000"
     volumes:
       - hush_ref:/data/reference
-    command: ["python", "tools/build_offtarget_db.py", "--outdir", "/data/reference"]
+      # Designs you save land in ./work on the host.
+      - ./work:/work
+    restart: unless-stopped
+
+  # One-shot reference build: fetch the RefSeq human transcriptome and run
+  # bowtie-build into the shared volume. Several GB, and needs a network.
+  reference-build:
+    image: ${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    volumes:
+      - hush_ref:/data/reference
+    command: ["hush", "reference", "build"]
 
 volumes:
   hush_ref:

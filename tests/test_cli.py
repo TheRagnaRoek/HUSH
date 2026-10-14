@@ -88,16 +88,32 @@ def test_design_default_mode_is_union(target_fasta):
 
 
 def test_design_offtarget_on_by_default_warns_without_index(target_fasta):
-    # Off-target scanning defaults on but degrades to a warning with no index.
+    # The reference check is the safety floor, so running without one still
+    # works but has to say so in terms of the consequence, not the missing flag.
     result = runner.invoke(app, ["design", str(target_fasta)])
     assert result.exit_code == 0
-    assert "off-target scanning is on by default" in result.stdout
+    assert "UNREFERENCED RUN" in result.stdout
+    assert "hush reference build" in result.stdout
 
 
 def test_design_no_offtarget_silences_the_reminder(target_fasta):
     result = runner.invoke(app, ["design", str(target_fasta), "--no-offtarget"])
     assert result.exit_code == 0
-    assert "off-target scanning is on by default" not in result.stdout
+    assert "UNREFERENCED RUN" not in result.stdout
+
+
+def test_design_tsv_records_whether_the_reference_was_checked(target_fasta, tmp_path):
+    # An empty off-target hit count must not read as "no off-targets found".
+    out = tmp_path / "d.tsv"
+    result = runner.invoke(
+        app, ["design", str(target_fasta), "--no-seed", "-o", str(out)]
+    )
+    assert result.exit_code == 0
+    lines = out.read_text(encoding="ascii").splitlines()
+    header = lines[0].split("	")
+    assert "offtarget_checked" in header
+    col = header.index("offtarget_checked")
+    assert {line.split("	")[col] for line in lines[1:]} == {"False"}
 
 
 def test_design_relaxed_selects_and_lists(target_fasta):

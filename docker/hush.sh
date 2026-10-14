@@ -1,12 +1,13 @@
 #!/usr/bin/env sh
-# HUSH launcher (Docker). Runs the containerized HUSH CLI - Python, bowtie1 and
-# the RefSeq off-target index - so nothing needs installing on the host. The
-# current directory is mounted at /work (HUSH reads and writes there); the index
-# comes from the reference volume at /data/reference. Arguments pass through to
-# hush, e.g.:
-#   ./docker/hush.sh design mytarget.fasta --offtarget-db /data/reference/refseq_human_mrna
+# HUSH launcher (Docker). Runs the containerized HUSH CLI - Python and bowtie1
+# included - so nothing needs installing on the host. The current directory is
+# mounted at /work (HUSH reads and writes there), and the off-target reference
+# comes from the volume at /data/reference. Arguments pass through to hush:
+#   ./docker/hush.sh reference build          # once, before designing
+#   ./docker/hush.sh design mytarget.fasta
+# The reference is found automatically, so no --offtarget-db is needed.
 # Override the image or volume name with the HUSH_IMAGE / HUSH_REF_VOLUME env vars.
-image="${HUSH_IMAGE:-hush:latest}"
+image="${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:latest}"
 ref="${HUSH_REF_VOLUME:-hush_hush_ref}"
 
 # Attach an interactive TTY only when stdin and stdout are terminals, so

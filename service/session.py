@@ -21,6 +21,7 @@ from core.errors import HushError
 from core.inputs import load_panel as _load_panel_file
 from core.inputs import load_target as _load_target_file
 from core.offtarget import BowtieSearcher
+from core.reference import default_index_prefix, index_exists
 from core.selection import SelectionCriteria, evaluate_all
 from core.sequence import BioSequence, DesignInput, SequencePanel
 from core.sirna import SiRNACandidate, enumerate_candidates
@@ -276,16 +277,21 @@ class HushSession:
                 )
             }
 
-        # Off-target scanning is on by default but needs a reference index; with
-        # none configured it is skipped (a flag the caller can warn about).
+        # The transcriptome check is the safety floor, so it is on by default
+        # and finds its own reference: an explicit --offtarget-db wins, else
+        # the one 'hush reference build' produced. Only when neither exists is
+        # the run unreferenced, which the caller reports loudly.
         offtarget_searcher = None
         self_accession = None
-        offtarget_active = params.use_offtarget_filter and params.offtarget_db is not None
-        offtarget_skipped = params.use_offtarget_filter and params.offtarget_db is None
+        offtarget_db = params.offtarget_db
+        if offtarget_db is None and index_exists(default_index_prefix()):
+            offtarget_db = default_index_prefix()
+        offtarget_active = params.use_offtarget_filter and offtarget_db is not None
+        offtarget_skipped = params.use_offtarget_filter and offtarget_db is None
         if offtarget_active:
             self_accession = params.offtarget_self_accession or _detect_accession(mrna)
             backend = BowtieSearcher(
-                params.offtarget_db,
+                offtarget_db,
                 max_mismatch=params.offtarget_max_mismatch,
                 bowtie_path=params.bowtie_path,
             )

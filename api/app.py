@@ -6,16 +6,21 @@ reuse its cached alignment. Every handler delegates to service.HushSession and
 renders the result with api.serialize; domain errors (HushError) and incoherent
 requests (ValueError) become 400, an unknown session id 400 -> 404.
 
+When the built web client is present it is served from this same app, so a
+container exposes one port and the browser talks to its own origin.
+
 Run it with:  uvicorn api.app:app --reload   (or  python -m api)
 """
 
 from __future__ import annotations
 
+import os
 from importlib import metadata
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from api import inputs, schemas, serialize
 from api.store import SessionStore
@@ -27,6 +32,24 @@ try:
 except metadata.PackageNotFoundError:  # pragma: no cover - editable/uninstalled
     _VERSION = "0.0.0"
 
+# Where the built SPA lives. The container points this at the dist it copied
+# in; a source checkout falls back to web/dist, so 'npm run build' is enough.
+WEB_DIR_ENV = "HUSH_WEB_DIR"
+
+
+def _web_root(explicit: Path | None = None) -> Path | None:
+    """The directory holding a built index.html, or None if there is none."""
+    if explicit is not None:
+        root = Path(explicit)
+    elif os.environ.get(WEB_DIR_ENV):
+        root = Path(os.environ[WEB_DIR_ENV])
+    else:
+        # Nothing implicit: a dist/ left in a checkout must not start being
+        # served (and drop CORS) just because it exists.
+        return None
+    return root if (root / "index.html").is_file() else None
+
+
 _DESCRIPTION = (
     "Allele-aware siRNA/shRNA design over HTTP. Post a target (and optional "
     "panel) to /design for a one-shot run, or create a /sessions instance to "
@@ -35,20 +58,31 @@ _DESCRIPTION = (
 
 
 def create_app(
-    store: SessionStore | None = None, allow_origins: list[str] | None = None
+    store: SessionStore | None = None,
+    allow_origins: list[str] | None = None,
+    web_dir: Path | None = None,
 ) -> FastAPI:
-    """Build the app. A caller may inject a store (tests) or CORS origins."""
+    """Build the app.
+
+    A caller may inject a store (tests), CORS origins, or the directory
+    holding the built web client.
+    """
     app = FastAPI(title="HUSH API", version=_VERSION, description=_DESCRIPTION)
     store = store if store is not None else SessionStore()
+    web_root = _web_root(web_dir)
 
-    # Permissive by default so the browser client can call from its dev origin;
-    # tighten allow_origins for a deployment.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allow_origins if allow_origins is not None else ["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Serving the client ourselves makes every call same-origin, so CORS is
+    # not needed at all. Without a client, stay permissive so the Vite dev
+    # server can call in from its own port.
+    if allow_origins is None:
+        allow_origins = [] if web_root is not None else ["*"]
+    if allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allow_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @app.exception_handler(HushError)
     async def _hush_error(request: Request, exc: HushError) -> JSONResponse:
@@ -144,7 +178,32 @@ def create_app(
         if not store.delete(sid):
             raise HTTPException(status_code=404, detail=f"no session {sid!r}")
 
+    if web_root is not None:
+        _serve_web_client(app, web_root)
+
     return app
+
+
+def _serve_web_client(app: FastAPI, web_root: Path) -> None:
+    """Serve the built SPA, falling back to index.html for client routes.
+
+    Registered after every API route, so those still win. The client uses
+    BrowserRouter with a catch-all route, so an unknown path is its to
+    resolve, not a 404 - hence the fallback rather than StaticFiles alone.
+    """
+    root = web_root.resolve()
+    index = root / "index.html"
+
+    @app.get("/{spa_path:path}", include_in_schema=False)
+    def web_client(spa_path: str) -> FileResponse:
+        try:
+            candidate = (root / spa_path).resolve()
+        except OSError:
+            return FileResponse(index)
+        # is_relative_to keeps a crafted path from escaping the web root.
+        if candidate.is_file() and candidate.is_relative_to(root):
+            return FileResponse(candidate)
+        return FileResponse(index)
 
 
 app = create_app()

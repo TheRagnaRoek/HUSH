@@ -275,7 +275,7 @@ class BowtieSearcher:
 
     Runs `bowtie -v N -a --norc`: end-to-end alignment allowing at most N
     mismatches (bowtie1 caps N at 3), reporting all hits on the forward strand.
-    build the index with tools/build_offtarget_db.py.
+    Build the index with 'hush reference build' (core.reference).
 
     search() runs one query; precompute() runs a whole batch in a single bowtie
     call and returns a PrecomputedSearcher - the path the CLI uses.
@@ -296,14 +296,15 @@ class BowtieSearcher:
         self.bowtie_path = bowtie_path
         if shutil.which(bowtie_path) is None:
             raise OffTargetError(
-                f"bowtie executable {bowtie_path!r} not found on PATH. Install "
-                "bowtie1 (e.g. via bioconda or your package manager)."
+                f"bowtie executable {bowtie_path!r} not found on PATH. The "
+                "HUSH container ships bowtie1; on a host install, install "
+                "bowtie1 from your package manager or bioconda."
             )
         if not Path(f"{self.index_prefix}.1.ebwt").is_file():
             raise OffTargetError(
                 f"No bowtie index at {self.index_prefix!r} (expected "
                 f"{self.index_prefix}.1.ebwt). Build one with "
-                "tools/build_offtarget_db.py."
+                "'hush reference build'."
             )
 
     def search(self, read: str) -> list[OffTargetHit]:

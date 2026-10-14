@@ -1,0 +1,64 @@
+# Publish the HUSH image to the GitHub Container Registry.
+#
+# HUSH is distributed to users, not hosted, so the published image is the
+# deliverable: a user runs it without cloning the repo or installing bowtie.
+# The Dockerfile stays in the repo as well, so a copy of this project hosted
+# elsewhere (the iGEM GitLab) can still build the same image from source.
+#
+# Fires on a version tag, or manually. The image is multi-arch because bowtie1
+# is packaged for both amd64 and arm64 on the pinned base.
+name: Publish image
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Extra tag to publish (e.g. edge)"
+        required: false
+        default: "edge"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Only the runtime stage is emulated; the web stage pins BUILDPLATFORM.
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lowercases the image name for GHCR and derives semver tags from the
+      # git tag; `latest` only moves for a real release, never a manual run.
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

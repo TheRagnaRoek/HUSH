@@ -258,3 +258,60 @@ def test_store_evicts_least_recently_used():
     assert store.get(c) is not None
     assert store.get(b) is None
     assert len(store) == 2
+
+
+# --------------------------------------------------------------------------- #
+# serving the built web client from the API's own origin
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def fake_dist(tmp_path):
+    """A minimal built-SPA layout: an index and one asset."""
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><div id=root></div>", encoding="ascii")
+    (dist / "assets" / "app.js").write_text("console.log(1);", encoding="ascii")
+    return dist
+
+
+def test_no_web_dir_serves_api_only(monkeypatch):
+    # A dist left lying around in a checkout must not start being served.
+    # HUSH_WEB_DIR is cleared because the image sets it, and this asserts the
+    # behaviour when nothing configures a client at all.
+    monkeypatch.delenv("HUSH_WEB_DIR", raising=False)
+    client = TestClient(create_app())
+    assert client.get("/health").status_code == 200
+    assert client.get("/").status_code == 404
+
+
+def test_web_client_is_served_at_the_root(fake_dist):
+    client = TestClient(create_app(web_dir=fake_dist))
+    res = client.get("/")
+    assert res.status_code == 200
+    assert "<div id=root>" in res.text
+    assert client.get("/assets/app.js").status_code == 200
+
+
+def test_api_routes_still_win_over_the_web_client(fake_dist):
+    client = TestClient(create_app(web_dir=fake_dist))
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"
+
+
+def test_client_routes_fall_back_to_the_index(fake_dist):
+    # BrowserRouter owns unknown paths, so they are the client's to resolve.
+    client = TestClient(create_app(web_dir=fake_dist))
+    res = client.get("/some/client/route")
+    assert res.status_code == 200
+    assert "<div id=root>" in res.text
+
+
+def test_web_client_does_not_serve_files_outside_its_root(fake_dist):
+    secret = fake_dist.parent / "secret.txt"
+    secret.write_text("do-not-serve", encoding="ascii")
+    client = TestClient(create_app(web_dir=fake_dist))
+    for probe in ("../secret.txt", "..%2f..%2fsecret.txt", "/etc/passwd"):
+        res = client.get(f"/{probe}")
+        assert "do-not-serve" not in res.text
