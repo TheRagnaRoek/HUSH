@@ -19,8 +19,9 @@ from pathlib import Path
 
 from core.errors import HushError
 from core.inputs import load_panel as _load_panel_file
+from core.inputs import load_sequences as _load_sequences_file
 from core.inputs import load_target as _load_target_file
-from core.offtarget import BowtieSearcher
+from core.offtarget import BowtieSearcher, SelfTranscripts, resolve_self_transcripts
 from core.reference import default_index_prefix, index_exists
 from core.selection import SelectionCriteria, evaluate_all
 from core.sequence import BioSequence, DesignInput, SequencePanel
@@ -41,9 +42,10 @@ _REFSEQ_ACCESSION = re.compile(r"\b([NX][MR]_\d+(?:\.\d+)?)\b")
 def _detect_accession(seq: BioSequence) -> str | None:
     """Best-effort RefSeq accession from a target's id/description.
 
-    The off-target search must drop hits to the candidate's own transcript. The
-    accession usually sits in the FASTA header; pass an explicit self-accession
-    to override when it does not.
+    One of the ways the off-target gate learns what a design owns. It finds
+    nothing for a target named by any other nomenclature - an IMGT allele header
+    such as HLA-A02:01:01:01 carries no RefSeq accession - which is why it is a
+    contribution to the self set rather than the whole of it.
     """
     match = _REFSEQ_ACCESSION.search(f"{seq.id} {seq.description}")
     return match.group(1) if match else None
@@ -245,6 +247,54 @@ class HushSession:
             )
         return self._variation
 
+    def _offtarget_self(
+        self, mrna: BioSequence, params: DesignParams, offtarget_db
+    ) -> SelfTranscripts:
+        """What the off-target gate must not hold against this design.
+
+        Named accessions and the target's own header accession identify
+        transcripts outright. Resolution then adds every reference transcript
+        that shares enough of the target, the panel or an explicit self FASTA to
+        belong to the same family, which is the only workable route for a
+        multigene family: HLA-A alone spans five RefSeq transcripts plus the
+        alternate-haplotype copies of its locus, so no single accession, and no
+        hand-written list, covers it.
+        """
+        declared = set(params.offtarget_self_accessions)
+        detected = _detect_accession(mrna)
+        if detected:
+            declared.add(detected)
+
+        resolved: frozenset[str] = frozenset()
+        if params.resolve_offtarget_self:
+            sequences = [mrna.seq]
+            if self._panel is not None:
+                sequences += [member.seq for member in self._panel]
+            if params.offtarget_self_fasta is not None:
+                sequences += [
+                    seq.seq
+                    for seq in _load_sequences_file(params.offtarget_self_fasta)
+                ]
+            resolved = resolve_self_transcripts(
+                BowtieSearcher(
+                    offtarget_db,
+                    max_mismatch=0,
+                    bowtie_path=params.bowtie_path,
+                ),
+                sequences,
+                length=params.length,
+                min_coverage=params.offtarget_self_coverage,
+            )
+        return SelfTranscripts.of(
+            declared=declared,
+            resolved=resolved,
+            min_coverage=(
+                params.offtarget_self_coverage
+                if params.resolve_offtarget_self
+                else None
+            ),
+        )
+
     def design(self, params: DesignParams | None = None) -> DesignResult:
         """Enumerate candidates for the target and filter them by the params.
 
@@ -282,14 +332,14 @@ class HushSession:
         # the one 'hush reference build' produced. Only when neither exists is
         # the run unreferenced, which the caller reports loudly.
         offtarget_searcher = None
-        self_accession = None
+        self_transcripts = None
         offtarget_db = params.offtarget_db
         if offtarget_db is None and index_exists(default_index_prefix()):
             offtarget_db = default_index_prefix()
         offtarget_active = params.use_offtarget_filter and offtarget_db is not None
         offtarget_skipped = params.use_offtarget_filter and offtarget_db is None
         if offtarget_active:
-            self_accession = params.offtarget_self_accession or _detect_accession(mrna)
+            self_transcripts = self._offtarget_self(mrna, params, offtarget_db)
             backend = BowtieSearcher(
                 offtarget_db,
                 max_mismatch=params.offtarget_max_mismatch,
@@ -311,7 +361,7 @@ class HushSession:
             use_offtarget_filter=offtarget_active,
             offtarget_min_mismatch=params.offtarget_min_mismatch,
             offtarget_searcher=offtarget_searcher,
-            offtarget_self_accession=self_accession,
+            offtarget_self_transcripts=self_transcripts,
             use_gc_filter=params.use_gc_filter,
             gc_min=params.gc_min,
             gc_max=params.gc_max,

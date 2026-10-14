@@ -62,7 +62,10 @@ opt-in.
 | `--offtarget-db` | (searcher) | auto | bowtie index prefix. Defaults to the one `hush reference build` produced; set it to use a different reference genome. |
 | `--offtarget-min-mismatch` | `offtarget_min_mismatch` | `2` | Reject when the nearest off-target has fewer than this many mismatches. |
 | `--offtarget-max-mismatch` | (searcher depth) | `3` | Mismatch depth searched (bowtie `-v` allows 0-3). |
-| `--offtarget-self-accession` | `offtarget_self_accession` | auto | The target's own accession, excluded from hits. Auto-detected from the FASTA header. |
+| `--offtarget-self-accession` | `offtarget_self_accessions` | - | Accessions the design owns, excluded from hits (comma-separated, version-insensitive). Added to the header accession and whatever homology resolves. |
+| `--offtarget-self-fasta` | `offtarget_self_fasta` | - | FASTA whose entries count as the design's own sequence, resolved to transcripts by homology. For an allele family the target and panel do not cover. |
+| `--offtarget-resolve-self` / `--no-offtarget-resolve-self` | `resolve_offtarget_self` | **on** | Resolve the owned transcripts by homology to the target, the panel and `--offtarget-self-fasta`. The only mechanism that works for a gene family. |
+| `--offtarget-self-coverage` | `offtarget_self_coverage` | `10` | Percent of a design sequence's k-mers a transcript must match exactly to count as owned. Lower widens the family; raise it to own only the target gene. |
 | `--bowtie-path` | (backend) | `bowtie` | Path to the bowtie executable. CLI only - deliberately not exposed over HTTP. |
 | `--gc` / `--no-gc` | `use_gc_filter` | off | Standalone GC-content window. |
 | `--gc-min` / `--gc-max` | `gc_min` / `gc_max` | `30` / `52` | GC window bounds, in percent. |

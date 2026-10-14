@@ -315,3 +315,38 @@ def test_web_client_does_not_serve_files_outside_its_root(fake_dist):
     for probe in ("../secret.txt", "..%2f..%2fsecret.txt", "/etc/passwd"):
         res = client.get(f"/{probe}")
         assert "do-not-serve" not in res.text
+
+
+def test_design_params_schema_carries_the_self_set():
+    # The wire field is a list: one accession never covers a gene family.
+    from api.schemas import DesignParamsSchema
+
+    params = DesignParamsSchema(
+        offtarget_self_accessions=["NM_002116", "NR_001434"],
+        offtarget_self_coverage=0.25,
+    ).to_domain()
+    assert params.offtarget_self_accessions == ("NM_002116", "NR_001434")
+    assert params.offtarget_self_coverage == 0.25
+    assert params.resolve_offtarget_self is True
+    # Defaults stay best-practice: resolution on, nothing named by hand.
+    assert DesignParamsSchema().to_domain().offtarget_self_accessions == ()
+
+
+def test_criteria_summary_reports_the_self_set():
+    from api.serialize import criteria_summary
+    from core.offtarget import BruteForceSearcher, SelfTranscripts
+    from core.selection import SelectionCriteria
+
+    own = SelfTranscripts.of(
+        declared=["NM_002116.8"], resolved=["xm_041680767"], min_coverage=0.1
+    )
+    criteria = SelectionCriteria(
+        use_offtarget_filter=True,
+        offtarget_searcher=BruteForceSearcher([("NM_1", "ACGT")], max_mismatch=3),
+        offtarget_self_transcripts=own,
+    )
+    summary = criteria_summary(criteria)
+    assert summary.offtarget_self_accessions == ["NM_002116", "XM_041680767"]
+    assert summary.offtarget_self_declared == 1
+    assert summary.offtarget_self_resolved == 1
+    assert summary.offtarget_self_coverage == 0.1

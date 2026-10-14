@@ -534,3 +534,79 @@ def test_convert_from_tsv_matches_the_in_session_conversion(target_fasta, tmp_pa
     in_session = [c.hairpin_rna.seq for c in session.convert().constructs]
 
     assert from_tsv == in_session
+
+
+# --------------------------------------------------------------------------- #
+# off-target self set
+# --------------------------------------------------------------------------- #
+
+
+def _stub_bowtie(monkeypatch, refs):
+    """Replace the session's bowtie backend with an in-memory searcher."""
+    import service.session as session_mod
+    from core.offtarget import BruteForceSearcher
+
+    class Stub(BruteForceSearcher):
+        def precompute(self, reads):
+            return self
+
+    monkeypatch.setattr(
+        session_mod,
+        "BowtieSearcher",
+        lambda prefix, max_mismatch=3, bowtie_path="bowtie": Stub(
+            refs, max_mismatch=max_mismatch
+        ),
+    )
+
+
+def test_design_warns_when_nothing_is_excluded_as_self(
+    monkeypatch, target_fasta, tmp_path
+):
+    # A silent empty self set is what made the gate look like a quality problem,
+    # so an active filter that owns nothing has to say so.
+    _stub_bowtie(monkeypatch, [("NM_900001.1", "ACGTACGTACGTACGTACGTACGT")])
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta),
+            "--offtarget-db", str(tmp_path / "index"),
+            "--no-offtarget-resolve-self",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "NO SELF EXCLUDED" in result.stdout
+    assert "--offtarget-self-accession" in result.stdout
+
+
+def test_design_reports_the_named_self_transcripts(
+    monkeypatch, target_fasta, tmp_path
+):
+    _stub_bowtie(monkeypatch, [("NM_900001.1", "ACGTACGTACGTACGTACGTACGT")])
+    result = runner.invoke(
+        app,
+        [
+            "design", str(target_fasta),
+            "--offtarget-db", str(tmp_path / "index"),
+            "--offtarget-self-accession", "NM_002116, NR_001434",
+            "--no-offtarget-resolve-self",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "NO SELF EXCLUDED" not in result.stdout
+    assert "2 named" in result.stdout
+    assert "NM_002116" in result.stdout
+
+
+def test_design_reports_homology_resolved_self(monkeypatch, target_fasta, tmp_path):
+    # The target's own transcript is found by coverage, and reported as such.
+    target_seq = target_fasta.read_text(encoding="ascii").split("\n", 1)[1]
+    target_seq = "".join(target_seq.split())
+    _stub_bowtie(monkeypatch, [("NM_900001.1", target_seq)])
+    result = runner.invoke(
+        app,
+        ["design", str(target_fasta), "--offtarget-db", str(tmp_path / "index")],
+    )
+    assert result.exit_code == 0
+    assert "NO SELF EXCLUDED" not in result.stdout
+    assert "by homology >= 10% k-mers" in result.stdout
+    assert "NM_900001" in result.stdout
