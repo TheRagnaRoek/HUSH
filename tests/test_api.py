@@ -275,8 +275,11 @@ def fake_dist(tmp_path):
     return dist
 
 
-def test_no_web_dir_serves_api_only():
+def test_no_web_dir_serves_api_only(monkeypatch):
     # A dist left lying around in a checkout must not start being served.
+    # HUSH_WEB_DIR is cleared because the image sets it, and this asserts the
+    # behaviour when nothing configures a client at all.
+    monkeypatch.delenv("HUSH_WEB_DIR", raising=False)
     client = TestClient(create_app())
     assert client.get("/health").status_code == 200
     assert client.get("/").status_code == 404
