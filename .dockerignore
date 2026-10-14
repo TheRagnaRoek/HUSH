@@ -25,6 +25,18 @@ dist
 data/reference/
 data/cache/
 
+# Node modules and a stale local build: the web stage installs from the
+# lockfile and builds fresh, and node_modules alone is ~185 MB of context.
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Benchmark exports and committed run outputs: developer material, not runtime.
+data/testing/
+results/
+docs/
+tests/
+
 # Editor / OS cruft
 .idea
 .vscode

@@ -29,3 +29,11 @@ class OffTargetError(HushError):
     e.g. the bowtie binary is not on PATH, the reference index is missing, or
     the aligner exited with an error.
     """
+
+
+class ReferenceBuildError(HushError):
+    """The transcriptome reference index could not be built.
+
+    e.g. bowtie-build is not on PATH, or the RefSeq download found no
+    transcript files at the configured base URL.
+    """

@@ -1,0 +1,82 @@
+# Tests and checks on every push and pull request.
+#
+# The off-target test that needs bowtie1 skips itself when the binary is absent,
+# so bowtie is installed here to keep that coverage rather than losing it
+# silently. The image build is checked too, because the Dockerfile is a shipped
+# artefact: if it stops building, the distribution is broken.
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install bowtie1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bowtie
+
+      - run: pip install -e ".[dev,api]"
+      - run: pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      # Native arch only: this gate is "does it build", not "publish it".
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          load: true
+          tags: hush:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        run: |
+          docker run --rm hush:ci hush --help
+          docker run --rm hush:ci bowtie --version | head -1
+          docker run --rm -d -p 8000:8000 --name hush-ci hush:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:8000/health
+          curl -fsS http://localhost:8000/ | head -c 200
+          docker rm -f hush-ci

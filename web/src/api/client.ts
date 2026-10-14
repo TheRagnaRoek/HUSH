@@ -1,13 +1,16 @@
 /**
- * Minimal typed fetch client for the HUSH API. Thin on purpose: the backend
- * already handles CORS, errors come back as { detail }, and the app's wrappers
- * (hush.ts) own the method/path/type mapping. Swap in openapi-fetch later if a
- * generated client is preferred - `npm run gen:api` emits the schema for it.
+ * Minimal typed fetch client for the HUSH API. Thin on purpose: errors come
+ * back as { detail }, and the app's wrappers (hush.ts) own the method/path/type
+ * mapping. Swap in openapi-fetch later if a generated client is preferred -
+ * `npm run gen:api` emits the schema for it.
+ *
+ * Calls are same-origin by default: in a container the API serves this bundle,
+ * and in dev the Vite server proxies the API paths. Set VITE_API_URL only to
+ * point a build at a different host.
  */
 
 export const API_URL: string =
-  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ??
-  "http://localhost:8000";
+  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
 export class ApiError extends Error {
   status: number;

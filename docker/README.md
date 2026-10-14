@@ -1,107 +1,138 @@
-# HUSH container image (bowtie1 + off-target index)
+# Running HUSH in Docker
 
-The transcriptome off-target stage needs the `bowtie1` binary and a prebuilt
-RefSeq index. Neither is an end-user dependency: HUSH ships as a hosted,
-browser-based tool, so bowtie and the index live on **our** side. This image is
-where they live.
+HUSH is distributed to its users rather than hosted, so the container is the
+unit you run. One image carries everything: the web GUI, the HTTP API, the CLI,
+and the `bowtie1` binary the off-target check needs. Nothing else goes on your
+machine.
 
-One image, two jobs:
+The one thing the image does **not** carry is the transcriptome reference. It is
+several gigabytes and tracks a live RefSeq release, so you fetch it once into a
+Docker volume and every later run finds it automatically.
 
-1. **Build the index once** with `tools/build_offtarget_db.py` (downloads RefSeq,
-   runs `bowtie-build`, writes a reproducibility manifest).
-2. **Serve designs** - the future web backend runs in this same image and shells
-   out to the bowtie already installed here.
-
-Because it is a Linux container, it also removes the pain of installing bowtie1
-via bioconda on native Windows: everything below runs the same on any host with
-Docker.
-
-## Build the index (one time)
-
-From the repository root:
+## Quickstart
 
 ```bash
-docker compose run --rm build-index
+docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:latest hush reference build
+docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:latest
 ```
 
-That builds the image if needed, downloads the RefSeq human transcriptome, runs
-`bowtie-build`, and writes the index plus `refseq_human_mrna.manifest.json` into
-the `hush_ref` Docker volume. It is network-heavy and runs once; the volume is
-reused afterwards. Point the builder at an archived RefSeq release for a
-permanent pin by passing `--base-url` (see the script's `--help`).
+Then open <http://localhost:8000>. The first command is the one-time reference
+fetch; the second serves the GUI and the API together on port 8000.
 
-## Run the HUSH CLI without installing anything
+With Compose, from the repository root:
 
-The repo's root launchers (`./hush`, `hush.bat`) run the **pip-only** CLI from a
-local venv - no bowtie, so transcriptome off-target is skipped. To get the
-**full** pipeline (bowtie + the RefSeq index) without installing anything on the
-host, run the CLI inside the container. Two ready-made wrappers do this; both
-mount your current directory at `/work` (so HUSH reads and writes your real
-files) and mount the reference volume at `/data/reference`.
+```bash
+docker compose run --rm reference-build
+docker compose up hush
+```
 
-Prerequisites: the image is built (`docker build -f docker/Dockerfile -t
-hush:latest .`) and the index exists (`docker compose run --rm build-index`).
+## The reference, and why it matters
 
-**Windows (PowerShell)** - [`docker/hush.ps1`](hush.ps1):
+The transcriptome off-target check is HUSH's safety floor: it is what tells you
+a guide does not also silence something else. It is on by default and needs no
+flag once the reference exists.
+
+HUSH still runs without it, because you may want to swap in a different
+reference genome, but every such run is labelled: the CLI prints an
+`UNREFERENCED RUN` warning and the design TSV carries an `offtarget_checked`
+column, so an empty hit count can never be mistaken for "no off-targets found".
+
+Check what you have:
+
+```bash
+docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:latest hush reference status
+```
+
+That reports the RefSeq release, the bowtie version and the build date recorded
+in the index's manifest. To pin an exact reference rather than the live release,
+pass `--base-url` an archived RefSeq release directory. To use a different
+reference entirely, build it yourself and point `--offtarget-db` at the prefix.
+
+## The CLI
+
+The image's default command serves the GUI. Pass a command to use the CLI
+instead:
+
+```bash
+docker run --rm -v "$PWD:/work" -w /work -v hush_ref:/data/reference \
+  ghcr.io/theragnaroek/hush:latest hush design mytarget.fasta -o selected.tsv
+```
+
+Mounting the current directory at `/work` is what lets HUSH read your real files
+and write results back out.
+
+Two wrappers do that for you, and pass everything through to `hush`:
 
 ```powershell
-.\docker\hush.ps1 design mytarget.fasta --offtarget-db /data/reference/refseq_human_mrna
+.\docker\hush.ps1 design mytarget.fasta -o selected.tsv
 ```
-
-**macOS / Linux** - [`docker/hush.sh`](hush.sh) (once, `chmod +x docker/hush.sh`):
 
 ```bash
-./docker/hush.sh design mytarget.fasta --offtarget-db /data/reference/refseq_human_mrna
+./docker/hush.sh design mytarget.fasta -o selected.tsv   # chmod +x once
 ```
 
-Everything after the script name passes straight through to `hush`, so `--help`,
-`-o out.tsv`, `inspect`, `--panel`, etc. all work. Outputs land in the folder you
-ran from. The image name and reference-volume name are overridable with the
-`HUSH_IMAGE` and `HUSH_REF_VOLUME` environment variables (the volume defaults to
-`hush_hush_ref`, the name Docker Compose gives it - see the "Volume ... Created"
-line from the build).
+They attach an interactive terminal when run from a console, so the REPL
+(`hush shell`) stays open, and drop it when input or output is redirected, so
+pipes and CI still work. `HUSH_IMAGE` and `HUSH_REF_VOLUME` override the image
+and volume names.
 
-### Make it feel native
+### Making it feel native
 
-There is no `activate` step like a venv, but a one-line shell function makes the
-wrapper look like a plain `hush` command from anywhere. Point it at your checkout:
+A one-line shell function makes the wrapper look like a plain `hush`:
 
 ```powershell
-# PowerShell: add to your profile (notepad $PROFILE), using your repo path
-function hush { & "D:\Dateien\Dokumente\iGEM2026\HUSH\docker\hush.ps1" @args }
+# PowerShell: add to your profile (notepad $PROFILE), using your checkout path
+function hush { & "C:\path\to\HUSH\docker\hush.ps1" @args }
 ```
 
 ```bash
-# bash/zsh: add to ~/.bashrc or ~/.zshrc, using your repo path
+# bash/zsh: add to ~/.bashrc or ~/.zshrc, using your checkout path
 hush() { /path/to/HUSH/docker/hush.sh "$@"; }
 ```
 
-### Or enter the environment interactively
-
-For a session where you run several commands, open a shell inside the container -
-the closest thing to "activating" it. `hush` and `bowtie` are on `PATH`; `exit`
-leaves:
+### An interactive shell inside the image
 
 ```bash
-docker run --rm -it -v hush_hush_ref:/data/reference -v "${PWD}:/work" -w /work hush:latest bash
+docker run --rm -it -v hush_ref:/data/reference -v "$PWD:/work" -w /work \
+  ghcr.io/theragnaroek/hush:latest bash
 ```
 
-For the HUSH REPL specifically (`hush shell` - load a target once, then tune and
-re-run `design`/`convert`), the wrappers work directly:
+`hush`, `bowtie` and `bowtie-build` are all on `PATH`.
 
-```powershell
-.\docker\hush.ps1 shell
+## Building the image yourself
+
+The Dockerfile ships with the source, so you never depend on the registry:
+
+```bash
+docker build -f docker/Dockerfile -t hush:local .
+HUSH_IMAGE=hush:local docker compose up hush
 ```
 
-They pass an interactive terminal through when run from a console, so the REPL
-stays open. When their input or output is redirected (a pipe, or CI) they drop
-the interactive flags automatically, so one-shot `design`/`convert` runs are
-unaffected.
+Two things in the build are deliberate:
 
-## Hosting the index
+- The web client is built in a `node` stage pinned to `BUILDPLATFORM`. The
+  bundle is identical on every architecture, so building it natively keeps the
+  arm64 image off QEMU for that whole stage.
+- The runtime base is pinned to `bookworm`. That is the Debian suite where
+  bowtie1 is packaged for both amd64 and arm64, which is what makes a multi-arch
+  image possible without compiling the aligner.
 
-Build the index once, then publish the volume's contents (the `.ebwt` shards and
-the manifest) to wherever the backend reads them - a mounted disk, an object
-store, or a release asset the runtime downloads on startup. End users only ever
-hit the web UI; they never install bowtie and never build or download the index
-themselves.
+## Configuration
+
+| Variable | Default | What it does |
+|---|---|---|
+| `HUSH_API_HOST` | `0.0.0.0` in the image, `127.0.0.1` otherwise | Interface the API binds |
+| `HUSH_API_PORT` | `8000` | Port the API binds |
+| `HUSH_REFERENCE_DIR` | `/data/reference` in the image | Where the off-target index lives |
+| `HUSH_WEB_DIR` | `/app/web` in the image | Built web client to serve; unset serves the API alone |
+
+The API binds loopback by default outside the container, which is the right
+default for a local tool; the image overrides it because a container's loopback
+is not reachable from a published port.
+
+## A note on exposing it
+
+The API has no authentication, and a session accepts a filesystem path for an
+alternative reference index. It is built to run on your own machine. Do not
+publish the port beyond localhost without putting your own authentication and a
+reverse proxy in front of it.

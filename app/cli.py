@@ -11,18 +11,28 @@ Run 'hush --help' (after 'pip install -e .') or 'python -m app.cli --help'.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Optional
 
 import typer
 
 from core.asymmetry import DEFAULT_WINDOW_BP
+
 from core.errors import HushError
 from core.hairpin import DEFAULT_INTERNAL_TM_THRESHOLD_C
 from core.inputs import build_design_input, load_sequences
 from core.offtarget import (
     DEFAULT_OFFTARGET_MAX_MISMATCH,
     DEFAULT_OFFTARGET_MIN_MISMATCH,
+)
+from core.reference import (
+    DEFAULT_BASE_URL,
+    INDEX_NAME,
+    build_index,
+    default_index_prefix,
+    describe_index,
+    index_exists,
 )
 from msa.discrimination import (
     LOW_TOLERANCE_WINDOW,
@@ -65,6 +75,13 @@ app = typer.Typer(
     help="HUSH - Human genome Universal Silencing Hairpin-designer.",
     no_args_is_help=True,
 )
+
+reference_app = typer.Typer(
+    add_completion=False,
+    help="Manage the transcriptome reference the off-target check searches.",
+    no_args_is_help=True,
+)
+app.add_typer(reference_app, name="reference")
 
 
 def _echo_sequence(
@@ -603,7 +620,8 @@ def _write_design_tsv(
     header = (
         "region\tstart\tend\tguide_5to3\tguide_overhang\tpassenger_5to3\t"
         "passenger_overhang\tgc_percent\trules_passed\tseed_max_tm_c\t"
-        "hairpin_tm_c\thomopolymer_max_run\tofftarget_min_mismatch\t"
+        "hairpin_tm_c\thomopolymer_max_run\tofftarget_checked\t"
+        "offtarget_min_mismatch\t"
         "offtarget_hits_0\tofftarget_hits_1\tofftarget_hits_2\tofftarget_hits_3"
     )
     if window_by_pos is not None:
@@ -648,6 +666,7 @@ def _write_design_tsv(
             seed_tm_val,
             hairpin_val,
             run_val,
+            str(e.offtarget is not None),
             off_min,
             *off_counts,
         ]
@@ -684,9 +703,15 @@ def render_design_result(
     )
     if result.offtarget_skipped:
         typer.secho(
-            "  [!] off-target scanning is on by default but no --offtarget-db was "
-            "given; skipping it. Build an index with tools/build_offtarget_db.py, "
-            "or pass --no-offtarget to silence this.",
+            "  [!] UNREFERENCED RUN - no transcriptome off-target check was run.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        typer.secho(
+            "      These guides have not been screened against the human\n"
+            "      transcriptome, which is HUSH's safety floor. Build the\n"
+            "      reference once with 'hush reference build', or pass\n"
+            "      --no-offtarget to accept an unreferenced run knowingly.",
             fg=typer.colors.YELLOW,
         )
     typer.echo("")
@@ -769,8 +794,9 @@ def design_cmd(
     ),
     offtarget_db: Optional[Path] = typer.Option(
         None, "--offtarget-db",
-        help="bowtie index prefix for the reference transcriptome "
-        "(build with tools/build_offtarget_db.py).",
+        help="bowtie index prefix for the reference transcriptome. Defaults "
+        "to the one 'hush reference build' produced; set this to point at a "
+        "different reference genome.",
     ),
     offtarget_min_mismatch: int = typer.Option(
         DEFAULT_OFFTARGET_MIN_MISMATCH, "--offtarget-min-mismatch",
@@ -1287,6 +1313,72 @@ def shell_cmd() -> None:
     from app.shell import HushShell
 
     HushShell().run()
+
+
+@reference_app.command("build")
+def reference_build_cmd(
+    outdir: Optional[Path] = typer.Option(
+        None, "--outdir",
+        help="Where to write the index and manifest (default: "
+        "$HUSH_REFERENCE_DIR, else data/reference).",
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL, "--base-url",
+        help="RefSeq mRNA_Prot directory URL. Point at an archived release "
+        "to pin an exact reference.",
+    ),
+    index_name: str = typer.Option(
+        INDEX_NAME, "--index-name", help="Basename of the bowtie index prefix."
+    ),
+    keep_fasta: bool = typer.Option(
+        False, "--keep-fasta/--no-keep-fasta",
+        help="Keep the concatenated FASTA after building the index.",
+    ),
+) -> None:
+    """Fetch the RefSeq human transcriptome and build the off-target index.
+
+    Run once after installing. The transcriptome check is HUSH's safety
+    floor, so design uses this index automatically once it exists; without
+    it every run is unreferenced and says so. The download is several
+    gigabytes and needs bowtie1, which the HUSH container already carries.
+    """
+    try:
+        prefix = build_index(
+            outdir,
+            base_url=base_url,
+            index_name=index_name,
+            keep_fasta=keep_fasta,
+        )
+    except (HushError, OSError, subprocess.CalledProcessError) as exc:
+        typer.secho(f"Reference build failed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    typer.secho(f"\nReference index ready at {prefix}", fg=typer.colors.GREEN, bold=True)
+    typer.echo("  Off-target checking is now on by default; no flag needed.")
+
+
+@reference_app.command("status")
+def reference_status_cmd() -> None:
+    """Report whether an off-target reference is present, and what it is."""
+    prefix = default_index_prefix()
+    if not index_exists(prefix):
+        typer.secho(
+            f"No off-target reference at {prefix}.", fg=typer.colors.YELLOW, bold=True
+        )
+        typer.echo(
+            "  Designs will run unreferenced. Build it with "
+            "'hush reference build'."
+        )
+        raise typer.Exit(code=1)
+
+    typer.secho(f"Off-target reference at {prefix}", fg=typer.colors.GREEN, bold=True)
+    manifest = describe_index(prefix)
+    if manifest is None:
+        typer.echo("  No manifest alongside it; provenance unknown.")
+        return
+    for key in ("reference", "refseq_release", "bowtie_build_version", "built_date"):
+        if key in manifest:
+            typer.echo(f"  {key.replace('_', ' '):<22}{manifest[key]}")
 
 
 if __name__ == "__main__":

@@ -64,7 +64,8 @@ class DesignParams:
     seed_tm_threshold: float = SEED_TM_THRESHOLD_C
 
     # Transcriptome off-target. use_offtarget_filter is the intent; with no
-    # offtarget_db the session resolves it to skipped (a warning, not an error).
+    # offtarget_db the session falls back to the reference built by
+    # 'hush reference build', and only skips (loudly) if that is absent too.
     use_offtarget_filter: bool = True
     offtarget_db: Path | None = None
     offtarget_min_mismatch: int = DEFAULT_OFFTARGET_MIN_MISMATCH
