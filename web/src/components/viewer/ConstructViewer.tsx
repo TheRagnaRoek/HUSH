@@ -4,7 +4,6 @@ import { buildAlignment, type AlleleEnrichment } from "../../lib/alignment";
 import { AlignmentTrack } from "./AlignmentTrack";
 import { ConstructSchematic } from "./ConstructSchematic";
 import { DiscriminationBreakdown } from "./DiscriminationBreakdown";
-import { HairpinFold } from "./HairpinFold";
 import { OligoRow } from "./OligoRow";
 import { QcChips } from "./QcChips";
 import { ScoreReport } from "./ScoreReport";
@@ -104,7 +103,24 @@ export function ConstructViewer({
                 terminator={terminator}
               />
               <div className="buildgrid">
-                <HairpinFold construct={construct} />
+                <div>
+                  <div className="subhead">Fold</div>
+                  {construct.fold_structure ? (
+                    <>
+                      <div className="dotbracket num" title="Dot-bracket notation">
+                        {construct.fold_structure}
+                      </div>
+                      <p className="hint">
+                        Dot-bracket over the hairpin body: {construct.loop_seq.length}
+                        -nt loop closed by a{" "}
+                        {(construct.fold_structure.match(/\(/g) ?? []).length}-bp stem.
+                        Paste it into any RNA structure viewer.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="hint">This construct folds into no stable hairpin.</p>
+                  )}
+                </div>
                 <div>
                   <div className="subhead">Fold QC</div>
                   <QcChips construct={construct} />

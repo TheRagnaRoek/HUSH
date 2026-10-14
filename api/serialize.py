@@ -290,6 +290,7 @@ def construct_result(c: ShrnaConstruct) -> schemas.ConstructResult:
         max_homopolymer_run=c.max_homopolymer_run,
         sense_overhang=c.sense_overhang,
         guide_overhang=c.guide_overhang,
+        fold_structure=c.fold_structure,
     )
 
 

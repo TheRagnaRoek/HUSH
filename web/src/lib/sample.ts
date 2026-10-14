@@ -266,6 +266,7 @@ const CONSTRUCTS: ConstructResult[] = [
     max_homopolymer_run: 2,
     sense_overhang: "",
     guide_overhang: "",
+    fold_structure: "(((((((((((((((((((.......)))))))))))))))))))",
   },
   {
     region: "476-494",
@@ -285,6 +286,7 @@ const CONSTRUCTS: ConstructResult[] = [
     max_homopolymer_run: 3,
     sense_overhang: "",
     guide_overhang: "",
+    fold_structure: "(((((((((((((((((((.......)))))))))))))))))))",
   },
   {
     region: "478-496",
@@ -304,6 +306,7 @@ const CONSTRUCTS: ConstructResult[] = [
     max_homopolymer_run: 3,
     sense_overhang: "",
     guide_overhang: "",
+    fold_structure: "(((((((((((((((((((.......)))))))))))))))))))",
   },
 ];
 

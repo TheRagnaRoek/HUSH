@@ -1327,9 +1327,22 @@ button.allele.hit:hover {
 }
 .buildgrid {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 26px;
-  align-items: center;
+  align-items: start;
+  margin-bottom: 8px;
+}
+/* Dot-bracket is only readable monospaced, and wraps rather than scrolls so
+   the whole structure is visible at once. */
+.dotbracket {
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-all;
+  color: var(--seg-loop);
+  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+  border-radius: 6px;
+  padding: 8px 10px;
   margin-bottom: 8px;
 }
 @media (max-width: 640px) {

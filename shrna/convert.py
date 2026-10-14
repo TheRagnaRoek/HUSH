@@ -126,6 +126,8 @@ class ShrnaConstruct:
             the terminator is the intended terminator, not a premature one.
         max_homopolymer_run: longest single-nucleotide run in the body (the
             3' tail's own poly-U run is excluded by construction).
+        fold_structure: 'fold' in dot-bracket notation over the body, or
+            empty when it folds into nothing. Paste-able into any RNA tool.
     """
 
     region: str
@@ -143,6 +145,7 @@ class ShrnaConstruct:
     max_homopolymer_run: int
     sense_overhang: str = ""
     guide_overhang: str = ""
+    fold_structure: str = ""
 
     def __repr__(self) -> str:
         ok = "folds-as-designed" if self.folds_as_designed else "MISFOLD-RISK"
@@ -218,6 +221,7 @@ def convert(
         max_homopolymer_run=run,
         sense_overhang=sense_oh,
         guide_overhang=guide_oh,
+        fold_structure="" if fold is None else fold.dot_bracket(len(body)),
     )
 
 

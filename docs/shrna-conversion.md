@@ -114,6 +114,17 @@ A human U6 or 7SK promoter initiates efficiently on A or G at +1, so a C or U
 start is flagged. This is a **QC flag, not a gate**: it reports rather than drops,
 because the right response depends on the promoter the wet lab uses.
 
+### fold_structure
+
+The fold in dot-bracket notation, over the body. This is the structure the
+QC read-outs above are derived from, written in the notation every RNA tool
+reads, so it can be pasted into an external viewer rather than taken on
+trust. Empty when the construct folds into nothing.
+
+It covers the body only, for the same reason the fold search does: the 3'
+tail is single-stranded. A 55-nt hairpin with a 2-nt guide overhang and a
+6-nt terminator yields a 47-character structure.
+
 ### max_homopolymer_run
 
 Longest single-nucleotide run in the body. The 3' tail's own poly-U is excluded

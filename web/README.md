@@ -67,9 +67,11 @@ checks (and if you later switch to an openapi-fetch generated client). Keep
 
 ## Deferred (follow-ups, gated on backend additions)
 
-- **fornac** real stem-loop fold - needs the dot-bracket added to
-  `ConvertResponse` (the engine already computes the fold). Until then the fold
-  is a schematic (`HairpinFold`).
+- ~~**fornac** real stem-loop fold~~ - dropped. The dot-bracket is now on
+  `ConvertResponse` as `fold_structure` and shown as notation; the schematic
+  it replaced was a fixed drawing that never varied between constructs. A
+  force-directed viewer buys little for the single hairpin HUSH emits, and
+  the notation pastes into any RNA tool.
 - **Nightingale** panel-MSA + protein-position tab - needs the aligned panel
   windows surfaced. The alignment currently shows each spared allele's deciding
   mismatch (`buildAlignment`, marked `complete: false`); sample data shows the
