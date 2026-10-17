@@ -83,12 +83,22 @@ Stem length sits on a processing boundary in any case - stems of 19 bp and below
 behave distinctly as "sshRNA" and can be extremely potent (Ge et al. 2010, *RNA*
 16:106).
 
+### The terminator
+
+The deliberate terminator is a run of T (U in the transcript) after the guide
+overhang: 6 by default, at least 4 when included (the length is not checked with
+`--no-terminator`). T4 is the minimal Pol III termination signal and full
+efficiency needs six or more. Termination within the run is heterogeneous,
+leaving a U-tail of 1 to 6 nt (Gao et al. 2018). The terminator is excluded from
+the premature-terminator check by construction.
+
 ### premature_terminator_free
 
 **This one is a filter, not just a flag.** Pol III terminates within a run of
-four or more T residues (Bogenhagen & Brown 1981, *Cell* 24:261), so a `UUUU`
-anywhere in the hairpin body truncates the transcript before the hairpin
-completes.
+four or more T residues (Bogenhagen & Brown 1981, *Cell* 24:261), with full
+efficiency from six; Gao et al. 2018 (*Mol Ther Nucleic Acids* 10:36) confirmed
+this in vivo on the human U6, 7SK and H1 promoters. So a `UUUU` anywhere in the
+hairpin body truncates the transcript before the hairpin completes.
 
 Grafting can build such a run where no upstream gate can see it: the core's last
 base, the overhang, and the loop's first base are three different objects that
@@ -110,8 +120,10 @@ rather than the list silently shrinking.
 
 ### starts_with_purine
 
-A human U6 or 7SK promoter initiates efficiently on A or G at +1, so a C or U
-start is flagged. This is a **QC flag, not a gate**: it reports rather than drops,
+A human U6 or 7SK promoter initiates efficiently and with a precise start site on
+A or G at +1 (Gao et al. 2017, *Transcription* 8:275), so a C or U start is
+flagged. The widely repeated rule "U6 requires a G" is too narrow, so HUSH checks
+for a purine instead. This is a **QC flag, not a gate**: it reports rather than drops,
 because the right response depends on the promoter the wet lab uses.
 
 ### max_homopolymer_run

@@ -1,8 +1,6 @@
-"""Run the HUSH API: ``python -m api`` (or ``uvicorn api.app:app --reload``).
+"""Run the API: python -m api.
 
-A thin launcher for local use. Host/port/reload are read from the environment
-(HUSH_API_HOST, HUSH_API_PORT, HUSH_API_RELOAD) so a container or a dev shell
-can point it wherever without code changes.
+Reads HUSH_API_HOST, HUSH_API_PORT and HUSH_API_RELOAD from the environment.
 """
 
 from __future__ import annotations

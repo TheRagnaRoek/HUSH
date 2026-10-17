@@ -1,10 +1,5 @@
-"""Tests for the interactive shell (app.shell.HushShell).
-
-The command loop is driven directly through ``dispatch`` - one line at a time -
-so state and output can be checked without a live stdin. The rendering itself is
-the CLI's (covered by test_cli); these tests cover the shell's state, its flag
-handling, and that a bad command never tears down the session.
-"""
+"""Tests for app.shell.HushShell, driven through dispatch(): state, flag handling and
+that a bad command does not end the session. Rendering is covered by test_cli."""
 
 import pytest
 
@@ -14,9 +9,7 @@ from service.params import AlleleTargetingSpec, DesignParams
 _ALLELE_1 = "HLA-DEMO*01:01"
 
 
-# --------------------------------------------------------------------------- #
 # apply_design_flags (unit)
-# --------------------------------------------------------------------------- #
 
 
 def test_apply_flags_only_changes_named_options():
@@ -63,9 +56,7 @@ def test_apply_convert_flags_builds_options():
     assert options.include_terminator is False
 
 
-# --------------------------------------------------------------------------- #
 # loading and state
-# --------------------------------------------------------------------------- #
 
 
 def test_load_sets_target(target_fasta, capsys):
@@ -107,9 +98,7 @@ def test_limit_updates_display_cap():
     assert shell.limit == 5
 
 
-# --------------------------------------------------------------------------- #
 # design / convert
-# --------------------------------------------------------------------------- #
 
 
 def test_design_without_target_reports_error(capsys):
@@ -152,9 +141,7 @@ def test_convert_without_design_reports_error(target_fasta, capsys):
     assert "error:" in capsys.readouterr().out
 
 
-# --------------------------------------------------------------------------- #
 # save, control flow, robustness
-# --------------------------------------------------------------------------- #
 
 
 def test_save_writes_both_tsvs_after_convert(demo_lowgc_fasta, tmp_path):

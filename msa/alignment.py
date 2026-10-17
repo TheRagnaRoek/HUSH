@@ -1,32 +1,10 @@
-"""The alignment result the MSA / allele stage speaks in (pipeline stage 3).
+"""Alignment result types for the allele stage.
 
-Every panel member is projected onto **ungapped target coordinates**: each member
-becomes a string exactly as long as the target, where index *i* holds the residue
-that member carries at target position *i*. Columns the alignment inserted into
-the target are removed during projection, so no downstream unit ever converts
-between alignment columns and target positions.
-
-Three states are kept distinct at each target position:
-
-* a residue - matching the target or not (this module does not judge which; that
-  is msa.variation's job),
-* GAP - the member has no residue there. Not the same as "different": a window
-  where a targeted allele is uncovered is unusable, not good or bad,
-* an insertion - extra residues with no target coordinate at all, recorded in
-  AlignedRow.insertions rather than dropped.
-
-Nothing is aligned here. The backends live in their own modules (msa.align_star,
-and whatever follows) and are named by AlignmentBackend, so one can be swapped
-for another without touching this module or the layers above it.
-
-Scope and deferrals:
-
-* No alignment algorithm, no scoring, no verdict.
-* Insertions are recorded but not interpreted. An insertion would make an siRNA
-  bulge on that member, which is a discriminating feature; weighting it needs
-  the mismatch thermodynamics core.thermo does not yet carry.
-* The projection is lossy by construction: residues a member carries outside the
-  target's span are kept only as insertion payloads, without alignment detail.
+Each panel member is projected onto ungapped target coordinates: a string as
+long as the target, where index i is the member's residue at target position i.
+A position holds a residue, GAP (member has none there; not the same as a
+difference) or, between positions, an insertion kept in AlignedRow.insertions.
+Insertions are recorded, not scored (docs/design-rules.md, Not implemented).
 """
 
 from __future__ import annotations
@@ -38,50 +16,26 @@ from typing import Iterable, Iterator
 from core.sequence import BioSequence
 from msa.msa_errors import AlignmentError
 
-# The character marking a target position the member does not cover. Matches the
-# gap alphabet core.sequence already accepts, so a projected row can be wrapped
-# in a BioSequence without further translation.
+# Marks an uncovered position; accepted by core.sequence as a gap character.
 GAP = "-"
 
 
-# --------------------------------------------------------------------------- #
-# Backend identity
-# --------------------------------------------------------------------------- #
-
-
 class AlignmentBackend(str, Enum):
-    """Which method produced an alignment, selectable and recordable by name.
+    """Method that produced an alignment (hashable, so it can sit in frozen objects).
 
-    A hashable stand-in for the backend itself, so a caller can carry a choice
-    of method through a frozen criteria object and into a report without
-    embedding a function. Each name corresponds to one module under msa/.
-
-    STAR: pairwise alignment of every member against the target, the target
-        acting as the common reference (msa.align_star). Adequate while panel
-        members are near-identical; it degrades as they diverge.
+    STAR: every member aligned pairwise to the target (msa.align_star).
     """
 
     STAR = "star"
 
 
-# --------------------------------------------------------------------------- #
-# One panel member, projected onto the target
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True)
 class AlignedRow:
-    """One panel member expressed in target coordinates.
+    """One panel member in target coordinates.
 
-    Parameters:
-        id:    The member's sequence id, as it appears in the panel.
-        bases: One character per target position, in target order. A residue
-               where the member covers that position, GAP where it does not.
-               Always the same length as the target.
-        insertions: Extra residues the member carries that the target does not.
-               Keyed by the target position they sit *before*: key ``i`` means
-               "between target positions i-1 and i". ``0`` is before the target
-               starts, ``len(target)`` after it ends.
+    bases has one character per target position (GAP where uncovered).
+    insertions maps a target position i to the residues inserted between
+    positions i-1 and i; key 0 is before the target, len(target) after it.
     """
 
     id: str
@@ -97,12 +51,12 @@ class AlignedRow:
 
     @property
     def covered(self) -> int:
-        """Number of target positions this member has a residue for."""
+        """Number of covered target positions."""
         return len(self.bases) - self.bases.count(GAP)
 
     @property
     def coverage(self) -> float:
-        """Fraction of the target this member covers (0.0 for an empty target)."""
+        """Fraction of the target covered; 0.0 for an empty target."""
         return self.covered / len(self.bases) if self.bases else 0.0
 
     def __repr__(self) -> str:
@@ -110,29 +64,12 @@ class AlignedRow:
         return f"AlignedRow(id={self.id!r}, coverage={self.coverage:.0%}{extra})"
 
 
-# --------------------------------------------------------------------------- #
-# The whole panel, projected onto the target
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True)
 class PanelAlignment:
-    """Every panel member projected onto one ungapped target sequence.
+    """Every panel member projected onto one target, keyed by id in panel order.
 
-    The hand-off from an alignment backend to msa.variation. The invariant every
-    backend must uphold - enforced here rather than trusted - is that each row is
-    exactly as long as the target, so index *i* means target position *i* in
-    every row without exception.
-
-    Rows are keyed by sequence id because that is how every consumer addresses
-    them; panel order is preserved by the mapping's insertion order.
-
-    Parameters:
-        target:  The target the panel was aligned against, ungapped and in its
-                 original coordinates.
-        rows:    Sequence id -> AlignedRow, in panel order.
-        backend: Which method produced this alignment, or None for an alignment
-                 assembled by hand (tests, imported files).
+    Every row must be exactly as long as the target; this is validated.
+    backend is None for an alignment assembled by hand.
     """
 
     target: BioSequence
@@ -143,8 +80,6 @@ class PanelAlignment:
         object.__setattr__(self, "rows", dict(self.rows))
         self._validate()
 
-    # -- construction ------------------------------------------------------ #
-
     @classmethod
     def from_rows(
         cls,
@@ -152,12 +87,7 @@ class PanelAlignment:
         rows: Iterable[AlignedRow],
         backend: AlignmentBackend | None = None,
     ) -> "PanelAlignment":
-        """Build an alignment from rows in panel order.
-
-        The convenient entry point for backends, which naturally produce rows one
-        after another rather than a mapping. Duplicate ids are rejected here
-        rather than silently overwriting each other.
-        """
+        """Build from rows in panel order; duplicate ids raise AlignmentError."""
         mapping: dict[str, AlignedRow] = {}
         for row in rows:
             if row.id in mapping:
@@ -167,8 +97,6 @@ class PanelAlignment:
                 )
             mapping[row.id] = row
         return cls(target=target, rows=mapping, backend=backend)
-
-    # -- validation -------------------------------------------------------- #
 
     def _validate(self) -> None:
         width = len(self.target)
@@ -190,20 +118,16 @@ class PanelAlignment:
                     f"{bad}, outside 0..{width}."
                 )
 
-    # -- accessors --------------------------------------------------------- #
-
     def __len__(self) -> int:
         return len(self.rows)
 
     def __iter__(self) -> Iterator[AlignedRow]:
-        """Iterate over the rows, in panel order."""
         return iter(self.rows.values())
 
     def __contains__(self, row_id: str) -> bool:
         return row_id in self.rows
 
     def __getitem__(self, row_id: str) -> AlignedRow:
-        """The row for this sequence id, raising a legible error if absent."""
         try:
             return self.rows[row_id]
         except KeyError:
@@ -212,24 +136,23 @@ class PanelAlignment:
             ) from None
 
     def get(self, row_id: str) -> AlignedRow | None:
-        """The row for this sequence id, or None when it is absent."""
+        """The row for this id, or None."""
         return self.rows.get(row_id)
 
     @property
     def width(self) -> int:
-        """Number of target positions - the length of every row."""
+        """Number of target positions."""
         return len(self.target)
 
     @property
     def ids(self) -> list[str]:
-        """Row ids, in panel order."""
+        """Row ids in panel order."""
         return list(self.rows)
 
     def column(self, position: int) -> dict[str, str]:
-        """The residue every member carries at one target position.
+        """Each member's residue at one target position (GAP if uncovered).
 
-        GAP for members that do not cover it. The target's own base is not
-        included - read it from ``alignment.target.seq[position]``.
+        The target's own base is not included.
         """
         if not 0 <= position < self.width:
             raise IndexError(

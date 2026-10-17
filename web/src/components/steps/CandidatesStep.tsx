@@ -40,10 +40,8 @@ export function CandidatesStep() {
   const rank = design.selected.findIndex((c) => c.region === selectedRegion) + 1;
   const targetId = inspect?.target.id ?? design.target.id;
   const terminator = terminatorString(convert?.terminator_length);
-  // Only worth nudging about a real run: the sample always has candidates,
-  // and after a failed call the error banner is the thing to read. Hidden while
-  // busy because applying the preset flips params before the re-run returns,
-  // which would otherwise swap the button for advice to go and do it manually.
+  // Only for a real, finished run: not for the sample, after an error, or
+  // while busy (applying the preset changes params before the re-run returns).
   const emptyRun = !offline && !error && !busy && design.selected.length === 0;
   const narrowest = emptyRun ? narrowestGate(design.funnel) : null;
   const seedIsOn = params.use_seed_filter;

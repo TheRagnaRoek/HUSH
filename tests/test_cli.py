@@ -54,9 +54,7 @@ def test_inspect_bad_file_exits_nonzero(tmp_path):
     assert result.exit_code != 0
 
 
-# --------------------------------------------------------------------------- #
 # design command
-# --------------------------------------------------------------------------- #
 
 
 def test_design_default_runs(target_fasta):
@@ -217,9 +215,7 @@ def test_design_allow_homopolymers_disables_the_gate(target_fasta):
     assert "homopolymer:off" in result.stdout.replace(" ", "")
 
 
-# --------------------------------------------------------------------------- #
 # design command - allele-aware panel targeting (MSA stage)
-# --------------------------------------------------------------------------- #
 
 _ALLELE_1 = "HLA-DEMO*01:01"  # a member id in hla_panel_example.fasta
 
@@ -412,9 +408,7 @@ def test_design_panel_tsv_has_allele_columns(target_fasta, panel_fasta, tmp_path
     assert "disc_all_positions" in header
 
 
-# --------------------------------------------------------------------------- #
 # convert command (stage 4: siRNA -> shRNA)
-# --------------------------------------------------------------------------- #
 
 
 def _design_tsv(target_fasta, tmp_path):
@@ -536,9 +530,7 @@ def test_convert_from_tsv_matches_the_in_session_conversion(target_fasta, tmp_pa
     assert from_tsv == in_session
 
 
-# --------------------------------------------------------------------------- #
 # off-target self set
-# --------------------------------------------------------------------------- #
 
 
 def _stub_bowtie(monkeypatch, refs):

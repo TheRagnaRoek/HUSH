@@ -25,9 +25,7 @@ def _pair(seq: str = CORE) -> tuple[BioSequence, BioSequence]:
     return s, s.reverse_complement()
 
 
-# --------------------------------------------------------------------------- #
 # Loop registry
-# --------------------------------------------------------------------------- #
 
 
 def test_registry_has_the_three_loops_with_expected_sequences():
@@ -47,9 +45,7 @@ def test_get_loop_is_case_insensitive_and_validates():
         get_loop("nonesuch")
 
 
-# --------------------------------------------------------------------------- #
 # Hairpin assembly (SA orientation)
-# --------------------------------------------------------------------------- #
 
 
 def test_hairpin_is_sense_loop_antisense_plus_terminator():
@@ -88,9 +84,7 @@ def test_convert_candidate_wrapper_matches_convert():
     assert c.hairpin_rna.seq.startswith(cand.sense.seq)
 
 
-# --------------------------------------------------------------------------- #
 # Options validation
-# --------------------------------------------------------------------------- #
 
 
 def test_short_terminator_is_rejected():
@@ -104,9 +98,7 @@ def test_short_terminator_allowed_when_terminator_disabled():
     assert opts.terminator_length == 0
 
 
-# --------------------------------------------------------------------------- #
 # Fold-based scoring
-# --------------------------------------------------------------------------- #
 
 
 def test_clean_core_folds_as_designed():
@@ -162,9 +154,7 @@ def test_premature_terminator_free_for_a_clean_junction():
     assert c.premature_terminator_free is True
 
 
-# --------------------------------------------------------------------------- #
 # 3' overhangs: both strands are encoded in full
-# --------------------------------------------------------------------------- #
 
 # A core whose antisense does not begin with U, so the loop/stem junction is
 # clean and any U run in these tests is one the test put there.
@@ -182,8 +172,7 @@ def test_hairpin_encodes_both_strands_in_full():
 
 
 def test_hairpin_carries_the_validated_guide_including_its_overhang():
-    # The whole point of the stage: the hairpin expresses the strand design
-    # validated, overhang and all, not a truncated core.
+    # The hairpin encodes the validated strand with its overhang, not the core alone.
     sense, antisense = _pair(CLEAN)
     c = convert(
         sense, antisense, region="1-19", start=0, end=19,

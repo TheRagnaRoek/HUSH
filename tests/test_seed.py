@@ -24,12 +24,7 @@ from core.thermo import NN_PARAMS_FREIER_1986, NN_PARAMS_XIA_1998
 
 
 def make_candidate_pair(sense: str) -> SiRNACandidate:
-    """Build a candidate whose two strands are true reverse-complements.
-
-    The seed filter reads a real duplex - the guide seed and the passenger seed
-    are related by complementarity - so unlike the rule tests these strands
-    cannot be set independently.
-    """
+    """Candidate whose strands are true reverse complements (the filter reads a real duplex)."""
     core = BioSequence(sense, id="core", moltype=MolType.RNA)
     return next(iter(enumerate_candidates(core, length=len(sense))))
 
@@ -72,16 +67,8 @@ def all_heptamer_tms() -> list[float]:
 
 
 class TestSiDirectPublishedFigures:
-    """The decisive check: reproduce siDirect 2.0's own published numbers.
-
-    Naito et al. (2009) report that of all 4^7 = 16384 possible seed heptamers,
-    4488 (27.4%) have a seed-duplex Tm below 21.5 C, and that the calculated
-    values range from -12 C to 60 C. Reproducing those figures exactly pins down
-    every constant in the equation at once - the parameter set, the -10.8 helix
-    initiation term, the 100 uM strand concentration, the 100 mM salt correction
-    and the absence of terminal-A-U and symmetry corrections. Any one of them
-    wrong moves the count.
-    """
+    """Reproduce siDirect 2.0 (Naito 2009): of all 4^7 = 16384 seed heptamers, 4488 (27.4%)
+    have Tm below 21.5 C, with values from -12 C to 60 C. Any wrong constant moves the count."""
 
     def test_covers_every_heptamer(self, all_heptamer_tms):
         assert len(all_heptamer_tms) == 4**SEED_LENGTH == 16384
@@ -120,7 +107,7 @@ class TestSeedDuplexTm:
         assert seed_duplex_tm("GCGCGCG") > seed_duplex_tm("AUAUAUA")
 
     def test_au_rich_seed_passes_and_gc_rich_seed_fails(self):
-        # The whole point of the filter: weak seeds are off-target-free.
+        # Weak (A/U-rich) seeds pass; strong (G/C-rich) seeds fail.
         assert seed_duplex_tm("AUAUAUA") < SEED_TM_THRESHOLD_C
         assert seed_duplex_tm("GCGCGCG") > SEED_TM_THRESHOLD_C
 

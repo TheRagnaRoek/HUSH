@@ -74,9 +74,6 @@ def _criteria(hit, spare=(), length=LENGTH, min_spare=1) -> WindowCriteria:
     )
 
 
-# --------------------------------------------------------------------------- #
-
-
 class TestCriteria:
     def test_default_length_matches_the_sirna_core(self):
         from core.sirna import DEFAULT_LENGTH
@@ -234,12 +231,8 @@ class TestSliding:
 
 
 class TestDiscrimination:
-    """The evidence-based ranking attached to each window.
-
-    Uses its own 19-nt fixture: the published findings are indexed by guide
-    position P1..P19, so the short window the other tests use cannot exercise
-    them.
-    """
+    """Evidence-based ranking per window. Uses a 19-nt fixture because the findings are
+    indexed by guide position P1..P19."""
 
     SEQ = "ATGCGTACGTTAGCCATTGCACGTAACGGATCATGCA"  # 37 nt
     WIDE = 19
@@ -387,7 +380,7 @@ class TestEveryDifferenceIsReported:
         )
 
     def test_the_second_difference_does_not_change_the_rank(self, variation_two_diffs):
-        # The whole point: placement decides, the count is reported alongside.
+        # Placement decides the rank; the count is reported alongside.
         window = self._window(variation_two_diffs)
         best_only = [window.deciding_mismatch]
         assert window.discrimination_key == allele_discrimination_key(best_only)

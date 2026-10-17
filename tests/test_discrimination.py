@@ -34,9 +34,7 @@ def _at_guide(guide_position_1: int, target_base: str, spared_base: str):
     )
 
 
-# --------------------------------------------------------------------------- #
 # Level 1: the published table
-# --------------------------------------------------------------------------- #
 
 
 class TestHuangTable:
@@ -92,9 +90,7 @@ class TestHuangTable:
         assert huang_recommends("A", base, 10) is None
 
 
-# --------------------------------------------------------------------------- #
 # Coordinates
-# --------------------------------------------------------------------------- #
 
 
 class TestGuidePosition:
@@ -135,9 +131,7 @@ class TestGuideRegion:
             guide_region(0)
 
 
-# --------------------------------------------------------------------------- #
 # Level 2: mismatch class
-# --------------------------------------------------------------------------- #
 
 
 class TestMismatchClass:
@@ -208,9 +202,7 @@ class TestSourcesAgree:
         assert _at_guide(10, target_base="N", spared_base="A").sources_agree is False
 
 
-# --------------------------------------------------------------------------- #
 # Ranking
-# --------------------------------------------------------------------------- #
 
 
 class TestSchwarzPositionSets:

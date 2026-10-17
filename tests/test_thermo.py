@@ -69,8 +69,7 @@ class TestStackingTerms:
         assert ds == pytest.approx(expected_ds)
 
     def test_excludes_initiation_and_end_terms(self):
-        # The whole point of the two entry points: duplex_thermo adds exactly
-        # initiation plus the end corrections on top of the bare stack.
+        # duplex_thermo adds only initiation and the end corrections to the stack.
         stack_dh, stack_ds = stacking_terms("GCAU")
         duplex = duplex_thermo("GCAU")
         assert duplex.dh - stack_dh == pytest.approx(INIT_DH + TERMINAL_AU_DH)
@@ -181,13 +180,8 @@ class TestMeltingTemperature:
 
 
 class TestBiopythonCrossCheck:
-    """Independent check against Biopython's Xia et al. (1998) table (RNA_NN2).
-
-    Biopython implements the same model from the same published parameters, so
-    it is a genuine external oracle for the whole chain: step lookup, end terms
-    and the Tm equation. Its gas constant is rounded to 1.987 where core.thermo
-    uses 1.9872, which is worth a hundredth of a degree - hence the tolerance.
-    """
+    """Check against the Xia 1998 table of Biopython (RNA_NN2), an independent implementation.
+    Its gas constant is 1.987 against 1.9872 here, hence the tolerance."""
 
     TOLERANCE_C = 0.01
 

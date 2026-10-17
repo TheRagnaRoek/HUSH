@@ -18,10 +18,8 @@ import { constructForRegion, sampleConvert, sampleDesign, sampleEnrichment, samp
 import { SessionContext, type SessionValue, type Step } from "./context";
 
 /**
- * Holds the working session. It opens on representative sample data (so the app
- * shows what it does immediately), and the run actions call the API when FASTA
- * input is present, falling back to sample on any failure and flagging offline.
- * The /sessions flow is used so the backend reuses its cached alignment.
+ * The working session. Opens on sample data; the run actions call the API when
+ * FASTA input is present and fall back to the sample, flagged offline, on failure.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [step, setStep] = useState<Step>("candidates");
@@ -56,10 +54,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const sessionId = useRef<string | null>(null);
 
-  // Keep the inspect summary in step with the typed inputs. The targeting
-  // step reads its panel members from here, so a stale inspect offers
-  // allele ids that are not in the user's panel. Debounced because the
-  // textareas report every keystroke.
+  // Refresh the inspect summary (the targeting step reads panel members from
+  // it) when the inputs change; debounced because textareas fire per keystroke.
   useEffect(() => {
     if (!targetFasta.trim()) {
       setInspect(sampleInspect);
@@ -75,7 +71,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (!cancelled) setInspect(res);
         })
         .catch(() => {
-          // Better to show nothing than someone else's panel.
+          // Show no panel rather than a stale one.
           if (!cancelled) setInspect(null);
         });
     }, 500);
@@ -104,7 +100,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const runDesign = useCallback(
     async (override?: Partial<DesignParams>) => {
       setError(null);
-      // Applied here as well as sent, so the criteria step reflects what ran.
+      // Applied to state as well, so the criteria step shows what ran.
       const effective = override ? { ...params, ...override } : params;
       if (override) setParams(effective);
       if (!targetFasta.trim()) {

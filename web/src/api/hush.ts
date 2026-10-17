@@ -1,8 +1,4 @@
-/**
- * Typed wrappers over the HUSH API endpoints. The session flow mirrors
- * service.HushSession: POST the inputs once to /sessions, then design/convert by
- * id so the server reuses its cached panel alignment across re-designs.
- */
+/** Typed wrappers over the HUSH API endpoints (docs/api.md). */
 
 import { apiGet, apiPost } from "./client";
 import type {

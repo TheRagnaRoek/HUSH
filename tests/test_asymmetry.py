@@ -56,8 +56,7 @@ class TestTerminalStackingDg:
         )
 
     def test_reads_from_the_five_prime_end(self):
-        # Only the first `window` bases matter; the rest of the strand is
-        # irrelevant to this measurement.
+        # Only the first 'window' bases matter.
         assert terminal_stacking_dg("GCGC" + "A" * 15) == terminal_stacking_dg(
             "GCGC" + "U" * 15
         )
@@ -127,12 +126,8 @@ class TestSignConvention:
 
 
 class TestAgreementWithAmarzguioui:
-    """The thermodynamic measure and the published A/U proxy should agree.
-
-    Amarzguioui's DT3 is an A/U-count stand-in for exactly this quantity, so the
-    two must point the same way. If the signs disagreed, one of them would be
-    inverted - which is the specific error this guards against.
-    """
+    """The thermodynamic differential and the A/U proxy (Amarzguioui DT3) should agree in sign;
+    a disagreement would mean one is inverted."""
 
     def test_signs_agree_on_constructed_duplexes(self):
         for sense, expected_positive in (

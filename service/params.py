@@ -1,10 +1,6 @@
-"""Request objects for the HUSH service layer.
+"""Parsed design request. Fields mirror the CLI flags; defaults are in docs/cli.md.
 
-Framework-agnostic, already-parsed design/convert requests. A CLI turns flag
-strings into these; a future HTTP layer turns JSON into these; the service
-itself speaks only this vocabulary. Fields mirror the tunable pipeline knobs and
-default to the best-practice paradigm (see 'hush design --help' and
-docs/cli.md). GC bounds are fractions here, not percent.
+GC bounds are fractions, not percent.
 """
 
 from __future__ import annotations
@@ -29,13 +25,10 @@ from msa.windows import DEFAULT_MIN_SPARE_MISMATCHES
 
 @dataclass(frozen=True)
 class AlleleTargetingSpec:
-    """A targeting intent by panel-member id, before it is resolved to sets.
+    """A targeting intent by member id; the intents are mutually exclusive.
 
-    The four named intents (pan-allele, allele-specific, target-specific,
-    explicit hit/spare) are mutually exclusive. Resolution against a panel -
-    which fills in the spared set and validates the ids - happens in the session,
-    where the panel is known. The all-default spec is the pan-allele intent (hit
-    everything, spare nothing).
+    Resolved against the panel by resolve_targeting. The all-default spec means
+    pan-allele.
     """
 
     pan_allele: bool = False
@@ -47,7 +40,7 @@ class AlleleTargetingSpec:
 
 @dataclass(frozen=True)
 class DesignParams:
-    """Everything the design stage needs beyond the loaded target and panel."""
+    """Everything a design run needs beyond the loaded target and panel."""
 
     length: int = 19
     overhang: OverhangPolicy = OverhangPolicy.NATURAL
@@ -64,25 +57,23 @@ class DesignParams:
     use_seed_filter: bool = True
     seed_tm_threshold: float = SEED_TM_THRESHOLD_C
 
-    # Transcriptome off-target. use_offtarget_filter is the intent; with no
-    # offtarget_db the session falls back to the reference built by
-    # 'hush reference build', and only skips (loudly) if that is absent too.
+    # Transcriptome off-target. Without offtarget_db the session uses the index
+    # from 'hush reference build'; if that is absent too, the gate is skipped
+    # and the result says so.
     use_offtarget_filter: bool = True
     offtarget_db: Path | None = None
     offtarget_min_mismatch: int = DEFAULT_OFFTARGET_MIN_MISMATCH
     offtarget_max_mismatch: int = DEFAULT_OFFTARGET_MAX_MISMATCH
     bowtie_path: str = "bowtie"
 
-    # What the off-target gate treats as the design's own rather than a hit.
-    # Accessions name transcripts outright; resolve_offtarget_self finds the rest
-    # by homology to the target, the panel and offtarget_self_fasta, which is the
-    # only workable route for a gene family (one accession never covers one).
+    # The design's own transcripts, excluded from hits: named accessions plus
+    # those resolved by homology (see docs/design-rules.md).
     offtarget_self_accessions: tuple[str, ...] = ()
     offtarget_self_fasta: Path | None = None
     resolve_offtarget_self: bool = True
     offtarget_self_coverage: float = DEFAULT_SELF_MIN_COVERAGE
 
-    # Standalone GC window (fractions in [0, 1], not percent).
+    # Standalone GC window.
     use_gc_filter: bool = False
     gc_min: float = 0.30
     gc_max: float = 0.52
@@ -100,14 +91,12 @@ class DesignParams:
     use_hairpin_filter: bool = False
     hairpin_tm_max: float = DEFAULT_INTERNAL_TM_THRESHOLD_C
 
-    # Nearest-neighbour parameter set for the asymmetry and hairpin readouts
-    # only (never the seed filter).
+    # Nearest-neighbor set for the asymmetry and hairpin read-outs only.
     thermo_params: ThermoParams = ThermoParams.XIA_1998
 
-    # Allele-aware targeting; consulted only when a panel is loaded.
+    # Allele targeting; used only when a panel is loaded.
     targeting: AlleleTargetingSpec | None = None
     min_spare_mismatches: int = DEFAULT_MIN_SPARE_MISMATCHES
 
-    # Report ordering: "auto" (discrimination when the request spares something,
-    # else position), "position" (nothing ranked), or "discrimination".
+    # "auto", "position" or "discrimination" (see sort_selection).
     sort: str = "auto"

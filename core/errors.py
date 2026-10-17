@@ -1,39 +1,27 @@
-"""Shared exception types for HUSH."""
+"""Exception types for HUSH."""
 
 from __future__ import annotations
 
 
 class HushError(Exception):
-    """Base class for all HUSH-specific errors."""
+    """Base class for all HUSH errors."""
 
 
 class SequenceValidationError(HushError):
-    """A sequence contains residues not valid for its molecule type."""
+    """A sequence contains residues invalid for its molecule type."""
 
 
 class MolTypeError(HushError):
-    """An operation was requested that is invalid for a sequence's molecule type.
-
-    e.g. asking for the RNA form of a protein sequence, or running siRNA
-    design against a target that is not a nucleotide sequence.
-    """
+    """An operation is invalid for the sequence's molecule type."""
 
 
 class InputParseError(HushError):
-    """A FASTA/PDB (or other) input file could not be parsed into sequences."""
+    """An input file could not be parsed into sequences."""
 
 
 class OffTargetError(HushError):
-    """A transcriptome off-target search could not be run.
-
-    e.g. the bowtie binary is not on PATH, the reference index is missing, or
-    the aligner exited with an error.
-    """
+    """The transcriptome off-target search could not be run."""
 
 
 class ReferenceBuildError(HushError):
-    """The transcriptome reference index could not be built.
-
-    e.g. bowtie-build is not on PATH, or the RefSeq download found no
-    transcript files at the configured base URL.
-    """
+    """The transcriptome reference index could not be built."""

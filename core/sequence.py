@@ -1,19 +1,6 @@
-"""The HUSH sequence domain model.
+"""Sequence model: MolType, BioSequence, SequencePanel and DesignInput.
 
-Every stage of the pipeline speaks in terms of the types defined here, so this
-module is intentionally dependency-light (pure standard library, no Biopython)
-and heavily validated.
-
-Core types:
-
-* MolType       - DNA / RNA / protein / unknown.
-* BioSequence   - an immutable, validated biological sequence with the
-  nucleotide operations (transcription, reverse-complement, GC content, ...)
-  the siRNA/shRNA stages rely on.
-* SequencePanel - a named set of related sequences (e.g. an HLA allele family)
-  fed to the MSA/allele module.
-* DesignInput   - the bundle handed from the Input Layer to the rest of the
-  pipeline: a target plus an optional panel.
+Standard library only, so it stays easy to test.
 """
 
 from __future__ import annotations
@@ -23,21 +10,15 @@ from enum import Enum
 
 from core.errors import MolTypeError, SequenceValidationError
 
-# --------------------------------------------------------------------------- #
-# Alphabets
-# --------------------------------------------------------------------------- #
-
 DNA_BASES = frozenset("ACGT")
 RNA_BASES = frozenset("ACGU")
-# IUPAC nucleotide ambiguity codes (shared between DNA and RNA).
 IUPAC_NUC_AMBIGUITY = frozenset("RYSWKMBDHVN")
 PROTEIN_AA = frozenset("ACDEFGHIKLMNPQRSTVWY")
-# Extended protein symbols: ambiguous (B,Z,J,X), selenocysteine (U),
-# pyrrolysine (O), and stop (*).
+# Ambiguous (B, Z, J, X), selenocysteine (U), pyrrolysine (O), stop (*).
 PROTEIN_EXTRA = frozenset("XBZJUO*")
 GAP_CHARS = frozenset("-.")
 
-# IUPAC complement (uppercase, DNA convention: T rather than U).
+# Complement table in DNA letters; RNA converts T back to U.
 _DNA_COMPLEMENT = {
     "A": "T", "T": "A", "G": "C", "C": "G",
     "R": "Y", "Y": "R", "S": "S", "W": "W",
@@ -61,20 +42,16 @@ class MolType(str, Enum):
 
 
 def _clean(seq: str) -> str:
-    """Uppercase and strip all whitespace from a raw sequence string."""
+    """Uppercase a sequence string and strip all whitespace."""
     return "".join(seq.split()).upper()
 
 
 def detect_moltype(seq: str) -> MolType:
-    """Best-effort guess of a sequence's molecule type from its residues.
+    """Guess the molecule type from the residues.
 
-    Heuristic: if 90% or more of the (gapless) residues are valid nucleotide
-    letters and the sequence does not mix 'T' and 'U', it is treated as nucleic
-    acid - RNA when a 'U' is present, otherwise DNA. Everything else is protein.
-
-    Short, ambiguous sequences (e.g. 'ACGA', valid as both DNA and a peptide)
-    resolve to DNA under this rule; pass an explicit moltype to BioSequence when
-    the type is known.
+    Nucleotide when at least 90% of the gapless residues are nucleotide letters
+    and T and U do not both occur (RNA if U is present, else DNA); otherwise
+    protein. Short strings valid as both, such as 'ACGA', resolve to DNA.
     """
     s = "".join(c for c in _clean(seq) if c not in GAP_CHARS)
     if not s:
@@ -91,7 +68,7 @@ def detect_moltype(seq: str) -> MolType:
 
 
 def _allowed_alphabet(moltype: MolType) -> frozenset[str] | None:
-    """Return the set of legal residues for moltype, or None to skip checks."""
+    """Legal residues for the molecule type, or None for no validation."""
     if moltype is MolType.DNA:
         return DNA_BASES | IUPAC_NUC_AMBIGUITY | GAP_CHARS
     if moltype is MolType.RNA:
@@ -103,20 +80,10 @@ def _allowed_alphabet(moltype: MolType) -> frozenset[str] | None:
 
 @dataclass(frozen=True)
 class BioSequence:
-    """An immutable, validated biological sequence.
+    """An immutable sequence, uppercased and validated against its moltype.
 
-    The 'seq' string is normalised to uppercase with whitespace stripped on
-    construction, and validated against the alphabet for its 'moltype'. When
-    'moltype' is left as MolType.UNKNOWN it is auto-detected via detect_moltype.
-
-    Parameters:
-        seq:         Raw residue string.
-        id:          Short identifier (e.g. a FASTA accession or 'HLA-A*02:01').
-        description: Free-text description (e.g. the remainder of a FASTA
-                     header line).
-        moltype:     Molecule type; auto-detected when UNKNOWN.
-        metadata:    Provenance and any extra key/value data (source file,
-                     chain id, ...).
+    A moltype of UNKNOWN is detected with detect_moltype. 'metadata' holds
+    provenance such as the source file or chain id.
     """
 
     seq: str
@@ -136,8 +103,6 @@ class BioSequence:
 
         self._validate(cleaned, moltype)
 
-    # -- validation -------------------------------------------------------- #
-
     @staticmethod
     def _validate(seq: str, moltype: MolType) -> None:
         allowed = _allowed_alphabet(moltype)
@@ -149,8 +114,6 @@ class BioSequence:
                 f"Invalid {moltype.value} residue(s) {bad} in sequence "
                 f"{seq!r:.40}"
             )
-
-    # -- basic accessors --------------------------------------------------- #
 
     def __len__(self) -> int:
         return len(self.seq)
@@ -169,15 +132,11 @@ class BioSequence:
 
     @property
     def label(self) -> str:
-        """A human-friendly one-line label: id plus description if present."""
+        """Id and description on one line."""
         return f"{self.id} {self.description}".strip() or "<unnamed>"
 
     def subseq(self, start: int, end: int) -> "BioSequence":
-        """Return the half-open slice [start, end) as a new sequence.
-
-        The new id is suffixed with ':start-end' (1-based, inclusive) so the
-        provenance of a design window stays legible downstream.
-        """
+        """Half-open slice [start, end); the id gains a 1-based ':start-end' suffix."""
         if start < 0 or end > len(self.seq) or start >= end:
             raise ValueError(
                 f"Invalid slice [{start}, {end}) for length {len(self.seq)}"
@@ -188,8 +147,6 @@ class BioSequence:
             id=f"{self.id}:{start + 1}-{end}" if self.id else self.id,
         )
 
-    # -- nucleotide operations -------------------------------------------- #
-
     def _require_nucleotide(self, op: str) -> None:
         if not self.is_nucleotide:
             raise MolTypeError(
@@ -199,35 +156,32 @@ class BioSequence:
 
     @property
     def gc_content(self) -> float:
-        """Fraction of G/C among unambiguous bases (0.0 for empty/none)."""
+        """Fraction of G/C among A/C/G/T/U bases; 0.0 when there are none."""
         self._require_nucleotide("gc_content")
         gc = sum(c in "GC" for c in self.seq)
         acgt = sum(c in "ACGTU" for c in self.seq)
         return gc / acgt if acgt else 0.0
 
     def transcribe(self) -> "BioSequence":
-        """DNA to RNA (coding-strand transcription: 'T' becomes 'U')."""
+        """DNA to RNA (T becomes U); RNA is returned unchanged."""
         if self.moltype is MolType.RNA:
             return self
         self._require_nucleotide("transcribe")
         return replace(self, seq=self.seq.replace("T", "U"), moltype=MolType.RNA)
 
     def reverse_transcribe(self) -> "BioSequence":
-        """RNA to DNA ('U' becomes 'T')."""
+        """RNA to DNA (U becomes T); DNA is returned unchanged."""
         if self.moltype is MolType.DNA:
             return self
         self._require_nucleotide("reverse_transcribe")
         return replace(self, seq=self.seq.replace("U", "T"), moltype=MolType.DNA)
 
     def as_rna(self) -> "BioSequence":
-        """Return this sequence as RNA (identity for RNA, transcribe for DNA).
-
-        Convenience for the siRNA stage, which operates on the target mRNA.
-        """
+        """Alias for transcribe()."""
         return self.transcribe()
 
     def complement(self) -> "BioSequence":
-        """IUPAC complement (not reversed). Works on DNA or RNA."""
+        """IUPAC complement, not reversed."""
         self._require_nucleotide("complement")
         as_dna = self.seq.replace("U", "T")
         comp = "".join(_DNA_COMPLEMENT[c] for c in as_dna)
@@ -236,7 +190,7 @@ class BioSequence:
         return replace(self, seq=comp)
 
     def reverse_complement(self) -> "BioSequence":
-        """IUPAC reverse-complement. Works on DNA or RNA."""
+        """IUPAC reverse complement."""
         rc = self.complement()
         return replace(rc, seq=rc.seq[::-1])
 
@@ -253,11 +207,7 @@ class BioSequence:
 
 @dataclass
 class SequencePanel:
-    """A named collection of related sequences (e.g. an HLA allele family).
-
-    Fed to the MSA/allele module, which aligns the members and derives
-    conserved vs. polymorphic windows for broad or allele-specific targeting.
-    """
+    """A named set of related sequences, e.g. an allele family."""
 
     name: str
     sequences: list[BioSequence] = field(default_factory=list)
@@ -281,21 +231,19 @@ class SequencePanel:
 
     @property
     def is_uniform(self) -> bool:
-        """True when every member shares one molecule type (required for MSA)."""
+        """True when all members share one molecule type."""
         return len(self.moltypes) <= 1
 
     def get(self, seq_id: str) -> BioSequence | None:
-        """Return the first member whose id equals seq_id, or None."""
+        """First member with this id, or None."""
         return next((s for s in self.sequences if s.id == seq_id), None)
 
 
 @dataclass
 class DesignInput:
-    """The Input Layer's output: a target sequence and an optional panel.
+    """Stage 1 output: a target and an optional panel.
 
-    This is the hand-off object consumed by every downstream stage. The panel is
-    optional - allele-aware targeting is only engaged when the user supplies a
-    related sequence set.
+    Allele targeting engages only when a panel is present.
     """
 
     target: BioSequence
@@ -306,13 +254,7 @@ class DesignInput:
         return self.panel is not None and len(self.panel) > 0
 
     def require_nucleotide_target(self) -> BioSequence:
-        """Return the target, guaranteeing it is a nucleotide sequence.
-
-        siRNA/shRNA design needs the target mRNA/CDS. A protein target (e.g.
-        parsed from a PDB structure) cannot be silenced directly and must first
-        be resolved to a coding sequence - this raises a clear error in that
-        case rather than letting a protein leak into the design stage.
-        """
+        """The target, or MolTypeError if it is not nucleotide (e.g. from a PDB)."""
         if not self.target.is_nucleotide:
             raise MolTypeError(
                 f"Target {self.target.label!r} is {self.target.moltype.value}; "

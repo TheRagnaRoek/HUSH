@@ -1,25 +1,7 @@
-"""Candidate selection - the design pipeline's option-rich filter step.
+"""Candidate selection: every enabled criterion is an independent gate, ANDed.
 
-Applies a user's design choices to the enumerated candidates. Deliberately NOT a
-ranking: the signals live on incommensurable scales, so any single combined score
-would need weights HUSH cannot justify without efficacy data. Instead every
-criterion is an explicit, optional gate (in the spirit of siDirect), and each
-candidate keeps its full per-criterion breakdown so any verdict is legible.
-
-Two groups of criteria:
-
-* The three rule sets (Ui-Tei, Reynolds, Amarzguioui), toggled independently and
-  combined by RuleMode.ALL (must satisfy every enabled set) or RuleMode.ANY (kept
-  if any enabled set passes). No rule enabled -> no rule constraint.
-* Independent filters, each optional, ANDed on top: a GC window, the seed-duplex
-  off-target Tm, and the loading asymmetry.
-
-Customisable values (GC range, seed Tm, rule thresholds) are options, not edits to
-the rules. The standalone GC filter is separate from Reynolds' internal GC
-criterion (fixed at the published 30-52%). Nothing is ranked: selected candidates
-are returned in target-position order.
-
-Rationale in docs/design-rules.md.
+There is no combined score. Each candidate keeps its per-criterion breakdown.
+Selected candidates keep input order. See docs/design-rules.md.
 """
 
 from __future__ import annotations
@@ -51,40 +33,24 @@ from core.seed import SEED_TM_THRESHOLD_C, SeedTmResult, seed_tm
 from core.sirna import SiRNACandidate
 from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
 
-# --------------------------------------------------------------------------- #
-# Rule combination mode
-# --------------------------------------------------------------------------- #
-
 
 class RuleMode(str, Enum):
-    """How the enabled rule sets combine.
-
-    ALL: intersection - a candidate must satisfy every enabled rule set.
-    ANY: union - a candidate is kept if any enabled rule set passes it.
-    """
+    """How enabled rule sets combine: ALL (intersection) or ANY (union)."""
 
     ALL = "all"
     ANY = "any"
 
 
-# --------------------------------------------------------------------------- #
-# GC-content window default
-# --------------------------------------------------------------------------- #
-
-# The standalone GC filter's default window, as a fraction. It mirrors Reynolds'
-# published 30-52%, but here it is a tunable option applied independently, not
-# the rule criterion. Off by default (GC is already judged inside Reynolds).
+# Standalone GC window, as fractions.
 DEFAULT_GC_MIN = 0.30
 DEFAULT_GC_MAX = 0.52
 
-# Longest run of one nucleotide the homopolymer filter tolerates; a run longer
-# than this (>= 4 by default) is rejected. Guards against synthesis-troublesome
-# and G-quadruplex-prone stretches (e.g. GGGG). Off by default.
+# A run longer than this is rejected.
 DEFAULT_MAX_HOMOPOLYMER_RUN = 3
 
 
 def longest_homopolymer_run(seq: str) -> tuple[int, str]:
-    """Return (length, base) of the longest single-nucleotide run in a strand."""
+    """(length, base) of the longest single-nucleotide run."""
     best_len, best_base = 0, ""
     run_len, prev = 0, ""
     for base in seq:
@@ -95,61 +61,13 @@ def longest_homopolymer_run(seq: str) -> tuple[int, str]:
     return best_len, best_base
 
 
-# --------------------------------------------------------------------------- #
-# Criteria
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True)
 class SelectionCriteria:
-    """A user's selection options: which criteria to apply and with what values.
+    """Which gates to apply, and their values.
 
-    The defaults encode HUSH's best-practice paradigm: all three rule sets
-    enabled but combined by ANY (union - each rule is weighted equally, so a
-    candidate any one set endorses is kept), the seed-duplex off-target Tm gate
-    on (the siDirect industry standard), and the homopolymer gate on (poly-runs
-    are disruptive to both siRNA stability and polymerase read-through). The GC,
-    hairpin and asymmetry gates default off (each encodes a stronger or more niche
-    opinion, left for the caller to opt into). The transcriptome off-target filter
-    also defaults off *here* because it needs a searcher argument that has no
-    sensible default; the CLI turns it on when a reference index is configured.
-
-    Rule sets:
-        use_ui_tei / use_reynolds / use_amarzguioui: enable each rule set.
-        rule_mode: ALL or ANY combination of the enabled rule sets.
-        reynolds_threshold / amarzguioui_threshold: the graded rule sets' score
-            cut-offs (Ui-Tei is an all-or-nothing filter and has no threshold).
-
-    Independent filters (each ANDed on top of the rule step when enabled):
-        use_gc_filter, gc_min, gc_max: a standalone GC-content window. Distinct
-            from Reynolds criterion I (which stays at the published 30-52%).
-        use_seed_filter, seed_tm_threshold: the siDirect seed-duplex off-target
-            Tm filter, applied to both strands.
-        use_offtarget_filter, offtarget_min_mismatch, offtarget_searcher,
-            offtarget_self_transcripts: the transcriptome homology off-target
-            filter. Rejects a candidate whose nearest off-target (on either
-            strand, excluding the transcripts the design owns) has fewer than
-            offtarget_min_mismatch mismatches. Needs a searcher (a reference
-            database handle); distinct from the seed filter above, which is a
-            sequence-intrinsic proxy rather than a database search. The owned
-            set is a SelfTranscripts, since a gene family is several
-            transcripts; the service layer resolves it.
-        use_hairpin_filter, hairpin_tm_max: a standalone internal-structure gate -
-            reject a candidate whose most stable self-hairpin melts above
-            hairpin_tm_max. Distinct from Reynolds criterion (its internal-repeat
-            sub-criterion stays Xia-pinned at 20 C); this is the tunable one.
-        use_homopolymer_filter, max_homopolymer_run: reject a candidate whose
-            core contains a single-nucleotide run longer than max_homopolymer_run
-            (e.g. GGGG). Judged on the core only; overhangs are not counted.
-        use_asymmetry_filter: require the duplex end asymmetry to favour loading
-            the guide strand (sign only - no magnitude threshold).
-
-    Advanced thermodynamic knobs (safe to leave at their defaults):
-        asymmetry_window: terminal base pairs compared at each duplex end.
-        asymmetry_temp_c: temperature the asymmetry dG is evaluated at.
-        thermo_params: nearest-neighbor parameter set for the asymmetry and
-            hairpin readouts ONLY. It never touches the seed filter (pinned to
-            Freier, on which its 21.5 C threshold is calibrated) or the rule sets.
+    The defaults are the paradigm in docs/cli.md. The off-target gate is off
+    here because it needs a searcher; the service layer enables it. The
+    self-transcript set is resolved by the service layer.
     """
 
     use_ui_tei: bool = True
@@ -174,6 +92,7 @@ class SelectionCriteria:
     use_hairpin_filter: bool = False
     hairpin_tm_max: float = DEFAULT_INTERNAL_TM_THRESHOLD_C
 
+    # Judged on the core only.
     use_homopolymer_filter: bool = True
     max_homopolymer_run: int = DEFAULT_MAX_HOMOPOLYMER_RUN
 
@@ -181,6 +100,8 @@ class SelectionCriteria:
 
     asymmetry_window: int = DEFAULT_WINDOW_BP
     asymmetry_temp_c: float = REFERENCE_TEMPERATURE_C
+    # Applies to the asymmetry and hairpin read-outs only, never to the seed
+    # filter or the rule sets.
     thermo_params: ThermoParams = ThermoParams.XIA_1998
 
     def __post_init__(self) -> None:
@@ -213,8 +134,8 @@ class SelectionCriteria:
                     "offtarget_min_mismatch must be >= 1; got "
                     f"{self.offtarget_min_mismatch}."
                 )
-            # The search must reach at least threshold-1 mismatches to see every
-            # disqualifying near-match.
+            # The search must reach threshold-1 mismatches to see every
+            # disqualifying hit.
             if self.offtarget_searcher.max_mismatch < self.offtarget_min_mismatch - 1:
                 raise ValueError(
                     f"offtarget searcher depth {self.offtarget_searcher.max_mismatch} "
@@ -225,7 +146,7 @@ class SelectionCriteria:
 
     @property
     def enabled_rule_names(self) -> tuple[str, ...]:
-        """Names of the rule sets that are switched on, in a stable order."""
+        """Names of the enabled rule sets."""
         names = []
         if self.use_ui_tei:
             names.append("ui_tei")
@@ -236,22 +157,12 @@ class SelectionCriteria:
         return tuple(names)
 
 
-# --------------------------------------------------------------------------- #
-# Evaluation result
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True)
 class CandidateEvaluation:
-    """The outcome of applying one SelectionCriteria to one candidate.
+    """One candidate's verdict under a SelectionCriteria.
 
-    Component results are present only for the criteria that were enabled; a
-    disabled criterion is None (not computed, not a black box - simply not asked
-    for). Each *_pass flag is True/False when its criterion was applied and None
-    when it was not.
-
-    'selected' is the overall verdict; 'reasons' lists, in plain language, the
-    criteria a rejected candidate failed (empty when selected).
+    Results and *_pass flags are None for gates that were not enabled.
+    'reasons' names the gates a rejected candidate failed.
     """
 
     candidate: SiRNACandidate
@@ -283,13 +194,8 @@ class CandidateEvaluation:
         )
 
 
-# --------------------------------------------------------------------------- #
-# Evaluation
-# --------------------------------------------------------------------------- #
-
-
 def _rule_pass(votes: list[bool], mode: RuleMode) -> bool:
-    """Combine the enabled rule verdicts. No rules enabled -> no constraint."""
+    """Combine the enabled rule verdicts; no enabled rule means no constraint."""
     if not votes:
         return True
     return all(votes) if mode is RuleMode.ALL else any(votes)
@@ -298,11 +204,7 @@ def _rule_pass(votes: list[bool], mode: RuleMode) -> bool:
 def evaluate(
     candidate: SiRNACandidate, criteria: SelectionCriteria
 ) -> CandidateEvaluation:
-    """Apply 'criteria' to one candidate and return the full breakdown.
-
-    Only the enabled criteria are computed. The rule sets are combined by
-    'criteria.rule_mode'; the enabled independent filters are then ANDed on top.
-    """
+    """Evaluate one candidate; only the enabled gates are computed."""
     ut = ui_tei(candidate) if criteria.use_ui_tei else None
     rey = reynolds(candidate) if criteria.use_reynolds else None
     amz = amarzguioui(candidate) if criteria.use_amarzguioui else None
@@ -427,7 +329,7 @@ def _reasons(
     asym: EndAsymmetry | None,
     asymmetry_pass: bool | None,
 ) -> tuple[str, ...]:
-    """Human-readable list of the criteria a rejected candidate failed."""
+    """Plain-language list of the gates a rejected candidate failed."""
     out: list[str] = []
     if not rule_pass:
         joined = "/".join(criteria.enabled_rule_names)
@@ -462,11 +364,7 @@ def _reasons(
 def select(
     candidates: Iterable[SiRNACandidate], criteria: SelectionCriteria
 ) -> list[CandidateEvaluation]:
-    """Evaluate every candidate and return the selected ones, in input order.
-
-    For the full set of evaluations (selected and rejected alike), map evaluate()
-    over the candidates directly.
-    """
+    """The selected evaluations, in input order."""
     return [
         evaluation
         for evaluation in evaluate_all(candidates, criteria)
@@ -477,6 +375,6 @@ def select(
 def evaluate_all(
     candidates: Iterable[SiRNACandidate], criteria: SelectionCriteria
 ) -> Iterator[CandidateEvaluation]:
-    """Lazily evaluate every candidate against 'criteria' (selected or not)."""
+    """Lazily evaluate all candidates, selected or not."""
     for candidate in candidates:
         yield evaluate(candidate, criteria)

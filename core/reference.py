@@ -1,15 +1,8 @@
-"""Build and locate the transcriptome reference the off-target gate searches.
+"""Build and locate the bowtie index of the human transcriptome.
 
-Fetches the RefSeq H_sapiens mRNA_Prot RNA FASTA set, concatenates it, runs
-bowtie-build, and writes a manifest recording exactly what went in (RefSeq
-release, source URLs, sha256, bowtie version, build date) so a build is
-auditable. core.offtarget.BowtieSearcher consumes what this produces.
-
-Fetching the reference is a one-time, network-heavy setup step, deliberately
-separate from designing: the download is multi-gigabyte and the index is not
-redistributable in an image. HUSH is installed first and the reference fetched
-afterwards, which is why this is a user-facing command (hush reference build)
-rather than an ops-side script. Only the standard library is used.
+build_index() downloads the RefSeq H_sapiens mRNA_Prot RNA FASTA files, runs
+bowtie-build and writes a manifest of what went in. Standard library only.
+See docs/design-rules.md (Transcriptome off-target) and docs/cli.md.
 """
 
 from __future__ import annotations
@@ -28,32 +21,28 @@ from pathlib import Path
 
 from core.errors import ReferenceBuildError
 
-# RefSeq's current human mRNA/ncRNA transcripts. These files track the live
-# RefSeq release; the release number is read separately and recorded in the
-# manifest. Point base_url at an archived release directory to pin exactly.
+# The live RefSeq release; use an archived release directory to pin one.
 DEFAULT_BASE_URL = "https://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/mRNA_Prot"
 RELEASE_NUMBER_URL = "https://ftp.ncbi.nlm.nih.gov/refseq/release/RELEASE_NUMBER"
 
-# Where the index lives unless told otherwise. The container sets
-# HUSH_REFERENCE_DIR to its mounted volume so the command needs no arguments.
 REFERENCE_DIR_ENV = "HUSH_REFERENCE_DIR"
 DEFAULT_REFERENCE_DIR = Path("data/reference")
 INDEX_NAME = "refseq_human_mrna"
 
 
 def reference_dir() -> Path:
-    """The directory holding the bowtie index, from the environment or default."""
+    """Index directory: HUSH_REFERENCE_DIR if set, else data/reference."""
     configured = os.environ.get(REFERENCE_DIR_ENV)
     return Path(configured) if configured else DEFAULT_REFERENCE_DIR
 
 
 def default_index_prefix() -> Path:
-    """The bowtie index prefix HUSH uses when none is given explicitly."""
+    """Index prefix used when none is given."""
     return reference_dir() / INDEX_NAME
 
 
 def index_exists(prefix: str | Path) -> bool:
-    """Whether a usable bowtie index sits at this prefix."""
+    """Whether a bowtie index exists at the prefix."""
     return Path(f"{prefix}.1.ebwt").is_file()
 
 
@@ -80,7 +69,7 @@ def _download(url: str, dest: Path) -> None:
 
 
 def _fetch_transcripts(base_url: str, workdir: Path) -> list[str]:
-    """Download human.N.rna.fna.gz until one 404s; return the source URLs used."""
+    """Download human.N.rna.fna.gz until one 404s; return the URLs used."""
     urls: list[str] = []
     index = 1
     while True:
@@ -90,7 +79,7 @@ def _fetch_transcripts(base_url: str, workdir: Path) -> list[str]:
             _download(url, dest)
         except urllib.error.HTTPError as exc:
             if exc.code == 404 and index > 1:
-                break  # ran off the end of the numbered set
+                break  # end of the numbered set
             raise
         urls.append(url)
         index += 1
@@ -100,7 +89,7 @@ def _fetch_transcripts(base_url: str, workdir: Path) -> list[str]:
 
 
 def _concatenate(workdir: Path, fasta_out: Path) -> None:
-    """Gunzip every downloaded shard into one plain FASTA."""
+    """Gunzip all downloaded files into one FASTA."""
     _log(f"  concatenating into {fasta_out}")
     shards = sorted(workdir.glob("human.*.rna.fna.gz"))
     with fasta_out.open("wb") as out:
@@ -139,7 +128,7 @@ def build_index(
     index_name: str = INDEX_NAME,
     keep_fasta: bool = False,
 ) -> Path:
-    """Fetch the transcriptome and build the bowtie index. Returns its prefix."""
+    """Download the transcriptome and build the bowtie index; return its prefix."""
     if shutil.which("bowtie-build") is None:
         raise ReferenceBuildError(
             "bowtie-build not found on PATH. The HUSH container ships bowtie1, so "
@@ -150,9 +139,8 @@ def build_index(
     outdir = Path(outdir) if outdir is not None else reference_dir()
     outdir.mkdir(parents=True, exist_ok=True)
     if not os.access(outdir, os.W_OK):
-        # A volume created by an older image carries that image's uid, which the
-        # current one is not. Reading the index still works, so this only bites
-        # on a rebuild - and it bites as a bare EACCES partway through.
+        # A volume from an older image keeps that image's uid. Reading still
+        # works; only a rebuild fails, with a bare EACCES partway through.
         uid = getattr(os, "geteuid", lambda: None)()
         who = f" (uid {uid})" if uid is not None else ""
         raise ReferenceBuildError(
@@ -196,7 +184,7 @@ def build_index(
 
 
 def describe_index(prefix: str | Path) -> dict | None:
-    """The manifest recorded for this index, or None if there is no manifest."""
+    """The index manifest, or None when it is missing or unreadable."""
     path = manifest_path(prefix)
     if not path.is_file():
         return None

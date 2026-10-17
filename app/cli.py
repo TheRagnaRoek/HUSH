@@ -1,12 +1,6 @@
-"""HUSH command-line interface.
+"""HUSH command-line interface (Typer): inspect, design, convert, shell, reference.
 
-CLI-first entry point for the pipeline. Exposes the Input Layer via
-'hush inspect' and siRNA candidate design via 'hush design'. The MSA/allele
-stage is engaged from within 'hush design' by supplying '--panel': the panel is
-aligned to the target and each candidate is additionally gated on its allele
-targeting. The shRNA conversion command is added as that stage comes online.
-
-Run 'hush --help' (after 'pip install -e .') or 'python -m app.cli --help'.
+Also holds the renderers shared with app.shell. Flags: docs/cli.md.
 """
 
 from __future__ import annotations
@@ -65,10 +59,8 @@ from service.session import HushSession, apply_convert_filters
 from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions, convert
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold, get_loop
 
-# Help-panel label that groups the expert thermodynamic knobs in `design --help`.
+# Option groups in 'design --help'.
 _ADVANCED = "Advanced (thermodynamic internals)"
-
-# Help-panel label grouping the allele-aware (MSA panel) options in `design --help`.
 _ALLELE = "Allele-aware (MSA panel targeting)"
 
 app = typer.Typer(
@@ -140,7 +132,6 @@ def _summarize_design_input(design: DesignInput) -> None:
         for i, seq in enumerate(design.panel):
             _echo_sequence(seq, index=i)
 
-    # Foreshadow the downstream requirement without failing the inspection.
     typer.echo("")
     if design.target.is_nucleotide:
         typer.echo(
@@ -210,13 +201,8 @@ def inspect_cmd(
         raise typer.Exit(code=1)
 
 
-# --------------------------------------------------------------------------- #
-# design command
-# --------------------------------------------------------------------------- #
-
-# The flag-vocabulary conversions live in app.parsing (shared with the shell)
-# and raise ValueError; here they are re-wrapped as Typer usage errors so a bad
-# --flag still reports with its hint and the usage exit code.
+# The parsers in app.parsing raise ValueError; these wrap it as a Typer usage
+# error naming the flag.
 
 
 def _parse_rules(spec: str) -> tuple[bool, bool, bool]:
@@ -248,7 +234,7 @@ def _parse_overhang(spec: str) -> OverhangPolicy:
 
 
 def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
-    """Compact per-rule pass code, e.g. 'UR-' (Ui-Tei + Reynolds pass, Amarz fails)."""
+    """Per-rule pass code: U, R, A for Ui-Tei, Reynolds, Amarzguioui; '-' for a fail."""
     parts = []
     if evaluation.ui_tei is not None:
         parts.append("U" if evaluation.ui_tei.satisfied else "-")
@@ -262,7 +248,7 @@ def _rules_code(evaluation, criteria: SelectionCriteria) -> str:
 
 
 def _describe_self(own) -> str:
-    """One line on the transcripts the off-target gate counts as the design's own."""
+    """One-line summary of the design's own transcripts."""
     if not own:
         return "none excluded - every hit counts against a candidate"
     parts = []
@@ -384,8 +370,7 @@ def _print_funnel(
     typer.echo(typer.style(row("selected:", len(selected)), fg=typer.colors.GREEN, bold=True))
 
 
-# Short codes for the criteria that set a mismatch's discrimination rank, so a
-# whole assessment reads in one cell instead of just its position.
+# Short codes for the one-cell mismatch readout (see _mismatch_code).
 _REGION_CODE = {
     GuideRegion.POST_SEED: "post",
     GuideRegion.SEED: "seed",
@@ -409,12 +394,10 @@ def _position_tier(guide_position: int) -> str:
 
 
 def _mismatch_code(d: MismatchAssessment) -> str:
-    """Every ranking criterion of one mismatch in one cell.
+    """One-cell readout of a mismatch, e.g. 'P16 post H+ S pp'.
 
-    'P16 post H+ S pp' reads: guide position 16; 3' of the seed; listed in
-    Huang's table for this base change (H+, vs H- not listed, H? ambiguous); a
-    strongest position (S; W = inside the P9-P16 window, - = outside);
-    purine:purine.
+    Fields: guide position, region, Huang status, position tier, class. Legend:
+    docs/design-rules.md (Discrimination ranking).
     """
     huang = "H?" if d.huang_recommended is None else ("H+" if d.huang_recommended else "H-")
     cls = "?" if d.mismatch_class is None else _CLASS_CODE[d.mismatch_class]
@@ -422,12 +405,7 @@ def _mismatch_code(d: MismatchAssessment) -> str:
 
 
 def _other_positions(window: WindowEvaluation) -> str:
-    """The weakest allele's remaining differences, best-placed first.
-
-    The rank rests on one mismatch, but the others are what let a user judge
-    count against placement - the trade-off msa.discrimination refuses to make.
-    Collapsing the row to the deciding mismatch alone would hide them.
-    """
+    """The weakest allele's remaining differences, best-placed first, as ' +P11,P4'."""
     rest = window.deciding_mismatches[1:]
     if not rest:
         return ""
@@ -435,12 +413,7 @@ def _other_positions(window: WindowEvaluation) -> str:
 
 
 def _discrimination_cell(window: WindowEvaluation) -> str:
-    """Full-criteria readout of the mismatch a window's discrimination rests on,
-    followed by the weakest allele's remaining difference positions.
-
-    See _mismatch_code for the encoding. 'P16 post H+ S pp +P11,P4' is a window
-    whose rank rests on P16 but which differs from that allele at three places.
-    """
+    """The deciding mismatch's code plus the remaining positions, e.g. 'P16 post H+ S pp +P11,P4'."""
     deciding = window.deciding_mismatch
     if deciding is None:
         return "none"
@@ -448,11 +421,7 @@ def _discrimination_cell(window: WindowEvaluation) -> str:
 
 
 def _discrimination_fields(window: WindowEvaluation) -> list[str]:
-    """The deciding mismatch as ten TSV fields. Empty ones where it has none.
-
-    The last field carries every difference to the weakest spared allele, in
-    ranking order, so a downstream reader is not left with the best one only.
-    """
+    """The deciding mismatch as ten TSV fields (empty if none); the last lists all positions."""
     deciding = window.deciding_mismatch
     if deciding is None:
         return [""] * 10
@@ -473,20 +442,13 @@ def _discrimination_fields(window: WindowEvaluation) -> list[str]:
 
 
 def _print_window_discrimination(window: WindowEvaluation) -> None:
-    """Per-spared-allele breakdown for one window, weakest allele first.
-
-    Where the table row collapses to the deciding (weakest) allele, this shows
-    every spared allele: its difference count, all its mismatch positions, and
-    its own best mismatch's full criteria - so an siRNA can be judged against the
-    whole panel, not just the allele it distinguishes least well.
-    """
+    """Per spared allele, weakest first: difference count, positions and best mismatch."""
     rows = window.spared_alleles_by_discrimination
     if not rows:
         typer.echo("      (nothing spared - no discrimination to assess)")
         return
     for index, (allele, assessments) in enumerate(rows):
-        # Ranking order, not numeric order: the leftmost position is the one the
-        # allele's rank rests on, and the rest are what the ranking ignores.
+        # Ranking order; the first position sets the allele's rank.
         ordered = ordered_by_placement(assessments)
         best = ordered[0] if ordered else None
         positions = ",".join(f"P{a.guide_position}" for a in ordered)
@@ -503,7 +465,7 @@ def _print_window_discrimination(window: WindowEvaluation) -> None:
 def render_discrimination_detail(
     selected: list, window_by_pos: dict[int, WindowEvaluation], limit: int
 ) -> None:
-    """Print the full per-allele discrimination breakdown for the shown candidates."""
+    """Print the per-allele breakdown for the shown candidates."""
     shown = selected if limit == 0 else selected[:limit]
     typer.echo("")
     typer.echo(typer.style("Per-allele discrimination (weakest allele first)", bold=True))
@@ -532,15 +494,13 @@ def _print_table(
     window_by_pos: dict[int, WindowEvaluation] | None = None,
     targeting: AlleleTargeting | None = None,
 ) -> None:
-    # The minDiff/disc columns are shown only when the request discriminates.
-    # minDiff is the weakest per-spared-allele difference count; disc places that
-    # allele's best-positioned difference against the published evidence.
+    # minDiff and placement columns appear only when the request spares alleles.
     show_spare = (
         window_by_pos is not None
         and targeting is not None
         and targeting.discriminating
     )
-    # Strands are shown as ordered: paired core plus the 2-nt 3' overhang.
+    # Strands are shown as ordered: core plus 3' overhang.
     seq_w = max(length + 3, 14)
     header = (
         f"  {'region':<11} {'guide 5->3':<{seq_w}} {'passenger 5->3':<{seq_w}} {'GC%':>4}"
@@ -584,9 +544,6 @@ def _print_table(
             row += f" {e.homopolymer_run:>4}"
         typer.echo(row)
     if show_spare:
-        # Both allele columns report the weakest spared allele, not an average:
-        # an siRNA has to spare every one of them, so the one it distinguishes
-        # least well is the one that decides.
         typer.secho(
             "  minDiff and placement describe the weakest spared allele - the one "
             "this window distinguishes least well.",
@@ -617,7 +574,7 @@ def _print_table(
 
 
 def _combined_offtarget_counts(profile) -> list[int]:
-    """Guide + passenger off-target hit counts at mismatch levels 0..3."""
+    """Guide plus passenger hit counts at mismatch levels 0..3."""
     out = [0, 0, 0, 0]
     for counts in (profile.guide_counts, profile.passenger_counts):
         for i, n in enumerate(counts):
@@ -632,9 +589,8 @@ def _write_design_tsv(
     criteria: SelectionCriteria,
     window_by_pos: dict[int, WindowEvaluation] | None = None,
 ) -> None:
-    # guide_5to3 / passenger_5to3 are the full ordered strands (core + 3'
-    # overhang); the *_overhang columns name the trailing overhang explicitly.
-    # start/end are the paired-core coordinates on the target.
+    # guide_5to3 and passenger_5to3 include the overhang; start and end are the
+    # core coordinates.
     header = (
         "region\tstart\tend\tguide_5to3\tguide_overhang\tpassenger_5to3\t"
         "passenger_overhang\tgc_percent\trules_passed\tseed_max_tm_c\t"
@@ -643,17 +599,11 @@ def _write_design_tsv(
         "offtarget_hits_0\tofftarget_hits_1\tofftarget_hits_2\tofftarget_hits_3"
     )
     if window_by_pos is not None:
-        # Allele-window read-outs at this candidate's position: the worst
-        # difference among hit alleles (0 for a selected candidate) and the
-        # weakest discrimination among spared alleles (empty for pan-allele).
+        # Allele window read-outs; disc_* describe the deciding mismatch, and
+        # disc_all_positions lists all differences to the weakest spared allele.
         header += (
             "\tallele_hit_max_mismatch\tallele_spare_min_mismatch"
             "\tallele_spare_count"
-            # The single mismatch the window's discrimination rank rests on:
-            # the best-placed difference from the weakest spared allele, with
-            # every criterion that sets its rank. disc_all_positions carries
-            # that allele's differences in full, in ranking order, because the
-            # rank itself ignores everything after the first.
             "\tdisc_guide_position\tdisc_mutation\tdisc_mismatch_class"
             "\tdisc_huang_recommended\tdisc_region\tdisc_sources_agree"
             "\tdisc_strongest_position\tdisc_in_window\tdisc_multi_mismatch"
@@ -704,12 +654,9 @@ def _write_design_tsv(
 def render_design_result(
     result: DesignResult, limit: int, explain: bool = False
 ) -> None:
-    """Print a design run: header, criteria, funnel, and the selected table.
+    """Print header, criteria, funnel and table; limit caps rows (0 = all).
 
-    The shared renderer behind both 'hush design' and the shell's 'design', so
-    the two stay identical. 'limit' caps the printed rows (0 = all). With
-    'explain' and a discriminating request, the full per-allele breakdown is
-    appended for the shown candidates.
+    Shared by 'hush design' and the shell. explain adds the per-allele breakdown.
     """
     mrna = result.target
     typer.echo(
@@ -1021,10 +968,6 @@ def design_cmd(
             param_hint="--panel",
         )
 
-    # Turn the parsed flags into a framework-agnostic request, then let the
-    # session wire the pipeline together and hand back a lossless result; the
-    # printers below render it. The allele-targeting intent is only assembled
-    # when a panel is given (the guard above rejects it otherwise).
     targeting_spec = None
     if panel is not None:
         targeting_spec = AlleleTargetingSpec(
@@ -1091,11 +1034,6 @@ def design_cmd(
         typer.echo(f"\nWrote {len(result.selected)} selected candidate(s) to {output}")
 
 
-# --------------------------------------------------------------------------- #
-# convert command (stage 4: siRNA -> shRNA)
-# --------------------------------------------------------------------------- #
-
-
 def _parse_loop(spec: str) -> LoopScaffold:
     try:
         return get_loop(spec)
@@ -1103,7 +1041,7 @@ def _parse_loop(spec: str) -> LoopScaffold:
         raise typer.BadParameter(str(exc), param_hint="--loop")
 
 
-# Columns the converter needs from a 'hush design' TSV to rebuild the core.
+# Columns convert needs from a 'hush design' TSV.
 _DESIGN_TSV_REQUIRED = {
     "region",
     "start",
@@ -1115,7 +1053,7 @@ _DESIGN_TSV_REQUIRED = {
 
 
 def _read_design_tsv(path: Path) -> list[dict[str, str]]:
-    """Read a 'hush design' TSV into a list of column-keyed row dicts."""
+    """Rows of a 'hush design' TSV as dicts."""
     lines = path.read_text(encoding="ascii").splitlines()
     if not lines:
         raise ValueError(f"{path} is empty.")
@@ -1139,14 +1077,9 @@ def _read_design_tsv(path: Path) -> list[dict[str, str]]:
 def _duplex_from_row(
     row: dict[str, str],
 ) -> tuple[BioSequence, BioSequence, str, str]:
-    """Rebuild the duplex core and both 3' overhangs from a design-TSV row.
+    """(sense core, guide core, sense overhang, guide overhang) from a design-TSV row.
 
-    The passenger strand as ordered is the core plus its 3' overhang; stripping
-    the recorded overhang leaves the paired core (the mRNA-matching sense
-    strand), and the guide core is its reverse-complement. Both overhangs are
-    read from their own columns: under the natural policy the guide overhang
-    comes from the opposite, upstream flank, so it is not the passenger's
-    reverse-complement and cannot be re-derived.
+    Both overhangs come from their own columns; see docs/cli.md (hush convert).
     """
     passenger_full = row["passenger_5to3"]
     sense_overhang = row["passenger_overhang"]
@@ -1229,10 +1162,7 @@ def _write_convert_tsv(path: Path, constructs: list) -> None:
 
 
 def render_convert_result(result: ConvertResult, limit: int) -> None:
-    """Print a convert run: scaffold header, summary, and the construct table.
-
-    The shared renderer behind both 'hush convert' and the shell's 'convert'.
-    """
+    """Print scaffold header, summary and construct table; shared with the shell."""
     options = result.options
     loop = options.loop
     term = f"{options.terminator_length}x T" if options.include_terminator else "none"
@@ -1369,8 +1299,7 @@ def shell_cmd() -> None:
     'set', and re-run 'design'/'convert' as often as you like - the panel
     alignment is computed once and reused. Type 'help' inside for the commands.
     """
-    # Imported here so the command definitions above load without pulling in the
-    # shell (which imports this module for its renderers).
+    # Imported here because app.shell imports this module (circular).
     from app.shell import HushShell
 
     HushShell().run()

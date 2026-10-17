@@ -1,12 +1,10 @@
 /**
- * Representative sample data in the real API response shapes, so the app opens
- * in a realistic working state and runs without a backend. Guides and construct
- * oligos are real HUSH output for the HLA-A 474/476/478 windows, from an
- * A*01+A*02 run; the spared-allele scenario is embellished to a 4-allele panel
- * to exercise the per-allele view. Clearly sample - not the user's data.
+ * Sample data in the API response shapes, so the app runs without a backend.
+ * Guides and oligos are HUSH output for the HLA-A 474/476/478 windows (A*01 and
+ * A*02 run); the 4-allele spared panel is embellished.
  *
- * Predates the overhang change, so the constructs here carry none; regenerate
- * from a current run if the sample should show the shipped hairpin geometry.
+ * Predates the overhang change, so the constructs carry no overhangs;
+ * regenerate it from a current run to show the current hairpin geometry.
  */
 
 import type {

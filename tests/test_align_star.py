@@ -28,9 +28,7 @@ def _dna(seq: str, seq_id: str) -> BioSequence:
     return BioSequence(seq, id=seq_id, moltype=MolType.DNA)
 
 
-# --------------------------------------------------------------------------- #
 # The projection, tested without an aligner
-# --------------------------------------------------------------------------- #
 
 
 class TestProjection:
@@ -46,9 +44,8 @@ class TestProjection:
             # stays in the row as GAP.
             ("ATGCGTA", "ATG--TA", "ATG--TA", {}),
             ("ATGGCCGTC", "ATGGCC---", "ATGGCC---", {}),
-            # Gap in the target = an insertion in the member. No target
-            # coordinate, so it moves into `insertions`, keyed by the position
-            # it precedes.
+            # A target gap is an insertion in the member: no target coordinate,
+            # so it goes into 'insertions', keyed by the position it precedes.
             ("ATG---C", "ATGAAAC", "ATGC", {3: "AAA"}),
             ("--AT", "AAAT", "AT", {0: "AA"}),
             ("AT--", "ATAA", "AT", {2: "AA"}),
@@ -118,9 +115,7 @@ class TestProjectionInvariants:
             assert sorted(recovered) == sorted(aligned_member.replace(GAP, ""))
 
 
-# --------------------------------------------------------------------------- #
 # End to end, through Biopython
-# --------------------------------------------------------------------------- #
 
 
 class TestAlignStar:

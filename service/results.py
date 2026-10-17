@@ -1,9 +1,7 @@
-"""Structured results returned by the HUSH service layer.
+"""Results returned by the service layer.
 
-Lossless carriers: each result holds the full computed state a renderer needs,
-whether that renderer is the CLI (terminal tables and TSV) or the future HTTP
-API (JSON). No formatting decisions live here - a result never knows about
-terminals, colours, or wire formats.
+They carry the full computed state and no formatting. See
+docs/architecture.md.
 """
 
 from __future__ import annotations
@@ -20,7 +18,7 @@ from shrna.convert import ShrnaConstruct, ShrnaOptions
 
 @dataclass
 class InspectResult:
-    """A preview of a design input: the loaded target and its optional panel."""
+    """A loaded target and its optional panel."""
 
     design_input: DesignInput
 
@@ -35,12 +33,11 @@ class InspectResult:
 
 @dataclass
 class DesignResult:
-    """The full outcome of one design run over the loaded target (+ panel).
+    """Outcome of one design run.
 
-    'evaluations' is every candidate with its per-criterion breakdown, in
-    target-position order; 'selected' is the subset that cleared every enabled
-    gate, already ordered per the request's sort. 'window_by_pos' and
-    'targeting' are populated only for an allele-aware (panel) run.
+    'evaluations' covers every candidate in position order; 'selected' is the
+    subset that cleared every gate, in the requested sort order. 'targeting' and
+    'window_by_pos' are set only for a run with a panel.
     """
 
     target: BioSequence
@@ -57,11 +54,10 @@ class DesignResult:
 
 @dataclass
 class ConvertResult:
-    """The stem-loop shRNA constructs built from a set of siRNA candidates.
+    """shRNA constructs built from candidates.
 
-    'constructs' is what survived conversion; 'dropped' is every construct
-    withheld by a conversion filter, kept so a renderer can say what went
-    and why rather than silently returning a shorter list.
+    'dropped' holds the constructs withheld by a conversion filter, so a
+    renderer can report them.
     """
 
     constructs: list[ShrnaConstruct]

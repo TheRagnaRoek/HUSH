@@ -1,8 +1,4 @@
-/**
- * The stem-loop loop registry, mirroring shrna/loops.py. Jensen is the default:
- * library-selected for robust knockdown with the least stem-sequence dependence,
- * the safest choice for an automated converter.
- */
+/** The loop registry, mirroring shrna/loops.py (docs/shrna-conversion.md). */
 export interface LoopInfo {
   name: string;
   label: string;

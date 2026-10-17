@@ -1,8 +1,6 @@
 /**
- * Lightweight client-side FASTA parsing and validation. This is a fast,
- * friendly pre-check for the input step - it catches empty input, malformed
- * records and junk characters before a request, and previews what was loaded.
- * The backend (core.inputs via Biopython) remains the authority on acceptance.
+ * Client-side FASTA parsing and pre-validation for the input step. The backend
+ * (core.inputs) decides what is accepted.
  */
 
 export interface FastaRecord {
@@ -116,8 +114,7 @@ export function validateFasta(text: string, kind: "target" | "panel"): FastaSumm
   const first = records[0];
   const moltype = classify(first?.seq ?? "");
   if (moltype === "protein") {
-    // The engine rejects this too, but only once a design is run - by which
-    // point the user has been through targeting and criteria for nothing.
+    // The backend rejects this only at design time; warn early.
     errors.push(
       kind === "target"
         ? "This looks like a protein sequence. Design needs the coding transcript, so resolve it to its mRNA/CDS first."

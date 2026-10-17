@@ -1,20 +1,8 @@
-"""siRNA to shRNA conversion (pipeline stage 4): stem-loop scaffold.
+"""siRNA to shRNA conversion (stage 4).
 
-Carries a validated siRNA candidate into a cloneable stem-loop shRNA. Both
-strands are encoded in full - paired core plus its 3' overhang - so the guide
-the design stage validated (seed-Tm, asymmetry, off-target) is exactly the
-guide the hairpin expresses, overhang included. The construct is emitted in
-the sense-loop-antisense (SA) orientation as the bare hairpin insert (top and
-bottom DNA oligos), with a Pol III poly-T terminator but without any
-vector-specific restriction tails: the wet-lab adds the sticky ends for
-whichever vector they clone into.
-
-Unlike the naive templating of earlier tools, each construct is scored: the
-hairpin is folded (core.hairpin) to confirm it forms the intended stem-loop
-rather than a competing structure, and a few legible QC flags (Pol III 5'-A/G
-initiation, loop terminator-safety, homopolymer runs) are attached.
-
-Rationale and references in docs/shrna-conversion.md.
+Grafts both strands of a candidate, overhangs included, onto a stem-loop and
+emits the bare hairpin insert as DNA oligos. Each construct is folded and
+checked (core.hairpin). See docs/shrna-conversion.md.
 """
 
 from __future__ import annotations
@@ -28,52 +16,28 @@ from core.sequence import BioSequence, MolType
 from core.sirna import SiRNACandidate
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold
 
-# A run of >= 4 U/T terminates Pol III (Bogenhagen & Brown 1981; Gao et al.
-# 2018). The hairpin body must not contain one, including at the loop/stem
-# junctions, which the upstream homopolymer gate cannot see.
+# Pol III stops at a run of four or more U (Bogenhagen & Brown 1981).
 _POL3_TERMINATOR_RUN = "UUUU"
 
-# Minimum poly-T terminator length: T4 is the minimal Pol III terminator, with
-# full efficiency at >= 6 T (Gao et al. 2018).
+# T4 is the minimal terminator; full efficiency from T6 (Gao et al. 2018).
 MIN_TERMINATOR_LENGTH = 4
 DEFAULT_TERMINATOR_LENGTH = 6
 
 
 def _as_encoded_overhang(overhang: str) -> str:
-    """Render a candidate's 3' overhang as the hairpin encodes it.
-
-    An expressed hairpin cannot carry the 2'-deoxythymidines of an ordered
-    dTdT duplex, so those positions are encoded as ribo-U. The DNA insert
-    oligo carries T either way.
-    """
+    """Overhang as encoded in the hairpin: dT becomes ribo-U."""
     return overhang.upper().replace("T", "U")
 
 
 class Orientation(str, Enum):
-    """Strand order of the hairpin.
-
-    SA: sense - loop - antisense (the pSUPER convention). The only orientation
-    built for now; modelled as an enum so antisense-loop-sense can be added
-    later without changing the construct's shape.
-    """
+    """Strand order of the hairpin; only SA (sense-loop-antisense) is built."""
 
     SA = "sa"
 
 
 @dataclass(frozen=True)
 class ShrnaOptions:
-    """How to build the hairpin from a duplex core.
-
-    Attributes:
-        loop: the loop scaffold to graft (default: Jensen UGUGCUU).
-        orientation: strand order (SA only for now).
-        include_terminator: append the Pol III poly-T terminator.
-        terminator_length: length of that poly-T run (>= 4 when included).
-        drop_premature_terminators: withhold constructs whose body carries
-            a premature Pol III terminator. On by default: grafting can
-            build a U run across a junction that no upstream gate sees,
-            and such a construct truncates before the hairpin completes.
-    """
+    """Loop, orientation, terminator and whether to withhold premature terminators."""
 
     loop: LoopScaffold = LOOPS[DEFAULT_LOOP]
     orientation: Orientation = Orientation.SA
@@ -99,33 +63,12 @@ class ShrnaOptions:
 
 @dataclass(frozen=True)
 class ShrnaConstruct:
-    """One stem-loop shRNA construct, with its fold-based QC read-outs.
+    """One construct with its QC read-outs (described in docs/shrna-conversion.md).
 
-    Attributes:
-        region: 1-based inclusive target coordinate label of the source core.
-        start / end: 0-based start and exclusive end of the core on the target.
-        loop_name: the grafted loop's registry name.
-        orientation: strand order used.
-        hairpin_rna: the transcribed hairpin, 5'->3' (incl. terminator as U's).
-        insert_top / insert_bottom: the orderable DNA oligos, 5'->3'; annealed,
-            they form the double-stranded insert (bottom = RC of top).
-        fold: the most stable hairpin the body (both arms plus loop, 3' tail
-            excluded) folds into, or None if it folds into nothing.
-        folds_as_designed: True when that most stable fold IS the intended
-            stem (the paired core) closing the intended loop - i.e. the
-            construct does not prefer a competing structure. The sense
-            overhang is unpaired where it sits, so it counts as loop, not
-            stem; a fold that pairs it up instead shifts the Dicer register
-            and is flagged.
-        starts_with_purine: the transcript's 5' base is A or G, the bases a
-            human U6/7SK promoter initiates on efficiently at +1 (Gao et al.
-            2017, Transcription 8:275). A C or U start is flagged.
-        premature_terminator_free: the body carries no >= 4 U run - including
-            at the stem/loop junctions - that would terminate Pol III early.
-            The 3' tail is excluded: a U run where the guide overhang meets
-            the terminator is the intended terminator, not a premature one.
-        max_homopolymer_run: longest single-nucleotide run in the body (the
-            3' tail's own poly-U run is excluded by construction).
+    start and end are the 0-based core coordinates on the target. hairpin_rna
+    includes the terminator as U. insert_top and insert_bottom are the DNA
+    oligos, bottom being the reverse complement of top. fold is the most stable
+    fold of the body, or None.
     """
 
     region: str
@@ -163,14 +106,10 @@ def convert(
     guide_overhang: str = "",
     options: ShrnaOptions | None = None,
 ) -> ShrnaConstruct:
-    """Build a stem-loop shRNA construct from one duplex core.
+    """Build a construct from the core strands (RNA, 5'->3') and their overhangs.
 
-    'sense' and 'antisense' are the paired-core strands (RNA, 5'->3'), exactly
-    as siRNA design defines them: sense is the target site and antisense its
-    reverse-complement. The 3' overhangs come in separately so the converter
-    knows where each core ends: both strands are encoded in full, but the
-    sense overhang lands between stem and loop and the guide overhang in the
-    3' tail, so the stem is the core alone.
+    The overhangs are separate because the sense overhang lands between stem
+    and loop, and the guide overhang in the 3' tail, so the stem is the core.
     """
     opts = options or ShrnaOptions()
     sense_rna = sense.as_rna()
@@ -178,8 +117,8 @@ def convert(
     sense_oh = _as_encoded_overhang(sense_overhang)
     guide_oh = _as_encoded_overhang(guide_overhang)
 
-    # The sense overhang is unpaired where it sits, so it reads as loop; the
-    # guide overhang is a single-stranded 3' end, so it joins the terminator.
+    # The sense overhang is unpaired, so it counts as loop; the guide overhang
+    # is a single-stranded 3' end and joins the terminator.
     intended_loop = sense_oh + opts.loop.seq
     body = sense_rna.seq + intended_loop + antisense_rna.seq
     terminator = "U" * opts.terminator_length if opts.include_terminator else ""
@@ -191,8 +130,7 @@ def convert(
     insert_top = hairpin_rna.reverse_transcribe()
     insert_bottom = insert_top.reverse_complement()
 
-    # Fold the body only: the 3' tail (guide overhang plus terminator) is
-    # single-stranded, so it must not enter the fold search.
+    # Fold the body only; the 3' tail is single-stranded.
     fold = most_stable_hairpin(body)
     folds_as_designed = (
         fold is not None
@@ -224,7 +162,7 @@ def convert(
 def convert_candidate(
     candidate: SiRNACandidate, options: ShrnaOptions | None = None
 ) -> ShrnaConstruct:
-    """Convenience wrapper: convert a SiRNACandidate straight to a construct."""
+    """Convert a SiRNACandidate."""
     return convert(
         candidate.sense,
         candidate.antisense,
