@@ -15,9 +15,10 @@ stem-loop shRNA constructs.
 
 HUSH was inspired by the **HLA** system, among the most polymorphic loci in the
 human genome; it is that allelic diversity which motivates the allele-aware
-stage. HLA is not baked in - it is the proof-of-concept panel, and any panel of
-related sequences works. HUSH is developed as part of **Project HIDE** (HLA
-Interference through Disguise and Erasure).
+stage.
+
+HUSH is developed as part of **Project HIDE** 
+(HLA Interference through Disguise and Erasure).
 
 ## Quickstart
 
@@ -54,18 +55,18 @@ the configuration variables.
 
 ## The reference check
 
-The transcriptome off-target check is HUSH's safety floor: it is what tells you
-a guide does not also silence something else. It is **on by default** and needs
-no flag once the reference exists.
+The transcriptome off-target check is HUSH's safety core: It checks whether the silencing
+guide strand targets and therefore silences other protein sequences; **off-targets**.
+It is **on by default** and needs no flag once the reference exists.
 
-The reference is not shipped inside the image. It is several gigabytes and
+The reference is not shipped with the image as it
 tracks a live RefSeq release, so you fetch it once with `hush reference build`
 and every later run finds it automatically. `hush reference status` reports what
 you have - the RefSeq release, the bowtie version and the build date recorded in
 the index manifest.
 
-HUSH still runs without a reference, because you may want to supply a different
-one, but it never does so quietly: the CLI prints an `UNREFERENCED RUN` warning
+HUSH still runs without a reference in case you may want to supply a different
+reference genome (e.g. different version or species): the CLI prints an `UNREFERENCED RUN` warning
 and the design TSV carries an `offtarget_checked` column, so an empty off-target
 hit count can never be mistaken for "no off-targets found".
 
@@ -130,14 +131,14 @@ mRNA/CDS.
 hush design data/examples/demo_lowgc_cds.fasta -o selected.tsv
 ```
 
-HUSH enumerates every candidate site (19-nt core, 2-nt 3' overhangs) and reports
+HUSH enumerates every candidate site (default: 19-nt core, 2-nt 3' overhangs) and reports
 those clearing the enabled gates. It is a **filter, not a score**: every gate is
 explicit and each candidate keeps its full per-criterion breakdown, so any
 verdict is legible. The run prints the criteria, a funnel of how many candidates
 clear each gate, and the selected table.
 
-> **GC-rich families:** the seed filter is the siDirect industry standard but is
-> deliberately strict - on a very GC-rich CDS such as HLA it can reject every
+> **GC-rich families:** the seed filter is the standard as per Amarzguioui (2004) but is
+> deliberately strict - on a very GC-rich coding sequence such as HLA it may reject every
 > candidate. Relax it there with `--no-seed`.
 
 Every flag, its default and what it does: [`docs/cli.md`](docs/cli.md), or
@@ -194,36 +195,10 @@ cd web && npm run dev  # GUI on :5173, proxying the API
 Interactive API docs are at `/docs`, the OpenAPI schema at `/openapi.json`. See
 [`docs/api.md`](docs/api.md) and [`web/README.md`](web/README.md).
 
-## Reproducing the results
+## Test Suite
 
-Three claims, each reproducible from a clean checkout. Install from the
-lockfile first so the versions match.
-
-**1. The rule pre-screen reproduces siDirect.** siDirect is HUSH's
-gold-standard reference; on matched settings the pre-screen reproduces its
-picks candidate-for-candidate.
-
-```bash
-python tools/compare_sidirect.py \
-  --sidirect data/testing/siDirect_PDCD1-CDS.ods \
-  --hush data/testing/pdcd1_hush_relaxed.tsv
-```
-
-**2. Allele-aware design on a real HLA target.** A GC-rich class I CDS, which
-is why the seed filter is relaxed here:
-
-```bash
-hush design data/hla_a01.fasta --no-seed -o selected.tsv
-hush convert selected.tsv -o shrna.tsv
-```
-
-Both runs print a funnel showing how many candidates clear each gate, so the
-numbers are auditable rather than asserted. Designs run without a reference
-index are labelled `UNREFERENCED RUN`; build the reference first for the
-off-target gate to participate.
-
-**3. The test suite**, including the 46-siRNA Amarzguioui Table 3
-exact-reproduction fixture:
+Install from the lockfile first so the versions match.
+Includes the 46-siRNA Amarzguioui Table 3 exact-reproduction fixture:
 
 ```bash
 pytest -q
@@ -231,16 +206,6 @@ pytest -q
 
 The bowtie parity test skips when `bowtie` is absent, so run it in the
 container to exercise that path - see [`docs/development.md`](docs/development.md).
-
-## Pipeline
-
-| Stage | Module | Status |
-|---|---|---|
-| 1. Input | `core.inputs`, `core.sequence` | implemented |
-| 2. siRNA design | `core.sirna` / `rules` / `thermo` / `seed` / `offtarget` / `asymmetry` / `hairpin` / `selection` | implemented, validated against siDirect |
-| 3. MSA / allele | `msa` | implemented, via `hush design --panel` |
-| 4. shRNA conversion | `shrna` | implemented, via `hush convert` |
-| 5. Output | `app.cli` (tables, TSV), `api.serialize` (JSON), `web` (GUI) | implemented |
 
 ## Documentation
 
