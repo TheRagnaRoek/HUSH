@@ -1,13 +1,9 @@
 /**
- * View model for the window alignment. The API currently surfaces, per spared
- * allele, only the DECIDING mismatch (PerAlleleDiscrimination.discrimination)
- * and a diff_count - not the full per-base window of each panel member. So an
- * API-derived alignment is marked `complete: false` and shows just the deciding
- * mismatch per allele, placed from its guide position.
+ * View model for the window alignment. The API returns only the deciding
+ * mismatch and diff_count per spared allele, so an API-derived alignment is
+ * marked complete: false. Sample data carries the full per-base window.
  *
- * TODO(api): surface the aligned window (or full mismatch list) for each panel
- * member so this can show every differing column; sample data already carries
- * that richer shape to demonstrate the intended view.
+ * TODO(api): return the aligned window or full mismatch list per panel member.
  */
 
 import type { CandidateResult, DiscriminationResult } from "../api/types";

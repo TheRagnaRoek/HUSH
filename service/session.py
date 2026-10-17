@@ -1,15 +1,8 @@
-"""HushSession - the stateful orchestration layer.
+"""HushSession: a loaded target and panel, with design and convert operations.
 
-One session is one working instance of HUSH: a loaded target (the template
-mRNA/CDS) and an optional related-sequence panel, plus the MSA alignment cached
-so repeated design runs with different parameters do not re-align. Both the CLI
-and the future HTTP API drive the pipeline through this object rather than
-reaching into core/msa/shrna directly.
-
-Every method returns a structured result (service.results) and raises the domain
-exceptions (core.errors.HushError, or ValueError for an incoherent request). It
-prints nothing and knows nothing about terminals or HTTP - turning a result into
-a table or JSON, and a ValueError into an exit code or a 4xx, is the caller's job.
+The panel alignment is cached across design calls. Methods return the results
+of service.results and raise HushError, or ValueError for an incoherent
+request; they print nothing. See docs/architecture.md.
 """
 
 from __future__ import annotations
@@ -40,13 +33,7 @@ _REFSEQ_ACCESSION = re.compile(r"\b([NX][MR]_\d+(?:\.\d+)?)\b")
 
 
 def _detect_accession(seq: BioSequence) -> str | None:
-    """Best-effort RefSeq accession from a target's id/description.
-
-    One of the ways the off-target gate learns what a design owns. It finds
-    nothing for a target named by any other nomenclature - an IMGT allele header
-    such as HLA-A02:01:01:01 carries no RefSeq accession - which is why it is a
-    contribution to the self set rather than the whole of it.
-    """
+    """RefSeq accession from the target's id or description, or None (e.g. IMGT headers)."""
     match = _REFSEQ_ACCESSION.search(f"{seq.id} {seq.description}")
     return match.group(1) if match else None
 
@@ -54,11 +41,10 @@ def _detect_accession(seq: BioSequence) -> str | None:
 def resolve_targeting(
     spec: AlleleTargetingSpec | None, panel: SequencePanel
 ) -> AlleleTargeting:
-    """Resolve a targeting intent into an AlleleTargeting against a panel.
+    """Resolve an intent against a panel; None means pan-allele.
 
-    Raises ValueError for an incoherent intent (mutually exclusive intents, or
-    spare without hit), and the msa TargetingError/PanelError (both HushError)
-    when a named id is not in the panel. A None spec is the default: pan-allele.
+    Raises ValueError for mutually exclusive intents or spare without hit, and
+    TargetingError or PanelError for ids not in the panel.
     """
     spec = spec or AlleleTargetingSpec()
     intents = [
@@ -93,16 +79,11 @@ def resolve_targeting(
 
 
 def sort_selection(selected, sort, window_by_pos, targeting):
-    """Order selected candidates. 'auto' (the default) ranks by discrimination
-    whenever the request spares something, and falls back to target-position
-    order otherwise.
+    """Order the selected candidates.
 
-    Discrimination order imposes a priority between published findings the
-    measurements do not fully settle, so it only applies to a request that spares
-    something (there is nothing to rank otherwise). Position breaks ties so two
-    runs never disagree. 'position' forces target order even when a request
-    discriminates; 'discrimination' asks for it explicitly and errors when the
-    request spares nothing.
+    "auto" ranks by discrimination when the request spares something, else by
+    position. "position" keeps target order. "discrimination" raises ValueError
+    when nothing is spared. Ties break by position.
     """
     discriminates = (
         window_by_pos is not None
@@ -135,10 +116,9 @@ def sort_selection(selected, sort, window_by_pos, targeting):
 def apply_convert_filters(
     constructs: list[ShrnaConstruct], options: ShrnaOptions
 ) -> ConvertResult:
-    """Apply the conversion filters and package the result.
+    """Withhold constructs per the options and package the result.
 
-    Shared by the session and the one-shot CLI so both withhold the same
-    constructs. Withheld constructs ride along on the result.
+    Shared by the session and the CLI.
     """
     dropped: list[ShrnaConstruct] = []
     if options.drop_premature_terminators:
@@ -151,12 +131,10 @@ def apply_convert_filters(
 
 
 class HushSession:
-    """A loaded target + optional panel, and the operations over them.
+    """A loaded target and optional panel.
 
-    Construct empty and load inputs with load_target / load_panel (or pass them
-    in), then call inspect / design / convert. The alignment underlying the
-    allele stage is computed once per (target, panel) and reused across design
-    calls; changing either input invalidates it.
+    The alignment is computed once per (target, panel) and reused by design();
+    changing either input invalidates it.
     """
 
     def __init__(
@@ -169,43 +147,39 @@ class HushSession:
         self._variation: PanelVariation | None = None
         self._last_design: DesignResult | None = None
 
-    # -- loading ----------------------------------------------------------- #
-
     def load_target(self, path: str | Path, fmt: str | None = None) -> BioSequence:
-        """Load the target (template) sequence from a file and make it current."""
+        """Load the target from a file."""
         self._target = _load_target_file(path, fmt=fmt)
         self._invalidate()
         return self._target
 
     def set_target(self, target: BioSequence) -> None:
-        """Set the target from an in-memory sequence (e.g. an API upload)."""
+        """Set the target from an in-memory sequence."""
         self._target = target
         self._invalidate()
 
     def load_panel(
         self, path: str | Path, name: str | None = None, fmt: str | None = None
     ) -> SequencePanel:
-        """Load the related-sequence panel from a file and make it current."""
+        """Load the panel from a file."""
         self._panel = _load_panel_file(path, name=name, fmt=fmt)
         self._invalidate()
         return self._panel
 
     def set_panel(self, panel: SequencePanel | None) -> None:
-        """Set (or clear, with None) the panel from an in-memory object."""
+        """Set the panel from an in-memory object, or clear it with None."""
         self._panel = panel
         self._invalidate()
 
     def clear_panel(self) -> None:
-        """Drop the panel, returning the session to single-target design."""
+        """Drop the panel."""
         self._panel = None
         self._invalidate()
 
     def _invalidate(self) -> None:
-        # The cached alignment and the last result both belong to the old inputs.
+        # The cached alignment and last result belong to the old inputs.
         self._variation = None
         self._last_design = None
-
-    # -- accessors --------------------------------------------------------- #
 
     @property
     def target(self) -> BioSequence | None:
@@ -229,18 +203,15 @@ class HushSession:
         return self._target
 
     def design_input(self) -> DesignInput:
-        """The current inputs as a DesignInput hand-off."""
+        """The current inputs as a DesignInput."""
         return DesignInput(target=self._require_target(), panel=self._panel)
 
-    # -- operations -------------------------------------------------------- #
-
     def inspect(self) -> InspectResult:
-        """Preview the loaded inputs (target role, panel, readiness)."""
+        """Preview the loaded inputs."""
         return InspectResult(design_input=self.design_input())
 
     def _panel_variation(self, mrna: BioSequence) -> PanelVariation:
-        # Align the panel to the target once; window evaluation (which depends
-        # on the design params) is cheap and re-run per design call.
+        # Align once; window evaluation depends on the params and is cheap.
         if self._variation is None:
             self._variation = PanelVariation.from_alignment(
                 align_star(mrna, self._panel)
@@ -250,15 +221,9 @@ class HushSession:
     def _offtarget_self(
         self, mrna: BioSequence, params: DesignParams, offtarget_db
     ) -> SelfTranscripts:
-        """What the off-target gate must not hold against this design.
-
-        Named accessions and the target's own header accession identify
-        transcripts outright. Resolution then adds every reference transcript
-        that shares enough of the target, the panel or an explicit self FASTA to
-        belong to the same family, which is the only workable route for a
-        multigene family: HLA-A alone spans five RefSeq transcripts plus the
-        alternate-haplotype copies of its locus, so no single accession, and no
-        hand-written list, covers it.
+        """The design's own transcripts: declared accessions, the target's header
+        accession, and (if enabled) those resolved by homology to the target,
+        panel and self FASTA. See docs/design-rules.md (What the design owns).
         """
         declared = set(params.offtarget_self_accessions)
         detected = _detect_accession(mrna)
@@ -296,11 +261,11 @@ class HushSession:
         )
 
     def design(self, params: DesignParams | None = None) -> DesignResult:
-        """Enumerate candidates for the target and filter them by the params.
+        """Enumerate candidates and apply the gates.
 
-        With a panel loaded, the allele gate (aligned once, cached) is ANDed with
-        the siRNA filters. Raises HushError for a protein target or an unknown
-        allele id, and ValueError for an incoherent request or bad criteria.
+        With a panel, the allele gate is ANDed with the siRNA gates. Raises
+        HushError for a protein target or unknown allele id, ValueError for an
+        incoherent request.
         """
         params = params or DesignParams()
         design_input = self.design_input()
@@ -309,8 +274,8 @@ class HushSession:
             enumerate_candidates(mrna, length=params.length, overhang=params.overhang)
         )
 
-        # Allele gate (MSA / stage 3). Windows and candidates share the target's
-        # coordinates one-for-one, so a candidate is looked up by start position.
+        # Allele gate: windows and candidates share target coordinates, so a
+        # candidate is looked up by start position.
         targeting = None
         window_by_pos = None
         if design_input.has_panel:
@@ -327,10 +292,8 @@ class HushSession:
                 )
             }
 
-        # The transcriptome check is the safety floor, so it is on by default
-        # and finds its own reference: an explicit --offtarget-db wins, else
-        # the one 'hush reference build' produced. Only when neither exists is
-        # the run unreferenced, which the caller reports loudly.
+        # Explicit --offtarget-db wins, else the built reference. With neither,
+        # the run is unreferenced and offtarget_skipped is set.
         offtarget_searcher = None
         self_transcripts = None
         offtarget_db = params.offtarget_db
@@ -405,15 +368,10 @@ class HushSession:
         options: ShrnaOptions | None = None,
         candidates: list[SiRNACandidate] | None = None,
     ) -> ConvertResult:
-        """Graft siRNA candidates onto a stem-loop scaffold as shRNA constructs.
+        """Convert candidates to shRNA constructs.
 
-        With no candidates given, the selected candidates of the most recent
-        design run are used, so a session can design then convert without a TSV
-        round-trip. Each candidate's full strands are carried over, core plus
-        3' overhang, so the hairpin expresses the guide that was validated.
-
-        Constructs the conversion filters withhold are returned on the result
-        rather than discarded; ordering is inherited from the design run.
+        Defaults to the selected candidates of the last design, in that order.
+        Withheld constructs are returned on the result.
         """
         options = options or ShrnaOptions()
         if candidates is None:

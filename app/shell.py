@@ -1,15 +1,7 @@
-"""The interactive HUSH shell (``hush shell``).
+"""Interactive shell (hush shell) over one HushSession.
 
-A persistent instance of HUSH: load the target (and optional panel) once, tune
-the design criteria with 'set', and run 'design'/'convert' as often as you like
-without re-parsing or re-loading. State lives in a single HushSession, so the
-panel alignment is computed once and reused across designs.
-
-The shell speaks the same option words as the one-shot CLI (--no-seed, --gc,
---allele-specific, ...) and renders results through the very same functions
-(app.cli.render_design_result / render_convert_result), so a design in the shell
-reads identically to 'hush design'. This module is presentation only; all the
-pipeline work is delegated to the session.
+Accepts the same flags as the CLI and renders through the same functions in
+app.cli. Presentation only; see docs/cli.md.
 """
 
 from __future__ import annotations
@@ -18,9 +10,7 @@ import argparse
 from dataclasses import replace
 from pathlib import Path
 
-# Importing readline (Linux/macOS; absent on native Windows) gives input() its
-# arrow-key editing and history in the shell. Without it, the arrow keys leak
-# raw escape codes like ^[[A. Optional, so the import is guarded.
+# readline gives input() arrow-key editing; it is absent on native Windows.
 try:
     import readline  # noqa: F401
 except ImportError:
@@ -50,22 +40,12 @@ from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions
 from shrna.loops import DEFAULT_LOOP, LOOPS, get_loop
 
 
-# --------------------------------------------------------------------------- #
-# flag parsing (mirrors the one-shot CLI's design/convert options)
-# --------------------------------------------------------------------------- #
-
-
 class _ShellArgError(ValueError):
-    """A flag-parsing failure inside the shell (never exits the process)."""
+    """A flag-parsing failure inside the shell."""
 
 
 class _ShellArgParser(argparse.ArgumentParser):
-    """An argparse parser that raises instead of calling sys.exit.
-
-    argparse's default is to print usage and terminate the interpreter; inside a
-    REPL that would kill the whole session, so both exits are turned into a
-    catchable error the command loop reports as 'error: ...'.
-    """
+    """An argparse parser that raises instead of exiting, so the shell survives."""
 
     def error(self, message: str) -> None:  # type: ignore[override]
         raise _ShellArgError(message)
@@ -77,8 +57,8 @@ class _ShellArgParser(argparse.ArgumentParser):
 
 
 def _build_design_parser() -> _ShellArgParser:
-    # SUPPRESS defaults so an unset option is simply absent from the namespace;
-    # only options the user actually typed are applied over the current criteria.
+    # SUPPRESS: unset options stay out of the namespace, so only typed options
+    # override the current criteria.
     p = _ShellArgParser(
         prog="set", add_help=False, argument_default=argparse.SUPPRESS
     )
@@ -143,11 +123,10 @@ _CONVERT_PARSER = _build_convert_parser()
 
 
 def apply_design_flags(params: DesignParams, tokens: list[str]) -> DesignParams:
-    """Return a copy of params updated by the design flags in tokens.
+    """Copy of params updated by the flags in tokens.
 
-    Only options present in tokens change; everything else is inherited. Any
-    targeting flag replaces the whole targeting intent (the intents are mutually
-    exclusive, and coherence is checked when the design runs).
+    Any targeting flag replaces the whole targeting intent; coherence is
+    checked when the design runs.
     """
     provided = vars(_DESIGN_PARSER.parse_args(tokens))
     updates: dict = {}
@@ -209,7 +188,7 @@ def apply_design_flags(params: DesignParams, tokens: list[str]) -> DesignParams:
 
 
 def apply_convert_flags(tokens: list[str]) -> ShrnaOptions:
-    """Build ShrnaOptions from the convert flags in tokens (unset ones default)."""
+    """ShrnaOptions from the convert flags in tokens; unset flags keep defaults."""
     provided = vars(_CONVERT_PARSER.parse_args(tokens))
     loop = get_loop(provided["loop"]) if "loop" in provided else LOOPS[DEFAULT_LOOP]
     return ShrnaOptions(
@@ -221,10 +200,6 @@ def apply_convert_flags(tokens: list[str]) -> ShrnaOptions:
         ),
     )
 
-
-# --------------------------------------------------------------------------- #
-# the shell
-# --------------------------------------------------------------------------- #
 
 _HELP = """\
 Commands:
@@ -258,8 +233,7 @@ class HushShell:
         self.session = session or HushSession()
         self.params = DesignParams()
         self.limit = 20
-        # The last convert result, kept so 'save' writes the scaffold the user
-        # actually chose. Cleared when a new design supersedes it.
+        # Kept for 'save'; cleared by the next design.
         self.last_convert = None
         self._commands = {
             "load": self._cmd_load,
@@ -281,8 +255,6 @@ class HushShell:
             "q": self._cmd_quit,
         }
 
-    # -- loop -------------------------------------------------------------- #
-
     def run(self, prompt: str = "hush> ") -> None:
         typer.echo("HUSH interactive shell. Type 'help' for commands, 'quit' to exit.")
         while True:
@@ -292,14 +264,14 @@ class HushShell:
                 typer.echo("")
                 break
             except KeyboardInterrupt:
-                # Ctrl-C abandons the current line, it does not leave the shell.
+                # Ctrl-C abandons the line without leaving the shell.
                 typer.echo("")
                 continue
             if not self.dispatch(line):
                 break
 
     def dispatch(self, line: str) -> bool:
-        """Run one command line. Returns False only for quit/exit."""
+        """Run one command line; False only for quit or exit."""
         line = line.strip()
         if not line or line.startswith("#"):
             return True
@@ -313,8 +285,6 @@ class HushShell:
         except (HushError, ValueError) as exc:
             typer.secho(f"error: {exc}", fg=typer.colors.RED)
             return True
-
-    # -- commands ---------------------------------------------------------- #
 
     def _cmd_load(self, rest: str) -> bool:
         if not rest:
@@ -397,14 +367,12 @@ class HushShell:
 
     def _cmd_design(self, rest: str) -> bool:
         tokens = rest.split() if rest else []
-        # --explain is a render flag, not a persistent design knob, so it is
-        # stripped before the criteria parser (which does not know it) runs.
+        # --explain is a render flag, not a criterion; strip it before parsing.
         explain = "--explain" in tokens
         tokens = [t for t in tokens if t != "--explain"]
         params = apply_design_flags(self.params, tokens) if tokens else self.params
         result = self.session.design(params)
-        # A previous convert belonged to the old design; drop it so 'save' never
-        # pairs a fresh design with stale shRNA.
+        # Drop the stale convert so 'save' never pairs it with this design.
         self.last_convert = None
         render_design_result(result, self.limit, explain=explain)
         return True
@@ -431,7 +399,7 @@ class HushShell:
                     f"no selected candidate with region {rest!r}; regions are the "
                     "left column of the design table (e.g. 6-24)."
                 )
-            limit = 0  # a named region is a single candidate; never truncate it
+            limit = 0  # a named region is one candidate; do not truncate
         render_discrimination_detail(selected, last.window_by_pos, limit)
         return True
 
@@ -458,8 +426,7 @@ class HushShell:
                 last_design.window_by_pos,
             )
             written.append(path)
-        # Only write shRNA when a convert has actually been run, so the saved
-        # scaffold is the one the user chose (not a silent default).
+        # Write shRNA only if a convert was run, so the scaffold is the chosen one.
         if self.last_convert is not None:
             path = out_dir / "shrna.tsv"
             _write_convert_tsv(path, self.last_convert.constructs)
@@ -477,10 +444,8 @@ class HushShell:
     def _cmd_quit(self, rest: str) -> bool:
         return False
 
-    # -- helpers ----------------------------------------------------------- #
-
     def _print_criteria(self) -> None:
-        """A compact readout of the current persistent criteria."""
+        """Print the current criteria."""
         p = self.params
         rules = [
             name
@@ -505,8 +470,7 @@ class HushShell:
             off = f"on ({p.offtarget_db})"
         typer.echo(f"  off-target:      {off}")
         if p.use_offtarget_filter:
-            # The owned set itself is only known once a design has run; these
-            # are the inputs it will be built from.
+            # The owned set exists only after a design; show its inputs.
             own = []
             if p.offtarget_self_accessions:
                 own.append(f"{len(p.offtarget_self_accessions)} named")
@@ -534,7 +498,7 @@ class HushShell:
 
 
 def _format_targeting(spec: AlleleTargetingSpec | None) -> str:
-    """One-line description of a targeting intent for the criteria readout."""
+    """One-line description of a targeting intent."""
     if spec is None or (
         not spec.pan_allele
         and spec.allele_specific is None

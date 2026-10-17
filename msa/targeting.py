@@ -1,33 +1,8 @@
-"""Allele targeting requests - what the user wants a candidate to hit and spare.
+"""Allele targeting request: which panel members a candidate must hit and spare.
 
-The MSA/allele stage answers one question: which sites on the target mRNA let an
-siRNA discriminate between the members of a panel the way the user asked for.
-This module holds the *request* side of that question - the domain model the rest
-of the stage is parameterised by. It performs no alignment and computes no
-verdicts; those live in the alignment and evaluation units.
-
-Four user intents are commonly named, but they are not four different things -
-they are one structure with different values:
-
-* allele-specific - hit exactly one panel member, spare the rest.
-* pan-allele      - hit every panel member, spare none.
-* subset          - hit a chosen group, spare the rest.
-* target-specific - hit no panel member, spare the whole panel.
-
-The last one is the case for a target loaded *apart* from its reference panel:
-candidates are always built from the loaded target, so it is silenced by
-construction, and "specific to it" means discriminating against every panel
-member while requiring nothing of the panel to be hit.
-
-All four reduce to two disjoint sets of allele ids: the ones a candidate must
-match ('hit') and the ones it must be able to discriminate against ('spare').
-Modelling them as one type rather than four keeps a single code path through the
-stage, and admits combinations the named cases do not cover (e.g. sparing only
-part of the panel and leaving the remainder unconstrained). The named cases are
-provided as constructors, not as separate types.
-
-TargetingMode is *derived* from the two sets rather than stored, so a request's
-reported mode can never disagree with its contents.
+All intents (pan-allele, allele-specific, subset, target-specific) are one
+structure of two disjoint id sets, built by named constructors. The mode is
+derived from the sets, never stored. See docs/design-rules.md (Allele targeting).
 """
 
 from __future__ import annotations
@@ -40,22 +15,9 @@ from typing import Iterable
 from core.sequence import SequencePanel
 from msa.msa_errors import PanelError, TargetingError
 
-# --------------------------------------------------------------------------- #
-# Mode
-# --------------------------------------------------------------------------- #
-
 
 class TargetingMode(str, Enum):
-    """The named intent a request corresponds to, derived from its sets.
-
-    ALLELE_SPECIFIC: exactly one allele is targeted.
-    PAN_ALLELE:      nothing is spared - the candidate should hit everything asked
-                     for and discriminate against nothing.
-    SUBSET:          several alleles are targeted while others are spared.
-    TARGET_SPECIFIC: no panel member is targeted and the whole panel is spared -
-                     the loaded target (silenced by construction) is the only
-                     thing hit.
-    """
+    """Intent label derived from a request's sets, used for reporting."""
 
     ALLELE_SPECIFIC = "allele_specific"
     PAN_ALLELE = "pan_allele"
@@ -63,47 +25,24 @@ class TargetingMode(str, Enum):
     TARGET_SPECIFIC = "target_specific"
 
 
-# --------------------------------------------------------------------------- #
-# Request
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True)
 class AlleleTargeting:
-    """Which panel members a candidate site must hit, and which it must spare.
+    """Panel member ids a candidate must match (hit) and discriminate against (spare).
 
-    Immutable, mirroring the rest of the HUSH domain model. Both fields are
-    normalised to frozensets on construction, so any iterable of ids may be
-    passed. The two sets must be disjoint: an allele cannot be both a target and
-    a bystander to protect.
-
-    'spare' is stored explicitly rather than being taken as "whatever else is in
-    the panel". A panel is data that can change; a request that silently meant
-    something different after a sequence was added to the panel would be a trap.
-    The constructors below fill it in from a panel at the moment the request is
-    made, which is when the user's intent is actually known.
-
-    Parameters:
-        hit:   Ids of the panel members the candidate must match. May be empty
-               only when 'spare' is not (target-specific targeting): the loaded
-               target is silenced by construction, so hitting no panel member
-               still targets something.
-        spare: Ids the candidate must be able to discriminate against. May be
-               empty (pan-allele targeting).
+    The sets must be disjoint and not both empty. hit may be empty only for
+    target-specific targeting. spare is stored explicitly rather than taken as
+    the rest of the panel, so a request keeps its meaning when the panel
+    changes; the constructors fill it from the panel at request time.
     """
 
     hit: frozenset[str]
     spare: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
-        # Accept any iterable of ids; store frozensets. The dataclass is frozen,
-        # so normalisation goes through object.__setattr__ - the same pattern
-        # core.sequence.BioSequence uses to clean its sequence string.
+        # Frozen dataclass: normalise any iterable to frozensets via object.__setattr__.
         object.__setattr__(self, "hit", frozenset(self.hit))
         object.__setattr__(self, "spare", frozenset(self.spare))
         self._validate()
-
-    # -- validation -------------------------------------------------------- #
 
     def _validate(self) -> None:
         if not self.hit and not self.spare:
@@ -120,15 +59,9 @@ class AlleleTargeting:
                 "against the same sequence."
             )
 
-    # -- derived properties ------------------------------------------------ #
-
     @property
     def mode(self) -> TargetingMode:
-        """The named intent this request corresponds to.
-
-        Derived, never stored: a request is defined by its sets, and the mode is
-        only a label for reporting.
-        """
+        """Intent label: no hit is target-specific, no spare is pan-allele."""
         if not self.hit:
             return TargetingMode.TARGET_SPECIFIC
         if not self.spare:
@@ -139,45 +72,35 @@ class AlleleTargeting:
 
     @property
     def constrained(self) -> frozenset[str]:
-        """Every allele the request says something about (hit or spare)."""
+        """Every allele in hit or spare."""
         return self.hit | self.spare
 
     @property
     def discriminating(self) -> bool:
-        """True when the request asks a candidate to tell alleles apart."""
+        """True when any allele is spared."""
         return bool(self.spare)
 
     def unconstrained(self, panel: SequencePanel) -> frozenset[str]:
-        """Panel members this request says nothing about.
-
-        Non-empty only for requests built by hand; the constructors below assign
-        every panel member to one of the two sets.
-        """
+        """Panel members in neither set; empty for the named constructors."""
         return frozenset(panel.ids) - self.constrained
-
-    # -- named constructors ------------------------------------------------ #
 
     @classmethod
     def allele_specific(cls, allele: str, panel: SequencePanel) -> "AlleleTargeting":
-        """Hit exactly 'allele'; spare every other member of 'panel'."""
+        """Hit one allele; spare every other member."""
         ids = _panel_ids(panel)
         _require_present({allele}, ids)
         return cls(hit={allele}, spare=ids - {allele})
 
     @classmethod
     def pan_allele(cls, panel: SequencePanel) -> "AlleleTargeting":
-        """Hit every member of 'panel'; spare nothing.
-
-        Selects conserved sites: a candidate satisfying this request matches all
-        panel members and is not asked to discriminate against anything.
-        """
+        """Hit every member; spare none."""
         return cls(hit=_panel_ids(panel), spare=frozenset())
 
     @classmethod
     def subset(
         cls, alleles: Iterable[str], panel: SequencePanel
     ) -> "AlleleTargeting":
-        """Hit the given 'alleles'; spare the remaining members of 'panel'."""
+        """Hit the given alleles; spare the remaining members."""
         wanted = frozenset(alleles)
         ids = _panel_ids(panel)
         _require_present(wanted, ids)
@@ -185,13 +108,7 @@ class AlleleTargeting:
 
     @classmethod
     def target_specific(cls, panel: SequencePanel) -> "AlleleTargeting":
-        """Spare every member of 'panel'; hit nothing in it.
-
-        For a target loaded apart from its reference panel: the guide is built
-        from that target, so it is silenced by construction, and specificity
-        means discriminating against the whole panel. The counterpart of
-        pan_allele - the same panel, the opposite request.
-        """
+        """Hit no member; spare the whole panel (the target is loaded apart from it)."""
         return cls(hit=frozenset(), spare=_panel_ids(panel))
 
     def __repr__(self) -> str:
@@ -201,25 +118,12 @@ class AlleleTargeting:
         )
 
 
-# --------------------------------------------------------------------------- #
-# Panel helpers
-# --------------------------------------------------------------------------- #
-
-
-# How many missing ids to name before truncating the message. A panel pulled
-# from IPD-IMGT/HLA can hold thousands of alleles, so 'available' is never listed
-# in full.
+# Panels can hold thousands of alleles, so error messages list at most this many ids.
 _MAX_REPORTED_IDS = 10
 
 
 def _panel_ids(panel: SequencePanel) -> frozenset[str]:
-    """The panel's sequence ids, rejecting blank or duplicated ones.
-
-    Ids are the only handle a request has on a panel member, so ambiguity here
-    would silently make a request mean something other than what was asked. The
-    checks are linear in panel size: an IPD-IMGT/HLA locus can hold thousands of
-    alleles, and this runs on every request.
-    """
+    """The panel's ids; blank or duplicate ids raise PanelError."""
     ids = panel.ids
     blank = sum(1 for seq_id in ids if not seq_id)
     if blank:
@@ -239,7 +143,7 @@ def _panel_ids(panel: SequencePanel) -> frozenset[str]:
 
 
 def _require_present(wanted: frozenset[str], available: frozenset[str]) -> None:
-    """Raise if any requested id is absent from the panel."""
+    """Raise TargetingError for ids that are not in the panel."""
     missing = wanted - available
     if missing:
         raise TargetingError(
@@ -249,7 +153,7 @@ def _require_present(wanted: frozenset[str], available: frozenset[str]) -> None:
 
 
 def _truncate(ids: list[str]) -> str:
-    """Render an id list for an error message, capped at _MAX_REPORTED_IDS."""
+    """Render ids for an error message, capped at _MAX_REPORTED_IDS."""
     if len(ids) <= _MAX_REPORTED_IDS:
         return str(ids)
     shown = ids[:_MAX_REPORTED_IDS]

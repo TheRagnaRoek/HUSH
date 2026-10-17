@@ -1,9 +1,4 @@
-"""Tests for the service layer (service.session.HushSession).
-
-These exercise the orchestration seam directly - the same pipeline the CLI and
-the future HTTP API drive - independently of any renderer. The CLI smoke tests
-(test_cli) cover the terminal-facing behaviour on top of this.
-"""
+"""Tests for service.session.HushSession, independent of any renderer."""
 
 from types import SimpleNamespace
 
@@ -23,9 +18,7 @@ _ALLELE_1 = "HLA-DEMO*01:01"  # a member id in hla_panel_example.fasta
 _ALLELE_2 = "HLA-DEMO*02:01"
 
 
-# --------------------------------------------------------------------------- #
 # loading and inspection
-# --------------------------------------------------------------------------- #
 
 
 def test_load_target_makes_it_current(target_fasta):
@@ -59,9 +52,7 @@ def test_design_without_target_raises(target_fasta):
         HushSession().design()
 
 
-# --------------------------------------------------------------------------- #
 # single-target design
-# --------------------------------------------------------------------------- #
 
 
 def test_design_bare_default_selects(demo_lowgc_fasta):
@@ -106,9 +97,7 @@ def test_design_inverted_gc_window_raises_valueerror(demo_lowgc_fasta):
         session.design(params)
 
 
-# --------------------------------------------------------------------------- #
 # allele-aware design (panel targeting)
-# --------------------------------------------------------------------------- #
 
 
 def _panel_session(target_fasta, panel_fasta):
@@ -248,9 +237,7 @@ class TestSortSelectionRouting:
         assert out == [a, b]
 
 
-# --------------------------------------------------------------------------- #
 # alignment caching
-# --------------------------------------------------------------------------- #
 
 
 def test_alignment_computed_once_across_designs(target_fasta, panel_fasta, monkeypatch):
@@ -284,9 +271,7 @@ def test_reloading_panel_invalidates_cache(target_fasta, panel_fasta, monkeypatc
     assert calls["n"] == 2
 
 
-# --------------------------------------------------------------------------- #
 # convert (in-memory, no TSV round-trip)
-# --------------------------------------------------------------------------- #
 
 
 def test_convert_uses_last_design_selection(demo_lowgc_fasta):
@@ -311,9 +296,7 @@ def test_convert_without_design_raises(target_fasta):
         session.convert()
 
 
-# --------------------------------------------------------------------------- #
 # conversion filters
-# --------------------------------------------------------------------------- #
 
 
 def test_convert_withholds_premature_terminators_by_default(demo_lowgc_fasta):
@@ -343,9 +326,7 @@ def test_apply_convert_filters_is_a_partition():
     assert result.total_converted == 3
 
 
-# --------------------------------------------------------------------------- #
 # sort_selection guards
-# --------------------------------------------------------------------------- #
 
 
 def test_unknown_sort_mode_is_rejected(demo_lowgc_fasta):
@@ -363,9 +344,7 @@ def test_discrimination_sort_without_a_panel_is_rejected(demo_lowgc_fasta):
         session.design(DesignParams(sort="discrimination"))
 
 
-# --------------------------------------------------------------------------- #
 # off-target self resolution
-# --------------------------------------------------------------------------- #
 
 # An IMGT-named target, as the bundled HLA files are: no RefSeq accession sits
 # in the header, so nothing but homology can tell the gate what the design owns.

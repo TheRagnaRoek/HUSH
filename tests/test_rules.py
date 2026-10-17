@@ -18,12 +18,7 @@ from core.sirna import SiRNACandidate, enumerate_candidates
 
 
 def make_candidate(sense: str, antisense: str) -> SiRNACandidate:
-    """Build a candidate with strands set directly.
-
-    The Ui-Tei rules read the two strands independently, so tests set sense and
-    antisense by hand (they need not be true complements) to isolate one rule at
-    a time without reasoning through reverse-complementation.
-    """
+    """Candidate with strands set directly (not necessarily complementary), to isolate one rule."""
     return SiRNACandidate(
         position=0,
         length=len(sense),
@@ -115,9 +110,7 @@ class TestIntegrationWithEnumerator:
         assert all(0 <= r.score <= 4 for r in results)
 
 
-# --------------------------------------------------------------------------- #
 # Reynolds
-# --------------------------------------------------------------------------- #
 
 # A 19-mer that maximises the assessable Reynolds score (internal repeat is
 # deferred). By 1-based position: pos3='A', pos10='U', pos13='A' (no penalty),
@@ -192,11 +185,7 @@ class TestReynoldsAdditive3pWindow:
 
 
 class TestReynoldsPosition19Gradient:
-    """Position 19 is A(+2) / U(+1) / G,C(-1), the whole point of the model.
-
-    'A' scores twice (the A-at-19 point and an A/U-window point); 'U' scores the
-    window point only; 'G'/'C' loses the window point and takes the penalty.
-    """
+    """Position 19 scores A +2, U +1, G or C -1 (A counts for A-at-19 and the A/U window)."""
 
     def test_a_at_19_scores_two_over_g(self):
         a19 = reynolds(rey_candidate(REY_ALL_PASS), no_internal_repeat=False)
@@ -283,9 +272,7 @@ class TestReynoldsIntegration:
             assert isinstance(r.no_internal_repeat, bool)
 
 
-# --------------------------------------------------------------------------- #
 # Amarzguioui
-# --------------------------------------------------------------------------- #
 
 # A 19-mer hitting all three positive motifs and no negatives:
 #   pos1 = G  -> S1 (+1), not U1
@@ -357,13 +344,7 @@ class TestAmarzguiouiEndDifferential:
 
 
 class TestAmarzguiouiPublishedTable3:
-    """Reproduce the paper's own scored test set (Table 3), all 46 siRNAs.
-
-    Amarzguioui & Prydz (2004) publish DT3 and the total algorithm score for
-    every siRNA in their test set. Matching all 46 pins down the differential's
-    sign convention, its window, the motif definitions and how the two combine -
-    the sign in particular cannot be inferred from the prose alone.
-    """
+    """Reproduce all 46 scores of Amarzguioui and Prydz 2004 Table 3; this fixes the DT3 sign."""
 
     def test_every_row_reproduces(self, amarzguioui_table3):
         assert len(amarzguioui_table3) == 46

@@ -1,10 +1,8 @@
 import type { DesignParams } from "../api/types";
 
 /**
- * The best-practice default paradigm, matching the backend DesignParamsSchema
- * defaults (api/schemas.py): all three rule sets by union, seed + homopolymer +
- * transcriptome off-target on, GC / hairpin / asymmetry off, 19-nt natural
- * duplex. GC bounds are fractions in [0, 1], as the API expects.
+ * Default parameters, matching DesignParamsSchema in api/schemas.py (defaults in
+ * docs/cli.md). GC bounds are fractions, as the API expects.
  */
 export const DEFAULT_PARAMS: DesignParams = {
   length: 19,

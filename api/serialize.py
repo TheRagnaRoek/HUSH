@@ -1,10 +1,4 @@
-"""Build API response models from service-layer results.
-
-The counterpart to the CLI's printers: where app.cli renders a DesignResult to a
-terminal table, this renders it to api.schemas models (the same columns, as
-JSON). Kept separate from the schemas so the wire shape and the mapping evolve
-independently.
-"""
+"""Build api.schemas response models from service results (the JSON counterpart of app.cli)."""
 
 from __future__ import annotations
 
@@ -25,16 +19,10 @@ from shrna.loops import LOOPS
 
 from api import schemas
 
-# The nucleotide-target requirement, surfaced by inspect for a protein target.
 _PROTEIN_NOTE = (
     "siRNA/shRNA design needs the coding transcript (mRNA/CDS); resolve the "
     "protein to its transcript first."
 )
-
-
-# --------------------------------------------------------------------------- #
-# sequences
-# --------------------------------------------------------------------------- #
 
 
 def sequence_summary(seq: BioSequence) -> schemas.SequenceSummary:
@@ -67,13 +55,8 @@ def inspect_response(design_input: DesignInput) -> schemas.InspectResponse:
     )
 
 
-# --------------------------------------------------------------------------- #
-# design
-# --------------------------------------------------------------------------- #
-
-
 def _rules_code(e: CandidateEvaluation, criteria: SelectionCriteria) -> str:
-    """Compact per-rule pass code, e.g. 'UR-' (Ui-Tei + Reynolds pass, Amarz fails)."""
+    """Per-rule pass code: U, R, A for Ui-Tei, Reynolds, Amarzguioui; '-' for a fail."""
     parts = []
     if e.ui_tei is not None:
         parts.append("U" if e.ui_tei.satisfied else "-")
@@ -87,7 +70,7 @@ def _rules_code(e: CandidateEvaluation, criteria: SelectionCriteria) -> str:
 
 
 def _offtarget_hits(profile) -> list[int]:
-    """Guide + passenger off-target hit counts at mismatch levels 0..3."""
+    """Guide plus passenger hit counts at mismatch levels 0..3."""
     out = [0, 0, 0, 0]
     for counts in (profile.guide_counts, profile.passenger_counts):
         for i, n in enumerate(counts):
@@ -101,13 +84,7 @@ def _discrimination_from(
     count: int,
     all_positions: tuple[MismatchAssessment, ...] = (),
 ) -> schemas.DiscriminationResult:
-    """One mismatch, with every criterion that sets its placement rank.
-
-    all_positions carries that allele's differences in full, in ranking order.
-    The rank rests on `d` alone, so without it a client sees only the best-placed
-    difference and cannot weigh count against placement itself - which is exactly
-    the judgement msa.discrimination leaves to the user.
-    """
+    """One mismatch with its ranking criteria; all_positions lists all differences."""
     return schemas.DiscriminationResult(
         guide_position=d.guide_position,
         mutation=d.mutation_type,
@@ -116,8 +93,7 @@ def _discrimination_from(
         region=d.region.value,
         sources_agree=d.sources_agree,
         strongest_position=d.guide_position in STRONGEST_POSITIONS,
-        # Field name kept for wire compatibility; it now reports membership of
-        # the P9-P16 low-tolerance window rather than Schwarz's second tier.
+        # Name kept for wire compatibility; now the P9-P16 window.
         consistent_position=d.guide_position in LOW_TOLERANCE_WINDOW,
         multi_mismatch=count >= MULTI_MISMATCH,
         all_guide_positions=[a.guide_position for a in all_positions],
@@ -134,7 +110,7 @@ def _discrimination(window: WindowEvaluation) -> schemas.DiscriminationResult | 
 
 
 def _per_allele(window: WindowEvaluation) -> list[schemas.PerAlleleDiscrimination]:
-    """Every spared allele's discrimination, weakest first."""
+    """Discrimination of every spared allele, weakest first."""
     out = []
     for allele, assessments in window.spared_alleles_by_discrimination:
         ordered = ordered_by_placement(assessments)
@@ -153,7 +129,7 @@ def _per_allele(window: WindowEvaluation) -> list[schemas.PerAlleleDiscriminatio
 
 
 def _self_summary(own) -> dict:
-    """The self-transcript fields of a criteria summary."""
+    """Self-transcript fields of the criteria summary."""
     if own is None:
         return {}
     return {
@@ -276,11 +252,6 @@ def design_response(result: DesignResult) -> schemas.DesignResponse:
         targeting=targeting_summary(result.targeting) if result.targeting else None,
         selected=selected,
     )
-
-
-# --------------------------------------------------------------------------- #
-# convert
-# --------------------------------------------------------------------------- #
 
 
 def construct_result(c: ShrnaConstruct) -> schemas.ConstructResult:

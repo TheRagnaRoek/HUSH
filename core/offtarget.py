@@ -1,38 +1,15 @@
 """Transcriptome homology off-target filter.
 
-An siRNA guide silences any transcript its sequence is complementary to, not only
-its intended target. siDirect BLASTs each guide against the human transcriptome
-and drops candidates whose nearest off-target is a near-perfect match; this module
-is HUSH's open, offline equivalent of that search. For each candidate it looks for
-near-complementary sites in a reference transcriptome, reports the off-target
-profile (nearest-match mismatch count and hit counts by mismatch level, on both
-strands, with the design's own transcripts excluded), and exposes an optional gate
-that rejects a candidate whose nearest off-target sits below a mismatch threshold.
+Searches a reference transcriptome for near-complementary sites of each
+candidate on both strands, reports the off-target profile and gates on the
+nearest hit. Design transcripts are excluded as SelfTranscripts. Rationale,
+the owned-set sources and the coverage default: docs/design-rules.md
+(Transcriptome off-target).
 
-What a design owns is a set, not one accession (SelfTranscripts): a gene family
-spans several reference transcripts, and the reference also carries
-alternate-haplotype copies of the same locus. resolve_self_transcripts finds that
-set by exact k-mer coverage, which is what makes the gate usable on HLA.
-
-This is distinct from core.seed, which is a *seed-mediated* off-target proxy (a
-sequence-intrinsic Tm). Here we search for direct full-length homology.
-
-Two searchers sit behind one protocol, sharing this module's result model, the
-on-target exclusion and the gate:
-
-* BruteForceSearcher - a pure-Python Hamming scan. Correct by construction, no
-  external tool; suited to small references (a curated panel such as an HLA allele
-  family, and the tests). It is the oracle the bowtie backend is checked against.
-* BowtieSearcher - shells out to bowtie1 in `-v` mode (end-to-end alignment with at
-  most N mismatches, all hits reported). bowtie1 is the open, offline counterpart of
-  the GGGenome k-mismatch search siDirect relies on; it scales to the whole
-  transcriptome. Only the binary is external - bowtie is reached via stdlib
-  subprocess, so importing this module never needs it.
-
-Both real engines are ungapped, Hamming-distance and forward-orientation, so their
-results agree exactly. Design rationale (why bowtie1 rather than BLAST, the RefSeq
-pinning, strand semantics and the allele-aware caveat) is in
-docs/offtarget_design_note.md.
+Two searchers share one protocol: BruteForceSearcher (pure Python, for small
+references and as the test oracle) and BowtieSearcher (bowtie1 in -v mode,
+reached through subprocess so importing this module never needs it). Both are
+ungapped, Hamming-distance and forward-orientation.
 """
 
 from __future__ import annotations
@@ -48,45 +25,29 @@ from typing import Iterable, Protocol, runtime_checkable
 from core.errors import OffTargetError
 from core.sirna import SiRNACandidate
 
-# --------------------------------------------------------------------------- #
-# Defaults
-# --------------------------------------------------------------------------- #
-
-# Reject a candidate if its nearest off-target has fewer than this many mismatches
-# (i.e. a 0/1-mismatch off-target exists). This matches siDirect on the PDCD1
-# benchmark: siDirect keeps candidates whose nearest off-target is >= 2 mismatches
-# and drops only the near-perfect (0/1) ones (see tools/compare_sidirect.py).
+# Reject when the nearest off-target has fewer mismatches than this.
 DEFAULT_OFFTARGET_MIN_MISMATCH = 2
 
-# How many mismatches the search enumerates. bowtie1 -v mode allows at most 3, so
-# this is capped there; 3 also gives siDirect-style counts at every level 0..3 and
-# lets the reported nearest-mismatch match siDirect's column (which reaches 3).
+# Mismatch depth searched; bowtie1 -v mode allows at most 3.
 DEFAULT_OFFTARGET_MAX_MISMATCH = 3
 BOWTIE_MAX_V = 3
 
-# Share of a design sequence's k-mers a reference transcript must carry exactly
-# before it counts as self rather than an off-target. 0.10 keeps the target gene
-# together with the alternate-haplotype copies of its locus and its closest
-# paralogs; docs/design-rules.md records the measured coverage distribution.
+# Fraction of a design sequence's k-mers a transcript must carry to count as self.
 DEFAULT_SELF_MIN_COVERAGE = 0.10
 
 
 def _to_dna(seq: str) -> str:
-    """Uppercase and spell a read as DNA (U -> T) for matching against a database.
-
-    The reference transcriptome and bowtie both work in DNA letters; candidate
-    strands are RNA. Matching is on the letters, so both sides must agree.
-    """
+    """Uppercase and read U as T; references and bowtie use DNA letters."""
     return seq.upper().replace("U", "T")
 
 
 def _base_accession(accession: str) -> str:
-    """An accession without its version suffix, lowercased (NM_1.3 -> nm_1)."""
+    """Accession without version suffix, lowercased (NM_1.3 -> nm_1)."""
     return accession.split(".", 1)[0].strip().lower()
 
 
 def _accession_set(values: Iterable[str] | str | None) -> frozenset[str]:
-    """Normalise accessions into a base-form set; a bare string counts as one."""
+    """Normalise accessions to base form; a bare string counts as one."""
     if values is None:
         return frozenset()
     if isinstance(values, str):
@@ -96,19 +57,10 @@ def _accession_set(values: Iterable[str] | str | None) -> frozenset[str]:
 
 @dataclass(frozen=True)
 class SelfTranscripts:
-    """The reference transcripts a design owns, and so does not count against it.
+    """Reference transcripts the design owns, excluded from off-target hits.
 
-    A guide is meant to match its target, and on a multigene family it is also
-    meant to match the family: for HLA, every allele of the target gene plus the
-    alternate-haplotype copies the reference carries of the same locus is an
-    intended hit, not an off-target. Allele-level discrimination stays the MSA
-    stage's job (msa.windows), at a resolution the transcriptome cannot reach;
-    this set only keeps the transcriptome gate from rejecting a candidate for
-    hitting what it was designed to hit.
-
-    'declared' is what the caller named by accession, 'resolved' what the
-    homology search found (resolve_self_transcripts). Both are normalised to a
-    version-less base, so NM_002116.8 and NM_002116 are one transcript.
+    'declared' holds accessions named by the caller, 'resolved' those found by
+    resolve_self_transcripts. Both are version-insensitive.
     """
 
     declared: frozenset[str] = frozenset()
@@ -121,7 +73,7 @@ class SelfTranscripts:
         resolved: Iterable[str] | str | None = None,
         min_coverage: float | None = None,
     ) -> "SelfTranscripts":
-        """Build from raw accessions, normalising each to its base form."""
+        """Build from raw accessions."""
         return SelfTranscripts(
             declared=_accession_set(declared),
             resolved=_accession_set(resolved),
@@ -145,20 +97,9 @@ class SelfTranscripts:
         )
 
 
-# --------------------------------------------------------------------------- #
-# Hit + profile model
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True)
 class OffTargetHit:
-    """One near-complementary site of a read in the reference transcriptome.
-
-    Fields:
-        accession:  the transcript the read aligned to (reference name).
-        position:   0-based offset of the match on that transcript.
-        mismatches: number of mismatched positions over the full read length.
-    """
+    """One near-match: transcript accession, 0-based position and mismatch count."""
 
     accession: str
     position: int
@@ -167,18 +108,12 @@ class OffTargetHit:
 
 @dataclass(frozen=True)
 class OffTargetProfile:
-    """The off-target picture for one candidate, both strands, self excluded.
+    """Off-target hits of one candidate, per strand, with self transcripts removed.
 
-    A candidate is loaded into RISC as either strand, so both are searched. The
-    'guide' side is the near-matches of the guide's target site (its off-targets
-    when the guide loads); the 'passenger' side is the same for the passenger.
-
-    counts[i] is the number of retained off-target hits with exactly i mismatches,
-    for i in 0..max_mismatch. min_mismatch is the nearest hit, or None if the read
-    has no off-target within max_mismatch.
-
-    A candidate passes only when BOTH strands' nearest off-target is at least
-    'threshold' mismatches away (or absent).
+    counts[i] is the number of hits with exactly i mismatches (i up to
+    max_mismatch); min_mismatch is the nearest hit, or None for no hit. The
+    candidate passes when each strand's nearest hit is at least 'threshold'
+    mismatches away or absent.
     """
 
     guide_min_mismatch: int | None
@@ -190,7 +125,7 @@ class OffTargetProfile:
 
     @property
     def min_mismatch(self) -> int | None:
-        """The nearer of the two strands' nearest off-targets (None if neither)."""
+        """The nearer of the two strands' nearest hits, or None."""
         mins = [
             m
             for m in (self.guide_min_mismatch, self.passenger_min_mismatch)
@@ -214,7 +149,7 @@ class OffTargetProfile:
 
     @property
     def passes(self) -> bool:
-        """True when the nearest off-target on either strand clears the threshold."""
+        """True when the nearest hit on both strands clears the threshold."""
         m = self.min_mismatch
         return m is None or m >= self.threshold
 
@@ -240,20 +175,11 @@ def _counts(hits: list[OffTargetHit], max_mismatch: int) -> tuple[int, ...]:
     return tuple(buckets)
 
 
-# --------------------------------------------------------------------------- #
-# Searcher protocol + backends
-# --------------------------------------------------------------------------- #
-
-
 @runtime_checkable
 class OffTargetSearcher(Protocol):
-    """Finds near-matches of a read in a reference, forward strand, up to N mismatches.
+    """Finds every ungapped forward-strand match of a read within max_mismatch.
 
-    'read' is a DNA-spelled string (see _to_dna). Implementations return every hit
-    with at most 'max_mismatch' mismatches over the full read length, ungapped, on
-    the reference's forward strand only (transcripts are single-stranded mRNA). The
-    on-target transcript is not excluded here - that is the module's job, not the
-    searcher's.
+    The read is DNA-spelled (see _to_dna). Self exclusion is not done here.
     """
 
     max_mismatch: int
@@ -262,12 +188,10 @@ class OffTargetSearcher(Protocol):
 
 
 class BruteForceSearcher:
-    """Exhaustive pure-Python Hamming search over an in-memory reference.
+    """Exhaustive Hamming search over an in-memory reference.
 
-    O(references x length) per read, so it is meant for small references - a
-    curated allele panel, or the tests - not the whole transcriptome. Use
-    BowtieSearcher for that. Serves as the reference implementation the bowtie
-    backend is checked against.
+    O(references x length) per read: for small references and tests, and the
+    oracle for BowtieSearcher.
     """
 
     def __init__(
@@ -288,9 +212,8 @@ class BruteForceSearcher:
         path: str | Path,
         max_mismatch: int = DEFAULT_OFFTARGET_MAX_MISMATCH,
     ) -> "BruteForceSearcher":
-        """Build a searcher from a FASTA reference (each record's id is its accession)."""
-        # Imported lazily so this module stays importable without touching the
-        # Biopython-backed input layer.
+        """Build from a FASTA file; each record id is an accession."""
+        # Lazy import keeps this module free of the Biopython-backed input layer.
         from core.inputs import load_sequences
 
         refs = [(s.id, s.seq) for s in load_sequences(path)]
@@ -310,7 +233,7 @@ class BruteForceSearcher:
 
 
 def _hamming_leq(read: str, ref: str, start: int, cap: int) -> int | None:
-    """Mismatch count of 'read' against ref[start:], or None if it exceeds 'cap'."""
+    """Mismatches of read against ref[start:], or None when above cap."""
     mm = 0
     for i, base in enumerate(read):
         if base != ref[start + i]:
@@ -321,11 +244,7 @@ def _hamming_leq(read: str, ref: str, start: int, cap: int) -> int | None:
 
 
 class PrecomputedSearcher:
-    """A searcher backed by an already-computed {read: hits} map (dict lookup).
-
-    BowtieSearcher.precompute() returns one of these after a single batched bowtie
-    run, so the per-candidate selection loop pays no per-read process cost.
-    """
+    """Searcher over a precomputed {read: hits} map."""
 
     def __init__(
         self, hits_by_read: dict[str, list[OffTargetHit]], max_mismatch: int
@@ -338,14 +257,10 @@ class PrecomputedSearcher:
 
 
 class BowtieSearcher:
-    """Off-target search via bowtie1 in `-v` mode over a prebuilt index.
+    """Off-target search with bowtie1: -v N -a --norc over a prebuilt index.
 
-    Runs `bowtie -v N -a --norc`: end-to-end alignment allowing at most N
-    mismatches (bowtie1 caps N at 3), reporting all hits on the forward strand.
-    Build the index with 'hush reference build' (core.reference).
-
-    search() runs one query; precompute() runs a whole batch in a single bowtie
-    call and returns a PrecomputedSearcher - the path the CLI uses.
+    Build the index with 'hush reference build' (core.reference). precompute()
+    aligns a batch of reads in one bowtie run.
     """
 
     def __init__(
@@ -378,7 +293,7 @@ class BowtieSearcher:
         return self.precompute([read])._hits.get(_to_dna(read), [])
 
     def precompute(self, reads: Iterable[str]) -> PrecomputedSearcher:
-        """Align every read in one bowtie run; return a lookup-backed searcher."""
+        """Align all reads in one bowtie run."""
         unique = sorted({_to_dna(r) for r in reads})
         hits_by_read: dict[str, list[OffTargetHit]] = {r: [] for r in unique}
         if not unique:
@@ -386,7 +301,7 @@ class BowtieSearcher:
 
         with tempfile.TemporaryDirectory() as tmp:
             reads_fa = Path(tmp) / "reads.fa"
-            # The read sequence doubles as its FASTA name so hits regroup by read.
+            # The sequence doubles as the FASTA name so hits regroup by read.
             reads_fa.write_text(
                 "".join(f">{r}\n{r}\n" for r in unique), encoding="ascii"
             )
@@ -402,8 +317,8 @@ class BowtieSearcher:
         cmd = [
             self.bowtie_path,
             "-v", str(self.max_mismatch),
-            "-a",              # report all alignments, not just the best
-            "--norc",          # forward strand only (transcripts are sense mRNA)
+            "-a",              # all alignments, not just the best
+            "--norc",          # forward strand only
             "--quiet",
             "-f", self.index_prefix, str(reads_fa),
         ]
@@ -411,9 +326,7 @@ class BowtieSearcher:
             proc = subprocess.run(cmd, capture_output=True, text=True)
         except FileNotFoundError as exc:
             raise OffTargetError(f"Could not run bowtie: {exc}") from exc
-        # A non-zero exit with no output is a real failure; bowtie can also exit
-        # non-zero merely because no read aligned, in which case stdout is empty
-        # and there is nothing to parse anyway.
+        # bowtie may exit non-zero when no read aligns; that leaves stdout empty.
         if proc.returncode != 0 and not proc.stdout:
             detail = proc.stderr.strip() or f"exit code {proc.returncode}"
             raise OffTargetError(f"bowtie failed: {detail}")
@@ -421,11 +334,10 @@ class BowtieSearcher:
 
 
 def _parse_bowtie_line(line: str) -> tuple[str, OffTargetHit]:
-    """Parse one default-format bowtie hit into (read_name, OffTargetHit).
+    """Parse one default-format bowtie line into (read name, hit).
 
-    Columns: name, strand, reference, 0-based offset, read, quals, reserved,
-    mismatch descriptors. The mismatch count is the number of comma-separated
-    descriptors in the final field (empty means a perfect match).
+    The mismatch count is the number of comma-separated descriptors in the
+    last column.
     """
     fields = line.rstrip("\n").split("\t")
     name = fields[0]
@@ -436,13 +348,8 @@ def _parse_bowtie_line(line: str) -> tuple[str, OffTargetHit]:
     return name, OffTargetHit(accession, position, mismatches)
 
 
-# --------------------------------------------------------------------------- #
-# Evaluation
-# --------------------------------------------------------------------------- #
-
-
 def _tiles(sequence: str, length: int) -> set[str]:
-    """Every distinct k-mer of 'length' in a sequence, DNA-spelled."""
+    """Distinct k-mers of the given length, DNA-spelled."""
     seq = _to_dna(sequence)
     return {seq[i : i + length] for i in range(len(seq) - length + 1)}
 
@@ -453,17 +360,10 @@ def resolve_self_transcripts(
     length: int,
     min_coverage: float = DEFAULT_SELF_MIN_COVERAGE,
 ) -> frozenset[str]:
-    """Reference transcripts the design's own sequences cover, by exact k-mer share.
+    """Transcripts that carry at least min_coverage of any input's k-mers exactly.
 
-    Each input (the target, and normally every panel member) is tiled into its
-    k-mers of 'length'; a transcript is self when at least min_coverage of one
-    input's distinct tiles align to it with no mismatch. Coverage is judged per
-    input rather than pooled, so a long target cannot dilute a short panel
-    member out of its own family.
-
-    Sequence is the only signal available: a bowtie index stores accessions, not
-    gene symbols, so an alternate-haplotype copy of the target gene and a true
-    paralog are separated only by how much of the target they carry.
+    Each input is tiled into k-mers of 'length' and judged on its own, so a
+    long target does not dilute a short panel member.
     """
     if not 0 < min_coverage <= 1:
         raise ValueError(f"min_coverage must be in (0, 1], got {min_coverage}.")
@@ -475,7 +375,7 @@ def resolve_self_transcripts(
         return frozenset()
     pooled = sorted(set().union(*tiled))
 
-    # One batched pass when the backend offers it (bowtie), else per-read search.
+    # One batched pass when the backend supports it, else per-read search.
     lookup = (
         searcher.precompute(pooled) if hasattr(searcher, "precompute") else searcher
     )
@@ -501,7 +401,7 @@ def resolve_self_transcripts(
 def _as_self(
     spec: "SelfTranscripts | Iterable[str] | str | None",
 ) -> SelfTranscripts | None:
-    """Accept a SelfTranscripts, a bare accession, or an iterable of them."""
+    """Accept a SelfTranscripts, an accession or an iterable of accessions."""
     if spec is None or isinstance(spec, SelfTranscripts):
         return spec
     return SelfTranscripts.of(declared=spec)
@@ -510,7 +410,7 @@ def _as_self(
 def _exclude_self(
     hits: list[OffTargetHit], self_transcripts: SelfTranscripts | None
 ) -> list[OffTargetHit]:
-    """Drop hits to the transcripts the design owns (siDirect's rule, as a set)."""
+    """Drop hits to the design's own transcripts."""
     if not self_transcripts:
         return hits
     return [h for h in hits if h.accession not in self_transcripts]
@@ -522,12 +422,10 @@ def evaluate_offtarget(
     threshold: int = DEFAULT_OFFTARGET_MIN_MISMATCH,
     self_transcripts: "SelfTranscripts | Iterable[str] | str | None" = None,
 ) -> OffTargetProfile:
-    """Off-target profile of a candidate against a reference, both strands, self out.
+    """Off-target profile of a candidate, both strands, self transcripts excluded.
 
-    The guide silences transcripts complementary to it, i.e. those carrying its
-    target site (the sense strand); the passenger, if mis-loaded, silences those
-    carrying the antisense strand. So the guide side searches the sense read and
-    the passenger side the antisense read.
+    Guide side: sense read; passenger side: antisense read. See
+    docs/design-rules.md (Transcriptome off-target, Both strands are searched).
     """
     max_mm = searcher.max_mismatch
     own = _as_self(self_transcripts)

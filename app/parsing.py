@@ -1,10 +1,7 @@
-"""Shared flag-vocabulary parsing for the HUSH frontends.
+"""Flag-string parsing shared by the CLI and the shell.
 
-The one-shot CLI and the interactive shell accept the same option words
-(--rules, --mode, --overhang, --params, comma-separated id lists), so the
-string-to-domain conversions live here once. These raise plain ValueError with
-a user-facing message; the Typer CLI re-wraps that as a usage error with a
---flag hint, while the shell prints it as-is.
+Raises ValueError with a user-facing message; the CLI turns it into a usage
+error, the shell prints it.
 """
 
 from __future__ import annotations
@@ -39,7 +36,7 @@ _OVERHANG_ALIASES = {
 
 
 def parse_rules(spec: str) -> tuple[bool, bool, bool]:
-    """Turn a rules spec into (use_ui_tei, use_reynolds, use_amarzguioui)."""
+    """(use_ui_tei, use_reynolds, use_amarzguioui) from a comma list, 'all' or 'none'."""
     text = spec.strip().lower()
     if text in ("", "all"):
         return True, True, True
@@ -60,7 +57,7 @@ def parse_rules(spec: str) -> tuple[bool, bool, bool]:
 
 
 def parse_mode(spec: str) -> RuleMode:
-    """Parse a rule-combination mode ('all' or 'any')."""
+    """Rule combination mode: 'all' or 'any'."""
     try:
         return RuleMode(spec.strip().lower())
     except ValueError:
@@ -68,7 +65,7 @@ def parse_mode(spec: str) -> RuleMode:
 
 
 def parse_params(spec: str) -> ThermoParams:
-    """Parse a nearest-neighbour parameter set ('xia' or 'freier')."""
+    """Nearest-neighbor parameter set: 'xia' or 'freier'."""
     key = _PARAMS_ALIASES.get(spec.strip().lower())
     if key is None:
         raise ValueError(
@@ -78,7 +75,7 @@ def parse_params(spec: str) -> ThermoParams:
 
 
 def parse_overhang(spec: str) -> OverhangPolicy:
-    """Parse a 3' overhang policy ('natural', 'dtdt', or 'uu')."""
+    """3' overhang policy: 'natural', 'dtdt' or 'uu'."""
     key = _OVERHANG_ALIASES.get(spec.strip().lower())
     if key is None:
         raise ValueError(
@@ -88,5 +85,5 @@ def parse_overhang(spec: str) -> OverhangPolicy:
 
 
 def split_ids(spec: str) -> list[str]:
-    """Split a comma-separated id list, dropping blanks and surrounding space."""
+    """Split a comma-separated id list, dropping blanks."""
     return [token.strip() for token in spec.split(",") if token.strip()]

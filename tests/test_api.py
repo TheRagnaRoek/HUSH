@@ -1,10 +1,5 @@
-"""Tests for the HTTP API (api.app).
-
-Driven through Starlette's TestClient against a fresh app + store per test, so
-sessions never leak between cases. The pipeline itself is covered by the service
-and CLI suites; these cover the HTTP contract: status codes, JSON shape, session
-lifecycle, and that domain errors become 400 (not 500).
-"""
+"""HTTP contract tests for api.app: status codes, JSON shape, session lifecycle and
+domain errors as 400. Fresh app and store per test; the pipeline is covered elsewhere."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -37,9 +32,7 @@ def demo_target(demo_lowgc_fasta):
     return demo_lowgc_fasta.read_text(encoding="ascii")
 
 
-# --------------------------------------------------------------------------- #
 # meta + inspect
-# --------------------------------------------------------------------------- #
 
 
 def test_health(client):
@@ -83,9 +76,7 @@ def test_inspect_accepts_bare_sequence(client):
     assert r.json()["target_ready"] is True
 
 
-# --------------------------------------------------------------------------- #
 # stateless design
-# --------------------------------------------------------------------------- #
 
 
 def test_design_bare_default_selects(client, demo_target):
@@ -189,9 +180,7 @@ def test_design_empty_target_is_400(client):
     assert r.status_code == 400
 
 
-# --------------------------------------------------------------------------- #
 # sessions
-# --------------------------------------------------------------------------- #
 
 
 def test_session_lifecycle(client, demo_target):
@@ -260,9 +249,7 @@ def test_store_evicts_least_recently_used():
     assert len(store) == 2
 
 
-# --------------------------------------------------------------------------- #
 # serving the built web client from the API's own origin
-# --------------------------------------------------------------------------- #
 
 
 @pytest.fixture

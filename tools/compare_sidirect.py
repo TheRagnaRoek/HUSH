@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """Diff a HUSH design TSV against a siDirect result export.
 
-Aligns the two candidate sets by guide sequence and reports which candidates
-both tools picked, and which HUSH picked that siDirect did not (with HUSH's
-per-rule pass codes). siDirect files are read as raw ODF (a zipped XML bundle)
-so no odfpy/pandas dependency is needed.
+Matches candidates by guide sequence and reports matched, HUSH-only and
+siDirect-only picks. The .ods file is read directly as zipped XML. Run HUSH
+with the off-target check active for a like-for-like diff.
 
-Usage:
     python tools/compare_sidirect.py --sidirect results.ods --hush hush.tsv
-
-Note: run HUSH with its transcriptome off-target check active for a like-for-
-like diff. Without a reference, HUSH keeps candidates siDirect drops for having
-near-perfect off-targets, so the HUSH-only list will be longer than it should be.
 """
 
 from __future__ import annotations
@@ -34,15 +28,14 @@ def _q(tag: str) -> str:
 
 
 def _read_ods_rows(path: str) -> list[list[str]]:
-    """Return the sheet's non-empty rows as lists of cell strings."""
+    """Non-empty rows of the sheet as lists of cell strings."""
     with zipfile.ZipFile(path) as z:
         root = ET.fromstring(z.read("content.xml"))
     rows: list[list[str]] = []
     for row in root.iter(_q("table:table-row")):
         cells: list[str] = []
         for cell in row.findall(_q("table:table-cell")):
-            # A cell can stand in for a run of identical cells; cap the expansion
-            # so trailing-empty runs do not blow up the row.
+            # A cell may repeat; cap the expansion so empty runs stay small.
             repeat = min(int(cell.get(_q("table:number-columns-repeated"), "1")), 50)
             text = "".join(p.text or "" for p in cell.iter(_q("text:p")))
             cells.extend([text] * repeat)
@@ -54,7 +47,7 @@ def _read_ods_rows(path: str) -> list[list[str]]:
 
 
 def _col(header: list[str], *needles: str) -> int:
-    """Index of the first header cell containing every needle (case-insensitive)."""
+    """Index of the first header cell containing all needles, ignoring case."""
     for i, cell in enumerate(header):
         low = cell.lower()
         if all(n in low for n in needles):
@@ -63,7 +56,7 @@ def _col(header: list[str], *needles: str) -> int:
 
 
 def load_sidirect(path: str) -> dict[str, dict[str, str]]:
-    """Map guide sequence -> {position, functional, min_mismatch} from a siDirect ODS."""
+    """Guide sequence to {position, functional, min_mismatch} from a siDirect ODS."""
     rows = _read_ods_rows(path)
     header_idx = next(
         i for i, r in enumerate(rows)
@@ -93,7 +86,7 @@ def load_sidirect(path: str) -> dict[str, dict[str, str]]:
 
 
 def load_hush(path: str) -> dict[str, dict[str, str]]:
-    """Map guide sequence -> {region, rules, min_mismatch} from a HUSH design TSV."""
+    """Guide sequence to {region, rules, min_mismatch} from a HUSH design TSV."""
     out: dict[str, dict[str, str]] = {}
     with open(path, encoding="ascii", newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
@@ -114,7 +107,7 @@ def _start(region: str) -> int:
 
 
 def _first_int(text: str):
-    """Leading integer in a cell (siDirect may write '3' or '>=3'), or None."""
+    """First integer in a cell ('3' or '>=3'), or None."""
     digits = ""
     for ch in text:
         if ch.isdigit():
@@ -125,7 +118,7 @@ def _first_int(text: str):
 
 
 def _mm_agree(hush_mm: str, sid_mm: str) -> bool:
-    """True when HUSH and siDirect report the same nearest-off-target mismatch."""
+    """True when both report the same nearest-off-target mismatch count."""
     a, b = _first_int(hush_mm), _first_int(sid_mm)
     return a is not None and a == b
 
@@ -176,7 +169,7 @@ def diff(sidirect: dict, hush: dict) -> int:
     if not sid_only:
         print("  (none - siDirect's picks are a subset of HUSH's)")
 
-    # Non-zero exit only if HUSH missed something siDirect kept (a real regression).
+    # Exit 1 only when HUSH missed a siDirect pick.
     return 1 if sid_only else 0
 
 

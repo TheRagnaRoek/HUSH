@@ -346,9 +346,7 @@ class TestBowtieSearcher:
         assert pre.search("GGGG") == []
 
 
-# --------------------------------------------------------------------------- #
 # bowtie parity - only when bowtie is installed (CI), skipped otherwise.
-# --------------------------------------------------------------------------- #
 
 _HAS_BOWTIE = shutil.which("bowtie") is not None and shutil.which("bowtie-build") is not None
 

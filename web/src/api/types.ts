@@ -1,8 +1,6 @@
 /**
- * TypeScript mirror of the HUSH API models (api/schemas.py). This is the typed
- * contract the app codes against. `npm run gen:api` regenerates
- * `schema.d.ts` from the live server's /openapi.json so drift can be diffed;
- * keep this file in sync with api/schemas.py when the backend changes.
+ * TypeScript mirror of api/schemas.py. Keep in sync with it; 'npm run gen:api'
+ * generates schema.d.ts from /openapi.json to diff against.
  */
 
 // ---- requests ---- //

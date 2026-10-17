@@ -1,15 +1,8 @@
 """The HUSH FastAPI application.
 
-Two ways in, one code path: the stateless endpoints build a throwaway session
-per request, while the /sessions endpoints keep one alive so repeat designs
-reuse its cached alignment. Every handler delegates to service.HushSession and
-renders the result with api.serialize; domain errors (HushError) and incoherent
-requests (ValueError) become 400, an unknown session id 400 -> 404.
-
-When the built web client is present it is served from this same app, so a
-container exposes one port and the browser talks to its own origin.
-
-Run it with:  uvicorn api.app:app --reload   (or  python -m api)
+Handlers delegate to service.HushSession and render with api.serialize. The
+built web client is served from the same app when HUSH_WEB_DIR is set.
+Endpoints, errors and CORS behaviour: docs/api.md.
 """
 
 from __future__ import annotations
@@ -32,20 +25,17 @@ try:
 except metadata.PackageNotFoundError:  # pragma: no cover - editable/uninstalled
     _VERSION = "0.0.0"
 
-# Where the built SPA lives. The container points this at the dist it copied
-# in; a source checkout falls back to web/dist, so 'npm run build' is enough.
 WEB_DIR_ENV = "HUSH_WEB_DIR"
 
 
 def _web_root(explicit: Path | None = None) -> Path | None:
-    """The directory holding a built index.html, or None if there is none."""
+    """The directory with a built index.html, or None."""
     if explicit is not None:
         root = Path(explicit)
     elif os.environ.get(WEB_DIR_ENV):
         root = Path(os.environ[WEB_DIR_ENV])
     else:
-        # Nothing implicit: a dist/ left in a checkout must not start being
-        # served (and drop CORS) just because it exists.
+        # No implicit lookup: a stale web/dist must not be served.
         return None
     return root if (root / "index.html").is_file() else None
 
@@ -62,18 +52,13 @@ def create_app(
     allow_origins: list[str] | None = None,
     web_dir: Path | None = None,
 ) -> FastAPI:
-    """Build the app.
-
-    A caller may inject a store (tests), CORS origins, or the directory
-    holding the built web client.
-    """
+    """Build the app; store, CORS origins and web directory can be injected."""
     app = FastAPI(title="HUSH API", version=_VERSION, description=_DESCRIPTION)
     store = store if store is not None else SessionStore()
     web_root = _web_root(web_dir)
 
-    # Serving the client ourselves makes every call same-origin, so CORS is
-    # not needed at all. Without a client, stay permissive so the Vite dev
-    # server can call in from its own port.
+    # With a served client every call is same-origin and needs no CORS;
+    # without one, allow all origins for the Vite dev server.
     if allow_origins is None:
         allow_origins = [] if web_root is not None else ["*"]
     if allow_origins:
@@ -113,13 +98,9 @@ def create_app(
             has_last_design=session.last_design is not None,
         )
 
-    # -- meta -------------------------------------------------------------- #
-
     @app.get("/health", response_model=schemas.HealthResponse, tags=["meta"])
     def health() -> schemas.HealthResponse:
         return schemas.HealthResponse(status="ok", service="HUSH API", version=_VERSION)
-
-    # -- stateless --------------------------------------------------------- #
 
     @app.post("/inspect", response_model=schemas.InspectResponse, tags=["stateless"])
     def inspect(req: schemas.InspectRequest) -> schemas.InspectResponse:
@@ -130,8 +111,6 @@ def create_app(
     def design(req: schemas.DesignRequest) -> schemas.DesignResponse:
         session = _build_session(req.target_fasta, req.panel_fasta)
         return serialize.design_response(session.design(req.params.to_domain()))
-
-    # -- sessions ---------------------------------------------------------- #
 
     @app.post(
         "/sessions",
@@ -185,11 +164,9 @@ def create_app(
 
 
 def _serve_web_client(app: FastAPI, web_root: Path) -> None:
-    """Serve the built SPA, falling back to index.html for client routes.
+    """Serve the built SPA, with index.html as fallback for client-side routes.
 
-    Registered after every API route, so those still win. The client uses
-    BrowserRouter with a catch-all route, so an unknown path is its to
-    resolve, not a 404 - hence the fallback rather than StaticFiles alone.
+    Registered after the API routes, so those take precedence.
     """
     root = web_root.resolve()
     index = root / "index.html"
@@ -200,7 +177,7 @@ def _serve_web_client(app: FastAPI, web_root: Path) -> None:
             candidate = (root / spa_path).resolve()
         except OSError:
             return FileResponse(index)
-        # is_relative_to keeps a crafted path from escaping the web root.
+        # Reject paths that escape the web root.
         if candidate.is_file() and candidate.is_relative_to(root):
             return FileResponse(candidate)
         return FileResponse(index)

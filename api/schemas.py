@@ -1,12 +1,7 @@
-"""Request and response models for the HUSH API.
+"""Pydantic request and response models: the JSON contract and OpenAPI schema.
 
-Pydantic v2 models: they define the JSON contract and, through FastAPI, the
-OpenAPI schema the browser client generates its typed client from. Request
-models carry a to_domain() that converts to the service-layer request objects
-(service.params); response models are plain data built by api.serialize.
-
-Enum-valued fields are plain strings on the wire (their .value), so the client
-never has to know the Python enums.
+Request models convert to service.params with to_domain(); response models are
+built by api.serialize. Enums travel as plain strings. See docs/api.md.
 """
 
 from __future__ import annotations
@@ -41,13 +36,8 @@ def _to_enum(cls, value: str, what: str):
         raise ValueError(f"unknown {what} {value!r}; choose from {allowed}.")
 
 
-# --------------------------------------------------------------------------- #
-# requests
-# --------------------------------------------------------------------------- #
-
-
 class TargetingSchema(BaseModel):
-    """A targeting intent by panel-member id (resolved against the panel later)."""
+    """A targeting intent by panel member id."""
 
     pan_allele: bool = False
     allele_specific: Optional[str] = None
@@ -66,10 +56,7 @@ class TargetingSchema(BaseModel):
 
 
 class DesignParamsSchema(BaseModel):
-    """The design knobs. Every field is optional; a bare {} is best-practice.
-
-    GC bounds are fractions in [0, 1], matching the pipeline (not percent).
-    """
+    """Design parameters; a bare {} gives the defaults. GC bounds are fractions."""
 
     length: int = 19
     overhang: str = OverhangPolicy.NATURAL.value
@@ -91,10 +78,7 @@ class DesignParamsSchema(BaseModel):
     offtarget_self_accessions: list[str] = Field(default_factory=list)
     resolve_offtarget_self: bool = True
     offtarget_self_coverage: float = DEFAULT_SELF_MIN_COVERAGE
-    # bowtie_path and offtarget_self_fasta are deliberately absent: this API has
-    # no authentication, so it must not take an executable path or an arbitrary
-    # file to read from the wire. The CLI keeps both flags. Self resolution still
-    # runs here - it reads the uploaded target and panel, not the filesystem.
+    # bowtie_path and offtarget_self_fasta are absent on purpose; see docs/api.md.
 
     use_gc_filter: bool = False
     gc_min: float = 0.30
@@ -155,7 +139,7 @@ class DesignParamsSchema(BaseModel):
 
 
 class ConvertOptionsSchema(BaseModel):
-    """The shRNA scaffold options."""
+    """shRNA conversion options."""
 
     loop: str = DEFAULT_LOOP
     include_terminator: bool = True
@@ -185,11 +169,6 @@ class DesignRequest(BaseModel):
 class CreateSessionRequest(BaseModel):
     target_fasta: str
     panel_fasta: Optional[str] = None
-
-
-# --------------------------------------------------------------------------- #
-# responses
-# --------------------------------------------------------------------------- #
 
 
 class SequenceSummary(BaseModel):
@@ -222,8 +201,8 @@ class CriteriaSummary(BaseModel):
     seed_tm_threshold_c: Optional[float] = None
     offtarget_filter: bool
     offtarget_min_mismatch: Optional[int] = None
-    # The transcripts the gate counted as the design's own, and how they were
-    # found. An empty list on an active filter means every hit counted.
+    # Transcripts the gate treated as the design's own; empty on an active
+    # filter means every hit counted (see docs/api.md).
     offtarget_self_accessions: list[str] = Field(default_factory=list)
     offtarget_self_declared: int = 0
     offtarget_self_resolved: int = 0
@@ -246,12 +225,9 @@ class TargetingSummary(BaseModel):
 
 
 class DiscriminationResult(BaseModel):
-    """The best-placed difference to one spared allele, with its ranking criteria.
+    """The best-placed difference to one spared allele, which sets its rank.
 
-    The rank rests on this one mismatch. all_guide_positions carries every
-    difference to that allele in ranking order, so a client can show the whole
-    set: placement and number are reported side by side and never combined (see
-    docs/design-rules.md).
+    all_guide_positions lists every difference to that allele in ranking order.
     """
 
     guide_position: int
@@ -261,18 +237,16 @@ class DiscriminationResult(BaseModel):
     sources_agree: bool
     huang_recommended: Optional[bool] = None
     strongest_position: bool
-    # Membership of the P9-P16 low-tolerance window. The name predates the
-    # window and is kept so existing clients keep parsing.
+    # Membership of the P9-P16 window; the name is kept for older clients.
     consistent_position: bool
-    # Two or more differences, for comparison with the siDirect convention.
-    # Reported only; it is not part of the ranking.
+    # Two or more differences; reported only, not ranked.
     multi_mismatch: bool
-    # Defaulted, so a client written against the previous shape still validates.
+    # Defaulted so older clients still validate.
     all_guide_positions: list[int] = []
 
 
 class PerAlleleDiscrimination(BaseModel):
-    """One spared allele's discrimination: how many differences, best placed one."""
+    """One spared allele: its difference count and best-placed difference."""
 
     allele: str
     diff_count: int
@@ -283,9 +257,7 @@ class AlleleResult(BaseModel):
     hit_max_mismatch: int
     spare_min_mismatch: Optional[int] = None
     spare_count: int = 0
-    # The deciding (weakest) allele's discrimination, then every spared allele in
-    # weakest-first order - so a client can rank on the summary yet still show the
-    # full per-allele picture.
+    # The weakest allele's discrimination, then all spared alleles weakest first.
     discrimination: Optional[DiscriminationResult] = None
     per_allele: list[PerAlleleDiscrimination] = []
 

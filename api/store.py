@@ -1,11 +1,7 @@
-"""In-memory session store for the API's stateful mode.
+"""In-memory session store: HushSession instances by opaque id.
 
-Holds live HushSession instances behind opaque ids so a client can upload the
-target and panel once and then design/convert by id, reusing the cached MSA
-alignment. State lives only in this process: it is a warm cache, not a database,
-and is lost on restart. Access is serialised (FastAPI runs sync endpoints in a
-threadpool), and the store is capacity-bounded with least-recently-used
-eviction so a long-lived server cannot grow without limit.
+A warm cache, lost on restart. Access is locked, and the store evicts the
+least recently used session beyond its capacity.
 """
 
 from __future__ import annotations
@@ -20,7 +16,7 @@ DEFAULT_MAX_SESSIONS = 128
 
 
 class SessionStore:
-    """A bounded, thread-safe, LRU map of id -> HushSession."""
+    """Bounded, thread-safe LRU map of id to HushSession."""
 
     def __init__(self, max_sessions: int = DEFAULT_MAX_SESSIONS) -> None:
         self._sessions: OrderedDict[str, HushSession] = OrderedDict()
@@ -28,7 +24,7 @@ class SessionStore:
         self._max = max_sessions
 
     def create(self, session: HushSession) -> str:
-        """Store a session under a fresh id, evicting the oldest if full."""
+        """Store a session under a new id, evicting the oldest if full."""
         sid = uuid.uuid4().hex
         with self._lock:
             self._sessions[sid] = session
@@ -38,7 +34,7 @@ class SessionStore:
         return sid
 
     def get(self, sid: str) -> HushSession | None:
-        """Return the session, marking it most-recently-used, or None."""
+        """The session (marked most recently used), or None."""
         with self._lock:
             session = self._sessions.get(sid)
             if session is not None:
@@ -46,7 +42,7 @@ class SessionStore:
             return session
 
     def delete(self, sid: str) -> bool:
-        """Drop a session; return whether it existed."""
+        """Drop a session; True if it existed."""
         with self._lock:
             return self._sessions.pop(sid, None) is not None
 
