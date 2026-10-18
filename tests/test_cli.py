@@ -459,6 +459,41 @@ def test_convert_bottom_oligo_is_reverse_complement_of_top(target_fasta, tmp_pat
     assert bottom == "".join(complement[b] for b in reversed(top))
 
 
+def test_convert_stem_overhang_trim_shortens_the_hairpin(target_fasta, tmp_path):
+    sel = _design_tsv(target_fasta, tmp_path)
+    keep_out, trim_out = tmp_path / "keep.tsv", tmp_path / "trim.tsv"
+    assert runner.invoke(app, ["convert", str(sel), "-o", str(keep_out)]).exit_code == 0
+    result = runner.invoke(
+        app,
+        [
+            "convert", str(sel), "--stem-overhang", "trim",
+            "--keep-premature-terminators", "-o", str(trim_out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "sense overhang trim" in result.stdout
+
+    def rows(path):
+        lines = path.read_text(encoding="ascii").splitlines()
+        cols = lines[0].split("\t")
+        return [dict(zip(cols, ln.split("\t"))) for ln in lines[1:]]
+
+    trimmed = rows(trim_out)
+    assert trimmed and all(r["sense_overhang"] == "" for r in trimmed)
+    keep_by_region = {r["region"]: r for r in rows(keep_out)}
+    for r in trimmed:
+        kept = keep_by_region.get(r["region"])
+        if kept is not None:
+            drop = len(kept["sense_overhang"])
+            assert len(r["hairpin_rna_5to3"]) == len(kept["hairpin_rna_5to3"]) - drop
+
+
+def test_convert_unknown_stem_overhang_errors(target_fasta, tmp_path):
+    sel = _design_tsv(target_fasta, tmp_path)
+    result = runner.invoke(app, ["convert", str(sel), "--stem-overhang", "fill"])
+    assert result.exit_code != 0
+
+
 def test_convert_unknown_loop_errors(target_fasta, tmp_path):
     sel = _design_tsv(target_fasta, tmp_path)
     result = runner.invoke(app, ["convert", str(sel), "--loop", "bogus"])

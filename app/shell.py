@@ -36,7 +36,12 @@ from app.parsing import (
 from core.errors import HushError
 from service.params import AlleleTargetingSpec, DesignParams
 from service.session import HushSession
-from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions
+from shrna.convert import (
+    DEFAULT_TERMINATOR_LENGTH,
+    ShrnaOptions,
+    StemOverhang,
+    get_stem_overhang,
+)
 from shrna.loops import DEFAULT_LOOP, LOOPS, get_loop
 
 
@@ -110,6 +115,7 @@ def _build_convert_parser() -> _ShellArgParser:
         prog="convert", add_help=False, argument_default=argparse.SUPPRESS
     )
     p.add_argument("--loop")
+    p.add_argument("--stem-overhang")
     p.add_argument("--terminator", action=argparse.BooleanOptionalAction)
     p.add_argument("--terminator-length", type=int)
     p.add_argument(
@@ -191,8 +197,14 @@ def apply_convert_flags(tokens: list[str]) -> ShrnaOptions:
     """ShrnaOptions from the convert flags in tokens; unset flags keep defaults."""
     provided = vars(_CONVERT_PARSER.parse_args(tokens))
     loop = get_loop(provided["loop"]) if "loop" in provided else LOOPS[DEFAULT_LOOP]
+    stem = (
+        get_stem_overhang(provided["stem_overhang"])
+        if "stem_overhang" in provided
+        else StemOverhang.KEEP
+    )
     return ShrnaOptions(
         loop=loop,
+        stem_overhang=stem,
         include_terminator=provided.get("terminator", True),
         terminator_length=provided.get("terminator_length", DEFAULT_TERMINATOR_LENGTH),
         drop_premature_terminators=provided.get(
@@ -217,7 +229,8 @@ Commands:
   assess [region]       show every spared allele's discrimination for the last design
                         (all selected, or just <region> e.g. 6-24)
   convert [flags]       convert the last design's selected candidates to shRNA
-                        (flags: --loop, --terminator/--no-terminator,
+                        (flags: --loop, --stem-overhang keep|trim,
+                        --terminator/--no-terminator,
                         --terminator-length,
                         --drop-premature-terminators/--keep-premature-terminators)
   save <dir>            write design.tsv (and shrna.tsv, if converted) into <dir>

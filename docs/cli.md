@@ -136,6 +136,7 @@ stem-loop scaffold. See [shrna-conversion.md](shrna-conversion.md).
 | Flag | Default | Description |
 |---|---|---|
 | `--loop` | `jensen` | Loop scaffold: `jensen` (UGUGCUU), `psuper` (UUCAAGAGA), `trc` (CUCGAG). |
+| `--stem-overhang` | `keep` | Sense 3' overhang between stem and loop: `keep` encodes the full 21-nt sense strand, `trim` leaves it out so the loop joins the core. The guide overhang is always kept. |
 | `--terminator` / `--no-terminator` | on | Append the Pol III poly-T terminator. |
 | `--terminator-length` | `6` | Length of that run (>= 4 when included). |
 | `--drop-premature-terminators` / `--keep-premature-terminators` | **drop** | Withhold constructs whose body carries a premature Pol III terminator (>= 4 U). |

@@ -98,6 +98,7 @@ were withheld:
 | `withheld` | Withheld constructs, with their QC flags |
 | `construct_count` / `withheld_count` | Their counts |
 | `converted_count` | The total built, before filtering |
+| `stem_overhang` | The sense-overhang mode used, `keep` or `trim` (request field of the same name; default `keep`) |
 
 `construct_count + withheld_count == converted_count` always holds, so every
 converted construct is accounted for.
