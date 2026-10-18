@@ -208,7 +208,7 @@ Commands:
   unpanel               drop the panel
   set [flags]           set persistent design criteria (same flags as 'hush design');
                         with no flags, print the current criteria
-  reset                 reset the criteria to the best-practice defaults
+  reset                 reset the criteria to the defaults
   limit [n]             set how many rows design/convert print (0 = all)
   show                  show the loaded inputs, criteria, and last results
   inspect               preview the design input (roles, readiness)
@@ -318,7 +318,7 @@ class HushShell:
 
     def _cmd_reset(self, rest: str) -> bool:
         self.params = DesignParams()
-        typer.echo("criteria reset to the best-practice defaults.")
+        typer.echo("criteria reset to the defaults.")
         return True
 
     def _cmd_limit(self, rest: str) -> bool:
@@ -465,7 +465,11 @@ class HushShell:
         typer.echo(
             f"  seed Tm:         {'< %.1f C' % p.seed_tm_threshold if p.use_seed_filter else 'off'}"
         )
-        off = "on (needs --offtarget-db)" if p.use_offtarget_filter else "off"
+        off = (
+            "on (built reference, or --offtarget-db)"
+            if p.use_offtarget_filter
+            else "off"
+        )
         if p.use_offtarget_filter and p.offtarget_db is not None:
             off = f"on ({p.offtarget_db})"
         typer.echo(f"  off-target:      {off}")

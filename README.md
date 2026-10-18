@@ -9,13 +9,12 @@ allele-aware siRNA/shRNA design pipeline for polymorphic gene families.
 
 Give HUSH a target transcript and, optionally, a panel of related sequences. It
 enumerates siRNA candidates, screens them against the classical efficacy rules
-and off-target filters, reasons about conserved versus polymorphic regions for
-broad or allele-specific knockdown, and converts what survives into cloneable
-stem-loop shRNA constructs.
+and off-target filters, identifies conserved and polymorphic regions for
+pan-allele or allele-specific knockdown, and converts the selected candidates
+into cloneable stem-loop shRNA constructs.
 
-HUSH was inspired by the **HLA** system, among the most polymorphic loci in the
-human genome; it is that allelic diversity which motivates the allele-aware
-stage.
+HUSH is motivated by the **HLA** system, one of the most polymorphic loci in the
+human genome; its allelic diversity is the reason for the allele-aware stage.
 
 HUSH is developed as part of **Project HIDE** 
 (HLA Interference through Disguise and Erasure).
@@ -55,20 +54,19 @@ the configuration variables.
 
 ## The reference check
 
-The transcriptome off-target check is HUSH's safety core: It checks whether the silencing
-guide strand targets and therefore silences other protein sequences; **off-targets**.
-It is **on by default** and needs no flag once the reference exists.
+The transcriptome off-target check tests whether the guide strand also matches
+other transcripts and would therefore silence them (**off-targets**). It is
+**on by default** and needs no flag once the reference exists.
 
-The reference is not shipped with the image as it
-tracks a live RefSeq release, so you fetch it once with `hush reference build`
-and every later run finds it automatically. `hush reference status` reports what
-you have - the RefSeq release, the bowtie version and the build date recorded in
-the index manifest.
+The reference is not shipped with the image because it tracks a live RefSeq
+release. Fetch it once with `hush reference build`; every later run finds it
+automatically. `hush reference status` reports the RefSeq release, the bowtie
+version and the build date recorded in the index manifest.
 
-HUSH still runs without a reference in case you may want to supply a different
-reference genome (e.g. different version or species): the CLI prints an `UNREFERENCED RUN` warning
-and the design TSV carries an `offtarget_checked` column, so an empty off-target
-hit count can never be mistaken for "no off-targets found".
+HUSH also runs without the built reference, for example to use a different
+reference genome (another version or species). In that case the CLI prints an
+`UNREFERENCED RUN` warning and the design TSV has an `offtarget_checked` column,
+so an empty off-target hit count cannot be mistaken for "no off-targets found".
 
 ## Install from source
 
@@ -88,19 +86,18 @@ pip install -r requirements.txt -r requirements-dev.txt
 pip install --no-deps -e .
 ```
 
-Pure pip, with one external dependency: **bowtie1**, used only for the
-transcriptome off-target search. Install it from your package manager or
-bioconda, or use the container, which already has it. Everything else - the
-design engine, the MSA stage, the conversion stage, the tests - runs with no
-binary at all.
+All dependencies install with pip except **bowtie1**, which is used only for the
+transcriptome off-target search. Install it from a package manager or bioconda,
+or use the container, which already contains it. The design engine, the MSA stage,
+the conversion stage and the tests run without any external binary.
 
 ## Usage
 
 ### Interactive shell
 
-`hush shell` keeps one instance alive: load the target and panel once, tune the
-criteria, then re-run `design`/`convert` without re-parsing. The panel alignment
-is computed once and reused.
+`hush shell` keeps one session open: load the target and panel once, adjust the
+criteria, then re-run `design` and `convert` without re-reading the inputs. The
+panel alignment is computed once and reused.
 
 ```
 hush> load data/examples/target_example.fasta
@@ -111,8 +108,8 @@ hush> convert --loop jensen
 hush> save run1/
 ```
 
-`help` inside the shell lists every command. The one-shot commands below do the
-same work per invocation and are the way to script HUSH.
+`help` inside the shell lists every command. The commands below run once per
+invocation and are the way to script HUSH.
 
 ### Inspect an input
 
@@ -132,23 +129,23 @@ hush design data/examples/demo_lowgc_cds.fasta -o selected.tsv
 ```
 
 HUSH enumerates every candidate site (default: 19-nt core, 2-nt 3' overhangs) and reports
-those clearing the enabled gates. It is a **filter, not a score**: every gate is
-explicit and each candidate keeps its full per-criterion breakdown, so any
-verdict is legible. The run prints the criteria, a funnel of how many candidates
-clear each gate, and the selected table.
+those that pass the enabled gates. It is a **filter, not a score**: every gate is
+explicit and each candidate keeps its per-criterion breakdown, so every verdict
+can be traced. The run prints the criteria, a funnel (the number of candidates
+that pass each gate) and the selected table.
 
-> **GC-rich families:** the seed filter is the standard as per Amarzguioui (2004) but is
-> deliberately strict - on a very GC-rich coding sequence such as HLA it may reject every
-> candidate. Relax it there with `--no-seed`.
+> **GC-rich families:** the seed filter follows Ui-Tei et al. (2008) and Naito et
+> al. (2009) and is strict. On a very GC-rich coding sequence such as HLA it may
+> reject every candidate. Relax it there with `--no-seed`.
 
 Every flag, its default and what it does: [`docs/cli.md`](docs/cli.md), or
 `hush design --help`.
 
 ### Allele-aware design
 
-`--panel` engages the MSA stage: the panel is aligned to the target and each
-candidate is additionally gated on whether its window **hits** the alleles you
-want silenced and **discriminates** against the ones you want spared.
+`--panel` enables the MSA stage: the panel is aligned to the target, and each
+candidate is additionally gated on whether its window **hits** the alleles to be
+silenced and **discriminates** against the alleles to be spared.
 
 ```bash
 # Conserved sites across the whole family (the default intent)
@@ -163,9 +160,9 @@ hush design target.fasta --no-seed --target-specific --panel panel.fasta --expla
 ```
 
 A request that spares something is ranked by discrimination by default, and the
-table gains `minDiff` and `disc` columns describing the **weakest** spared
-allele - the one the window distinguishes least well. `--explain` prints the
-per-allele breakdown. See [`docs/design-rules.md`](docs/design-rules.md).
+table gains `minDiff` and `disc` columns that describe the **weakest** spared
+allele, the allele that the window distinguishes least well. `--explain` prints
+the per-allele breakdown. See [`docs/design-rules.md`](docs/design-rules.md).
 
 ### Convert to shRNA
 
@@ -197,15 +194,15 @@ Interactive API docs are at `/docs`, the OpenAPI schema at `/openapi.json`. See
 
 ## Test Suite
 
-Install from the lockfile first so the versions match.
-Includes the 46-siRNA Amarzguioui Table 3 exact-reproduction fixture:
+Install from the lockfile first so that the versions match. The suite includes the
+46-siRNA Amarzguioui Table 3 exact-reproduction fixture:
 
 ```bash
 pytest -q
 ```
 
-The bowtie parity test skips when `bowtie` is absent, so run it in the
-container to exercise that path - see [`docs/development.md`](docs/development.md).
+The bowtie parity test is skipped when `bowtie` is absent. Run the tests in the
+container to cover that path; see [`docs/development.md`](docs/development.md).
 
 ## Documentation
 
@@ -226,7 +223,7 @@ container to exercise that path - see [`docs/development.md`](docs/development.m
 core/     Domain model and the siRNA design engine
 msa/      MSA / allele stage (alignment, variation, windows, targeting)
 shrna/    shRNA conversion (loops, convert)
-service/  HushSession: the orchestration seam the CLI and API both drive
+service/  HushSession, the orchestration layer used by the CLI and the API
 app/      CLI (cli.py) and interactive shell (shell.py)
 api/      FastAPI backend over the same session layer
 web/      React + Vite browser client
@@ -242,7 +239,7 @@ pytest
 cd web && npm run typecheck && npm run lint
 ```
 
-The bowtie parity test skips when `bowtie` is not on PATH. See
+The bowtie parity test is skipped when `bowtie` is not on PATH. See
 [`docs/development.md`](docs/development.md).
 
 ## Data, models and disclosure
@@ -251,14 +248,14 @@ The bowtie parity test skips when `bowtie` is not on PATH. See
 rule-based pipeline: every verdict comes from a published criterion or a
 thermodynamic calculation, and the same input always gives the same output. No
 model is trained, fine-tuned or called at runtime, and no commercial model API
-is contacted. An ML efficacy layer was considered and deliberately left out of
-scope; the reasoning is in [`docs/design-rules.md`](docs/design-rules.md).
+is contacted. An ML efficacy layer was considered and is out of scope; the
+reasoning is in [`docs/design-rules.md`](docs/design-rules.md).
 
-**No large files live in this repository.** The only bulky artefact is the
+**The repository contains no large files.** The only large artefact is the
 transcriptome off-target index, which is built on the user's machine by
-`hush reference build` directly from NCBI's RefSeq FTP. It is not redistributed
-here, so the reference always matches a RefSeq release the user can name, and
-the index manifest records exactly which one.
+`hush reference build` directly from the NCBI RefSeq FTP site. It is not
+redistributed, so the reference always matches a RefSeq release that the user can
+name, and the index manifest records which one.
 
 **Dependencies are pinned.** `requirements.txt`, `requirements-dev.txt` and
 `web/package-lock.json` record the exact versions used; `pyproject.toml` holds

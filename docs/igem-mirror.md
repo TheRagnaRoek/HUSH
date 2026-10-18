@@ -1,42 +1,41 @@
 # The iGEM GitLab mirror
 
-Competition rules require the submitted software to live on the team's
-repository on [iGEM's GitLab](https://gitlab.igem.org/); code hosted elsewhere
-is not evaluated. Development happens on GitHub, so the GitLab repository is a
-mirror, frozen at the submitted version.
+The competition rules require the submitted software to be in the team repository
+on [iGEM's GitLab](https://gitlab.igem.org/); code hosted elsewhere is not
+evaluated. Development takes place on GitHub, so the GitLab repository is a mirror,
+frozen at the submitted version.
 
-This page records how to produce that mirror and exactly how it differs, so the
-difference is a deliberate, repeatable edit rather than two copies drifting
-apart.
+This page describes how to produce the mirror and exactly how it differs from the
+GitHub repository, so that the difference is a repeatable edit and the two copies
+do not drift apart.
 
-## The frozen copy must stand alone
+## The frozen copy must be self-contained
 
 A judge clones the GitLab repository and runs it. Nothing outside that clone is
-guaranteed to exist at that moment, so the documented path must not depend on
-one.
+guaranteed to exist at that time, so the documented path must not depend on
+anything outside it.
 
-That is why the quickstart leads with:
+For this reason the quickstart starts with:
 
 ```bash
 docker compose run --rm reference-build
 docker compose up hush
 ```
 
-Compose builds from `docker/Dockerfile` when the image is not already present,
-so this path touches no registry at all. It is also what the rules ask for:
-the source must produce the output, rather than a prebuilt binary being handed
-over.
+Compose builds from `docker/Dockerfile` when the image is not already present, so
+this path does not use any registry. The rules also require this: the source must
+produce the output, and a prebuilt binary is not accepted.
 
-The published image is offered second and is **pinned to an exact version**,
-never `latest`. A moving tag would mean the frozen repository's own documented
-command pulls whatever was published most recently - so the code a judge reads
-and the software a judge runs could silently differ. Every reference in the
-repository names `ghcr.io/theragnaroek/hush:1.0.0`.
+The published image is offered second and is **pinned to an exact version**, never
+`latest`. A moving tag would make the documented command pull the most recently
+published image, so the code that is read and the software that runs could differ
+without notice. Every reference in the repository names
+`ghcr.io/theragnaroek/hush:1.0.0`.
 
-The one thing deliberately not shipped is the transcriptome reference index.
-It is multi-gigabyte, it is built from public RefSeq data by
-`hush reference build`, and the index manifest records exactly which RefSeq
-release went into it. That is reproducible, not missing.
+The transcriptome reference index is intentionally not included. It is several
+gigabytes, it is built from public RefSeq data by `hush reference build`, and its
+manifest records the RefSeq release that was used. The index is reproducible and
+its absence is not an omission.
 
 ## Producing the mirror
 
@@ -46,12 +45,12 @@ git push igem main
 git push igem v1.0.0
 ```
 
-Push the tag as well: it is what ties the mirror to the published image and to
-the version in `pyproject.toml` and `CITATION.cff`.
+Push the tag as well. It connects the mirror to the published image and to the
+version in `pyproject.toml` and `CITATION.cff`.
 
-`.gitlab-ci.yml` runs there in place of `.github/workflows/`. The GitHub
-workflows are harmless on GitLab - they are simply ignored - and keeping them
-avoids a difference that would have to be re-applied on every sync.
+`.gitlab-ci.yml` runs on GitLab in place of `.github/workflows/`. GitLab ignores
+the GitHub workflows. Keeping them avoids a difference that would have to be
+re-applied at every sync.
 
 ## The differences to apply
 
@@ -65,36 +64,36 @@ heading:
 > what is recorded here.
 ```
 
-And in `CITATION.cff`, add the mirror alongside the development repository:
+In `CITATION.cff`, add the mirror next to the development repository:
 
 ```yaml
 repository: https://gitlab.igem.org/2026/software-tools/<team>
 ```
 
-That is the whole diff. Everything else is identical by design.
+No other file differs.
 
-## Checking the mirror before you call it done
+## Checking the mirror
 
-Do this from a clone of the **GitLab** repository, on a machine that has never
-built HUSH, with no registry login:
+Check from a clone of the **GitLab** repository, on a machine that has never built
+HUSH and has no registry login:
 
 ```bash
 docker compose up hush          # must build from source and serve :8000
 pytest -q                       # after: pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-If the first command reaches <http://localhost:8000> without pulling anything,
-the frozen copy is self-sufficient.
+If the first command reaches <http://localhost:8000> without pulling any image, the
+frozen copy is self-contained.
 
-Also confirm, outside the clone:
+Also check, outside the clone, that:
 
 - the repository is under 50 MB (`git count-objects -vH`),
 - `LICENSE` is present and the license is OSI-approved (MIT),
-- `CITATION.cff` names the real author list rather than a placeholder,
-- the published image, if you reference it, is actually public.
+- `CITATION.cff` contains the real author list and not a placeholder,
+- the published image, if referenced, is public.
 
-## If you have to fix something after submitting
+## Fixing something after submission
 
-Fix it on GitHub, tag a new version, and push that tag to the mirror as well.
-Do not edit the mirror directly: a change that exists only there is lost the
-next time anyone syncs, and the two copies stop being the same software.
+Fix it on GitHub, tag a new version, and push that tag to the mirror as well. Do not
+edit the mirror directly: a change that exists only in the mirror is lost at the
+next sync, and the two copies are no longer the same software.

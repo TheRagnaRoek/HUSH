@@ -56,7 +56,7 @@ def test_design_without_target_raises(target_fasta):
 
 
 def test_design_bare_default_selects(demo_lowgc_fasta):
-    # The shipped low-GC demo selects under the full default paradigm (seed on).
+    # The shipped low-GC demo selects under the default settings (seed on).
     session = HushSession()
     session.load_target(demo_lowgc_fasta)
     result = session.design()

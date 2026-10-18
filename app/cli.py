@@ -476,8 +476,8 @@ def render_discrimination_detail(
     typer.secho(
         "  code: P<pos> region(post/seed/anch) Huang(H+/H-/H?) "
         "position(S=P10/P13/P16, W=inside P9-P16, -=outside) class(pp/pu/up/uu); "
-        "agree = Huang and region concur. Positions are listed in ranking order, "
-        "the first one being what the allele's rank rests on.",
+        "agree = Huang and region agree. Positions are listed in ranking order; "
+        "the first one sets the rank of the allele.",
         fg=typer.colors.BRIGHT_BLACK,
     )
     if limit and len(selected) > limit:
@@ -557,8 +557,8 @@ def _print_table(
         )
         typer.secho(
             "  Rows are ranked on the leading mismatch only. minDiff and the '+' "
-            "positions are reported, never weighed against placement - no source "
-            "measures that trade-off (docs/design-rules.md).",
+            "positions are reported but not weighed against placement, because no "
+            "source measures that trade-off (docs/design-rules.md).",
             fg=typer.colors.BRIGHT_BLACK,
         )
         typer.secho(
@@ -674,9 +674,9 @@ def render_design_result(
         )
         typer.secho(
             "      These guides have not been screened against the human\n"
-            "      transcriptome, which is HUSH's safety floor. Build the\n"
-            "      reference once with 'hush reference build', or pass\n"
-            "      --no-offtarget to accept an unreferenced run knowingly.",
+            "      transcriptome. Build the reference once with\n"
+            "      'hush reference build', or pass --no-offtarget to run\n"
+            "      without the check.",
             fg=typer.colors.YELLOW,
         )
     criteria = result.criteria
@@ -768,9 +768,10 @@ def design_cmd(
     ),
     offtarget: bool = typer.Option(
         True, "--offtarget/--no-offtarget",
-        help="Apply the transcriptome homology off-target filter (on by default; "
-        "needs a bowtie index via --offtarget-db, else it is skipped with a "
-        "warning). Pass --no-offtarget to silence the reminder.",
+        help="Apply the transcriptome homology off-target filter (on by default). "
+        "It uses the reference built by 'hush reference build' or --offtarget-db; "
+        "without a reference it is skipped and the run is labelled unreferenced. "
+        "Pass --no-offtarget to run without the filter and without the warning.",
     ),
     offtarget_db: Optional[Path] = typer.Option(
         None, "--offtarget-db",
@@ -802,16 +803,17 @@ def design_cmd(
     offtarget_resolve_self: bool = typer.Option(
         True, "--offtarget-resolve-self/--no-offtarget-resolve-self",
         help="Resolve the design's own transcripts by homology to the target, "
-        "the panel and --offtarget-self-fasta. On by default, and the only "
-        "mechanism that works for a gene family (HLA-A spans five RefSeq "
-        "transcripts plus its alternate-haplotype copies).",
+        "the panel and --offtarget-self-fasta. On by default. It is the only "
+        "option that covers a whole gene family (HLA-A has five RefSeq "
+        "transcripts plus alternate-haplotype copies).",
     ),
     offtarget_self_coverage: float = typer.Option(
         DEFAULT_SELF_MIN_COVERAGE * 100.0, "--offtarget-self-coverage",
         help="Percent of a design sequence's k-mers a reference transcript must "
-        "match exactly to count as the design's own. Lower widens the family "
-        "(10 keeps the target locus, its reference duplicates and its closest "
-        "paralogs); raise it to count only the target gene itself.",
+        "match exactly to count as the design's own. A lower value includes more "
+        "of the family (10 includes the target locus, its reference duplicates "
+        "and its closest paralogs); a higher value restricts the set to the "
+        "target gene.",
     ),
     bowtie_path: str = typer.Option(
         "bowtie", "--bowtie-path", help="Path to the bowtie executable.",
@@ -827,9 +829,10 @@ def design_cmd(
     ),
     allow_homopolymers: bool = typer.Option(
         False, "--allow-homopolymers/--forbid-homopolymers",
-        help="Whether to keep candidates with a single-nucleotide run over "
-        "--max-run. Forbidden by default (poly-runs hurt siRNA stability and "
-        "cause polymerase read-through); pass --allow-homopolymers to keep them.",
+        help="Keep candidates with a single-nucleotide run longer than --max-run. "
+        "Such candidates are rejected by default, because long runs reduce siRNA "
+        "stability and can cause polymerase read-through; pass "
+        "--allow-homopolymers to keep them.",
     ),
     max_run: int = typer.Option(
         DEFAULT_MAX_HOMOPOLYMER_RUN, "--max-run",
@@ -863,15 +866,15 @@ def design_cmd(
     params: str = typer.Option(
         "xia", "--params",
         help="Nearest-neighbor parameter set for the asymmetry and hairpin "
-        "readouts only (never the seed filter): xia | freier.",
+        "read-outs only (never the seed filter): xia | freier.",
         rich_help_panel=_ADVANCED,
     ),
     panel: Optional[Path] = typer.Option(
         None, "--panel", "-p",
         exists=True, dir_okay=False, readable=True,
-        help="Allele-family FASTA (e.g. an HLA locus). Turns on the MSA/allele "
-        "stage: candidates are gated to windows that hit the requested alleles "
-        "and discriminate against the spared ones.",
+        help="Allele-family FASTA (e.g. an HLA locus). Enables the allele stage: "
+        "a candidate must lie in a window that hits the requested alleles and "
+        "discriminates against the spared alleles.",
         rich_help_panel=_ALLELE,
     ),
     panel_format: Optional[str] = typer.Option(
@@ -894,8 +897,8 @@ def design_cmd(
     target_specific: bool = typer.Option(
         False, "--target-specific",
         help="Spare every panel member and hit none of them: design specific to "
-        "the loaded target (silenced by construction) against the whole reference "
-        "panel. Use when the target is loaded apart from the panel.",
+        "the loaded target (the guide is built from the target) against the whole "
+        "reference panel. Use when the target is loaded separately from the panel.",
         rich_help_panel=_ALLELE,
     ),
     hit: Optional[str] = typer.Option(
@@ -912,8 +915,8 @@ def design_cmd(
     ),
     min_spare_mismatches: int = typer.Option(
         DEFAULT_MIN_SPARE_MISMATCHES, "--min-spare-mismatches",
-        help="Differences a spared allele must carry inside a window before the "
-        "window is credited with discriminating against it.",
+        help="Differences a spared allele must carry inside a window for the "
+        "window to count as discriminating against it.",
         rich_help_panel=_ALLELE,
     ),
     sort: str = typer.Option(
@@ -937,22 +940,23 @@ def design_cmd(
         None, "--output", "-o", help="Write all selected candidates to a TSV file."
     ),
 ) -> None:
-    """Enumerate siRNA candidates for a target and filter them by chosen criteria.
+    """Enumerate siRNA candidates for a target and filter them by the chosen criteria.
 
-    The best-practice default applies all three rule sets combined by ANY (union),
-    the seed-duplex off-target Tm filter, the homopolymer gate, and transcriptome
-    off-target scanning when a --offtarget-db is configured. The GC, hairpin and
-    asymmetry gates are opt-in. Ordering is 'auto' by default: a request that
-    spares alleles is ranked best-discrimination first, and everything else stays
-    in target-position order ('--sort position' forces target order). Expert
-    thermodynamic knobs live in the Advanced option group (see --help).
+    By default, all three rule sets are combined by ANY (union), and the
+    seed-duplex off-target Tm filter, the homopolymer gate and the transcriptome
+    off-target search (using the reference built by 'hush reference build' or
+    --offtarget-db) are applied. The GC, hairpin and asymmetry gates are opt-in.
+    The default order is 'auto': a request that spares alleles is ranked by
+    discrimination, best first, and all other requests stay in target-position
+    order ('--sort position' forces target order). Thermodynamic options for
+    experts are in the Advanced option group (see --help).
 
-    Supply --panel to make the run allele-aware: the panel is aligned to the
-    target (MSA/allele stage) and each candidate is additionally gated on whether
-    its window hits the requested alleles and discriminates against the spared
-    ones. The targeting intent is pan-allele by default, or --allele-specific,
-    --target-specific (spare the whole panel), or --hit (+ --spare). This allele
-    gate is ANDed with the other filters; add --explain for the full per-allele
+    Supply --panel for an allele-aware run: the panel is aligned to the target
+    (allele stage), and each candidate must also lie in a window that hits the
+    requested alleles and discriminates against the spared alleles. The targeting
+    intent is pan-allele by default, or --allele-specific, --target-specific
+    (spare the whole panel), or --hit (+ --spare). The allele gate is combined
+    with the other filters by AND; add --explain for the full per-allele
     breakdown.
     """
     use_ut, use_rey, use_amz = _parse_rules(rules)
@@ -1246,11 +1250,12 @@ def convert_cmd(
 
     Reads a 'hush design -o' TSV and, for each selected candidate, grafts its
     full strands (paired core plus 3' overhang) onto the chosen loop as a
-    sense-loop-antisense hairpin. The bare insert is emitted as top/bottom DNA oligos plus a Pol III
-    poly-T terminator - vector-agnostic, so add your vector's restriction
-    sticky-end tails before cloning. Each construct is folded to confirm it forms
-    the intended stem-loop, and QC flags (Pol III 5'-A/G start, loop
-    terminator-safety, homopolymer runs) are reported.
+    sense-loop-antisense hairpin. The output is the bare insert as top and bottom
+    DNA oligos with a Pol III poly-T terminator. It has no vector-specific
+    sequences; add the restriction sticky-end tails of the vector before cloning.
+    Each construct is folded to check that it forms the intended stem-loop, and QC
+    flags (Pol III 5'-A/G start, premature terminator, homopolymer run) are
+    reported.
     """
     loop_scaffold = _parse_loop(loop)
     try:
@@ -1294,10 +1299,10 @@ def convert_cmd(
 def shell_cmd() -> None:
     """Start an interactive session: load a target and panel once, then design.
 
-    The one-shot commands re-parse and re-load on every call; the shell keeps a
-    live instance so you load the target (and panel) once, tune the criteria with
-    'set', and re-run 'design'/'convert' as often as you like - the panel
-    alignment is computed once and reused. Type 'help' inside for the commands.
+    The other commands read their inputs on every call. The shell keeps one
+    session, so the target and panel are loaded once, the criteria are changed
+    with 'set', and 'design' and 'convert' can be repeated; the panel alignment
+    is computed once and reused. Type 'help' in the shell for the commands.
     """
     # Imported here because app.shell imports this module (circular).
     from app.shell import HushShell
@@ -1314,8 +1319,8 @@ def reference_build_cmd(
     ),
     base_url: str = typer.Option(
         DEFAULT_BASE_URL, "--base-url",
-        help="RefSeq mRNA_Prot directory URL. Point at an archived release "
-        "to pin an exact reference.",
+        help="RefSeq mRNA_Prot directory URL. Use an archived release "
+        "to fix the reference version.",
     ),
     index_name: str = typer.Option(
         INDEX_NAME, "--index-name", help="Basename of the bowtie index prefix."
@@ -1327,10 +1332,9 @@ def reference_build_cmd(
 ) -> None:
     """Fetch the RefSeq human transcriptome and build the off-target index.
 
-    Run once after installing. The transcriptome check is HUSH's safety
-    floor, so design uses this index automatically once it exists; without
-    it every run is unreferenced and says so. The download is several
-    gigabytes and needs bowtie1, which the HUSH container already carries.
+    Run once after installing. Design uses this index automatically once it
+    exists; without it, every run is labelled unreferenced. The download is
+    several gigabytes and needs bowtie1, which the HUSH container contains.
     """
     try:
         prefix = build_index(
@@ -1344,7 +1348,7 @@ def reference_build_cmd(
         raise typer.Exit(code=1)
 
     typer.secho(f"\nReference index ready at {prefix}", fg=typer.colors.GREEN, bold=True)
-    typer.echo("  Off-target checking is now on by default; no flag needed.")
+    typer.echo("  Off-target checking is on by default; no flag is needed.")
 
 
 @reference_app.command("status")
