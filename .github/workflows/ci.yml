@@ -4,6 +4,10 @@
 # so bowtie is installed here to keep that coverage rather than losing it
 # silently. The image build is checked too, because the Dockerfile is a shipped
 # artefact: if it stops building, the distribution is broken.
+#
+# The Python job lints before it tests: ruff is cheap and its findings are the
+# kind that make a test failure harder to read. Rules are selected in
+# pyproject.toml, so `ruff check .` behaves the same locally and here.
 name: CI
 
 on:
@@ -17,12 +21,18 @@ permissions:
 jobs:
   python:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject declares requires-python >= 3.11, so both ends are tested
+        # rather than only the newer one.
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install bowtie1
         run: |
@@ -30,6 +40,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends bowtie
 
       - run: pip install -e ".[dev,api]"
+      - run: ruff check .
       - run: pytest -q
 
   web:

@@ -475,9 +475,8 @@ class HushShell:
             f"  rules:           {', '.join(rules) or 'none'} "
             f"(mode {p.rule_mode.value.upper()})"
         )
-        typer.echo(
-            f"  seed Tm:         {'< %.1f C' % p.seed_tm_threshold if p.use_seed_filter else 'off'}"
-        )
+        seed = f"< {p.seed_tm_threshold:.1f} C" if p.use_seed_filter else "off"
+        typer.echo(f"  seed Tm:         {seed}")
         off = (
             "on (built reference, or --offtarget-db)"
             if p.use_offtarget_filter
@@ -500,15 +499,22 @@ class HushShell:
             typer.echo(
                 f"  own txs:         {', '.join(own) or 'nothing excluded'}"
             )
-        typer.echo(
-            f"  GC window:       {'%.0f-%.0f%%' % (p.gc_min * 100, p.gc_max * 100) if p.use_gc_filter else 'off'}"
+        gc = (
+            f"{p.gc_min * 100:.0f}-{p.gc_max * 100:.0f}%"
+            if p.use_gc_filter
+            else "off"
         )
-        typer.echo(
-            f"  hairpin:         {'Tm <= %.1f C' % p.hairpin_tm_max if p.use_hairpin_filter else 'off'}"
+        typer.echo(f"  GC window:       {gc}")
+        hairpin = (
+            f"Tm <= {p.hairpin_tm_max:.1f} C" if p.use_hairpin_filter else "off"
         )
-        typer.echo(
-            f"  homopolymer:     {'reject runs > %d nt' % p.max_homopolymer_run if p.use_homopolymer_filter else 'off'}"
+        typer.echo(f"  hairpin:         {hairpin}")
+        homopolymer = (
+            f"reject runs > {p.max_homopolymer_run} nt"
+            if p.use_homopolymer_filter
+            else "off"
         )
+        typer.echo(f"  homopolymer:     {homopolymer}")
         typer.echo(f"  asymmetry:       {'on' if p.use_asymmetry_filter else 'off'}")
         typer.echo(f"  targeting:       {_format_targeting(p.targeting)}")
         typer.echo(f"  sort:            {p.sort}")

@@ -407,7 +407,8 @@ def _mismatch_code(d: MismatchAssessment) -> str:
     """
     huang = "H?" if d.huang_recommended is None else ("H+" if d.huang_recommended else "H-")
     cls = "?" if d.mismatch_class is None else _CLASS_CODE[d.mismatch_class]
-    return f"P{d.guide_position} {_REGION_CODE[d.region]} {huang} {_position_tier(d.guide_position)} {cls}"
+    tier = _position_tier(d.guide_position)
+    return f"P{d.guide_position} {_REGION_CODE[d.region]} {huang} {tier} {cls}"
 
 
 def _other_positions(window: WindowEvaluation) -> str:
@@ -419,7 +420,10 @@ def _other_positions(window: WindowEvaluation) -> str:
 
 
 def _discrimination_cell(window: WindowEvaluation) -> str:
-    """The deciding mismatch's code plus the remaining positions, e.g. 'P16 post H+ S pp +P11,P4'."""
+    """The deciding mismatch's code plus the remaining positions.
+
+    For example 'P16 post H+ S pp +P11,P4'.
+    """
     deciding = window.deciding_mismatch
     if deciding is None:
         return "none"

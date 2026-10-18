@@ -8,7 +8,6 @@ from core.sirna import (
     DEFAULT_LENGTH,
     OVERHANG_LENGTH,
     OverhangPolicy,
-    SiRNACandidate,
     enumerate_candidates,
 )
 
@@ -118,7 +117,8 @@ class TestOverhangs:
 
     def test_guide_full_equals_full_window_reverse_complement(self):
         # Natural guide overhang comes from upstream, so guide_full is the
-        # reverse-complement of the core-plus-upstream window (the 21-nt guide of Elbashir et al. 2001).
+        # reverse-complement of the core-plus-upstream window (the 21-nt guide
+        # of Elbashir et al. 2001).
         c = self._interior()[2]
         window = self.TARGET.subseq(c.position - OVERHANG_LENGTH, c.end)
         assert c.guide_full == window.reverse_complement().seq
