@@ -12,8 +12,13 @@ abstract: >-
   Developed as part of Project HIDE (HLA Interference through Disguise and
   Erasure).
 authors:
-  # TODO: replace with the full team author list before release.
-  - name: The HUSH contributors
+  - family-names: van Reem
+    given-names: Dennis Ragnar
+    role: Programmer, Project Manager
+  - family-names: Symalla
+    given-names: Florian
+    role: Programmer
+  - name: "iGEM GU Frankfurt 2026"
 version: 1.0.0
 date-released: "2026-10-14"
 license: MIT
