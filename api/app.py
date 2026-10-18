@@ -8,6 +8,7 @@ Endpoints, errors and CORS behaviour: docs/api.md.
 from __future__ import annotations
 
 import os
+import shutil
 from importlib import metadata
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from api import inputs, schemas, serialize
 from api.store import SessionStore
 from core.errors import HushError
+from core.reference import default_index_prefix, index_exists
+from service.params import DesignParams
 from service.session import HushSession
 
 try:
@@ -100,7 +103,13 @@ def create_app(
 
     @app.get("/health", response_model=schemas.HealthResponse, tags=["meta"])
     def health() -> schemas.HealthResponse:
-        return schemas.HealthResponse(status="ok", service="HUSH API", version=_VERSION)
+        return schemas.HealthResponse(
+            status="ok",
+            service="HUSH API",
+            version=_VERSION,
+            bowtie_available=shutil.which(DesignParams().bowtie_path) is not None,
+            offtarget_reference=index_exists(default_index_prefix()),
+        )
 
     @app.post("/inspect", response_model=schemas.InspectResponse, tags=["stateless"])
     def inspect(req: schemas.InspectRequest) -> schemas.InspectResponse:

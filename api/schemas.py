@@ -341,9 +341,15 @@ class SessionResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    """Liveness, plus what the off-target check needs on this host."""
+
     status: str
     service: str
     version: str
+    # bowtie1 found on PATH (searched as the default bowtie_path).
+    bowtie_available: bool
+    # The default transcriptome index exists; 'hush reference build' makes it.
+    offtarget_reference: bool
 
 
 class ErrorResponse(BaseModel):
