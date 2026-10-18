@@ -334,7 +334,7 @@ class TestAdvancedThermoKnobs:
         assert xia.hairpin_tm != pytest.approx(freier.hairpin_tm)
 
 
-class TestSelectPreservesOrderAndDropsNothingSilently:
+class TestSelectOrder:
     def test_select_returns_subset_in_position_order(self, hla_candidates):
         criteria = SelectionCriteria(rule_mode=RuleMode.ANY)
         selected = select(hla_candidates, criteria)
