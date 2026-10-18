@@ -351,8 +351,8 @@ class TestCountIsNotRanked:
         assert all(isinstance(entry, bool) for entry in key)
 
     def test_multi_mismatch_is_reporting_only(self):
-        # Still exported for the siDirect comparison the renderers show, but it
-        # must not appear anywhere in the key.
+        # Still exported as the reporting flag (the two-mismatch convention of
+        # Naito et al. 2009), but it must not appear anywhere in the key.
         assert MULTI_MISMATCH == 2
         one = [_at_guide(16, target_base="C", spared_base="A")]
         two = one + [_at_guide(12, target_base="C", spared_base="A")]

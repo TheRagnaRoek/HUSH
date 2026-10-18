@@ -35,8 +35,8 @@ export function CriteriaStep() {
       <div className="callout warn">
         <span className="ic">{"⚠"}</span>
         <span>
-          <b>This target is GC-rich{gc != null ? ` (${gc.toFixed(1)}%)` : ""}.</b> The seed filter is the
-          siDirect industry standard but deliberately strict - on HLA it can reject every
+          <b>This target is GC-rich{gc != null ? ` (${gc.toFixed(1)}%)` : ""}.</b> The seed filter
+          (Naito et al. 2009) is deliberately strict - on HLA it can reject every
           candidate. Recommended here: turn seed <b>off</b> and add the standalone GC and hairpin
           gates.
           <br />

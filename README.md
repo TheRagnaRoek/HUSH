@@ -136,9 +136,8 @@ explicit and each candidate keeps its full per-criterion breakdown, so any
 verdict is legible. The run prints the criteria, a funnel of how many candidates
 clear each gate, and the selected table.
 
-> **GC-rich families:** the seed filter is the siDirect industry standard but is
-> deliberately strict - on a very GC-rich CDS such as HLA it can reject every
-> candidate. Relax it there with `--no-seed`.
+> **GC-rich families:** the seed filter (Naito et al. 2009) is deliberately
+> strict - on a very GC-rich CDS such as HLA it can reject every candidate. Relax it there with `--no-seed`.
 
 Every flag, its default and what it does: [`docs/cli.md`](docs/cli.md), or
 `hush design --help`.
@@ -196,18 +195,13 @@ Interactive API docs are at `/docs`, the OpenAPI schema at `/openapi.json`. See
 
 ## Reproducing the results
 
-Three claims, each reproducible from a clean checkout. Install from the
-lockfile first so the versions match.
+Three claims. Claims 2 and 3 are reproducible from a clean checkout; install
+from the lockfile first so the versions match.
 
 **1. The rule pre-screen reproduces siDirect.** siDirect is HUSH's
 gold-standard reference; on matched settings the pre-screen reproduces its
-picks candidate-for-candidate.
-
-```bash
-python tools/compare_sidirect.py \
-  --sidirect data/testing/siDirect_PDCD1-CDS.ods \
-  --hush data/testing/pdcd1_hush_relaxed.tsv
-```
+picks candidate-for-candidate. The siDirect export and the HUSH design that were
+compared are kept in `data/testing/`.
 
 **2. Allele-aware design on a real HLA target.** A GC-rich class I CDS, which
 is why the seed filter is relaxed here:

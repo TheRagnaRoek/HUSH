@@ -66,8 +66,8 @@ DU_LOW_TOLERANCE = frozenset(range(9, 16))
 # Ranking window: Du's region plus P16 (rationale in the docs).
 LOW_TOLERANCE_WINDOW = DU_LOW_TOLERANCE | frozenset({16})
 
-# Differences at which a window is flagged against siDirect's two-mismatch
-# convention. Reported only; the count is never a ranking criterion.
+# Differences at which a window is flagged against the two-mismatch convention
+# of Naito et al. 2009. Reported only; the count is never a ranking criterion.
 MULTI_MISMATCH = 2
 
 

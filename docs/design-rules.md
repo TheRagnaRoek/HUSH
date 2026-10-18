@@ -103,8 +103,8 @@ absolute position 19, while DT3 follows the real 3' end, so the two disagree. A
 
 ## Seed-duplex off-target Tm
 
-**On by default.** `core.seed`, after siDirect (Naito et al. 2009, *BMC
-Bioinformatics* 10:392).
+**On by default.** `core.seed`, after Naito et al. 2009 (*BMC Bioinformatics*
+10:392).
 
 Seed-mediated off-target silencing tracks the thermodynamic stability of the
 seed duplex (Ui-Tei et al. 2008, *NAR* 36:7100): a weakly-pairing seed is largely
@@ -150,13 +150,13 @@ Its **physics is contested**. The seed duplex does not form in solution: Ago
 reshapes its guide's binding properties, and seed pairing proceeds 50-200x faster
 than annealing of the equivalent naked RNAs (Salomon et al. 2015, *Cell* 162:84;
 Wee et al. 2012, *Cell* 151:1055). HUSH keeps the filter because it is the
-industry standard and reproduces siDirect, but treats it as a calibrated
-empirical proxy rather than a mechanism.
+standard published filter (Naito et al. 2009) and HUSH reproduces its figures,
+but treats it as a calibrated empirical proxy rather than a mechanism.
 
 Consequently the seed filter's internals are **not tunable**: the Freier
 parameter set, the initiation constant, the concentration and the salt are
-pinned, and `--params` never reaches them. Only the threshold moves. siDirect's
-21.5 C cut-off is meaningful only against exactly those numbers.
+pinned, and `--params` never reaches them. Only the threshold moves. The 21.5 C
+cut-off is meaningful only against exactly those numbers.
 
 ## Transcriptome off-target
 
@@ -509,8 +509,8 @@ and the regional finding disagree.
 
 HUSH is benchmarked against **siDirect** (Naito et al. 2004, 2009), which it
 positions itself as a successor to: on matched settings the rule pre-screen
-reproduces its picks candidate-for-candidate. `tools/compare_sidirect.py` diffs
-a design TSV against a siDirect export.
+reproduces its picks candidate-for-candidate. The siDirect export and the
+matching HUSH design are kept in `data/testing/`.
 
 When comparing in `natural` overhang mode, compare on the **guide** or the target
 position, not the passenger: the guide equals siDirect's listed guide, but the

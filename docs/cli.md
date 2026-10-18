@@ -56,7 +56,7 @@ opt-in.
 | `--mode` | `rule_mode` | `any` | Combine them by `any` (union) or `all` (intersection). |
 | `--reynolds-threshold` | `reynolds_threshold` | `6` | Reynolds score cut-off (out of 10). |
 | `--amarzguioui-threshold` | `amarzguioui_threshold` | `3` | Amarzguioui score cut-off. |
-| `--seed` / `--no-seed` | `use_seed_filter` | **on** | siDirect seed-duplex off-target Tm filter, both strands. |
+| `--seed` / `--no-seed` | `use_seed_filter` | **on** | Seed-duplex off-target Tm filter (Naito et al. 2009), both strands. |
 | `--seed-tm` | `seed_tm_threshold` | `21.5` | Seed-duplex Tm cut-off in C. |
 | `--offtarget` / `--no-offtarget` | `use_offtarget_filter` | **on** | Transcriptome homology filter. Uses the built reference automatically. |
 | `--offtarget-db` | (searcher) | auto | bowtie index prefix. Defaults to the one `hush reference build` produced; set it to use a different reference genome. |
@@ -115,7 +115,8 @@ Some values are pinned so a published calibration stays valid:
 
 - **The seed filter's internals** (Freier parameters, initiation constant,
   concentration, salt). Only `--seed-tm` moves, and `--params` never reaches
-  them: siDirect's 21.5 C cut-off is meaningful only against those numbers.
+  them: the 21.5 C cut-off of Naito et al. 2009 is meaningful only against those
+  numbers.
 - **Reynolds' internal GC (30-52%) and internal-repeat (Tm <= 20 C) criteria.**
   The standalone `--gc` and `--hairpin` gates are the tunable counterparts; the
   rule keeps its published form.
