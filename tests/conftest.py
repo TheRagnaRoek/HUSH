@@ -38,7 +38,7 @@ def hla_a01_fasta() -> Path:
 
 @pytest.fixture
 def demo_lowgc_fasta() -> Path:
-    """A synthetic low-GC CDS that selects under the default paradigm (seed on)."""
+    """A synthetic low-GC CDS that selects under the default settings (seed on)."""
     return EXAMPLES_DIR / "demo_lowgc_cds.fasta"
 
 

@@ -86,8 +86,8 @@ def test_design_default_mode_is_union(target_fasta):
 
 
 def test_design_offtarget_on_by_default_warns_without_index(target_fasta):
-    # The reference check is the safety floor, so running without one still
-    # works but has to say so in terms of the consequence, not the missing flag.
+    # Running without a reference works, but the output must state the
+    # consequence (no off-target screening), not only the missing flag.
     result = runner.invoke(app, ["design", str(target_fasta)])
     assert result.exit_code == 0
     assert "UNREFERENCED RUN" in result.stdout
@@ -198,7 +198,7 @@ def test_design_unknown_overhang_errors(target_fasta):
 
 
 def test_design_homopolymer_filter_on_by_default(target_fasta):
-    # The homopolymer gate is part of the default paradigm.
+    # The homopolymer gate is part of the default settings.
     result = runner.invoke(app, ["design", str(target_fasta), "--no-seed"])
     assert result.exit_code == 0
     assert "homopolymer:" in result.stdout

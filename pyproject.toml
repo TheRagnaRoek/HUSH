@@ -33,7 +33,7 @@ hush = "app.cli:app"
 
 [tool.setuptools]
 # Flat top-level packages mirroring the pipeline stages, plus the service layer
-# (the orchestration seam the CLI and API render over) and the HTTP API.
+# (the orchestration layer used by the CLI and the API) and the HTTP API.
 packages = ["core", "msa", "shrna", "service", "app", "api"]
 
 [tool.pytest.ini_options]
