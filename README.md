@@ -261,6 +261,21 @@ name, and the index manifest records which one.
 `web/package-lock.json` record the exact versions used; `pyproject.toml` holds
 the supported ranges.
 
+## Credits
+
+HUSH was developed by iGEM GU Frankfurt 2026 as part of Project HIDE (HLA
+Interference through Disguise and Erasure).
+
+- Dennis Ragnar van Reem - project management, programming, research
+- Florian Symalla - programming, research
+- Leonie Schallmey - research
+- Lucas Koch - programming, research
+- Itzel Jaimes Jaramillo - design
+
+
+To cite HUSH, see [`CITATION.cff`](CITATION.cff). GitHub's "Cite this
+repository" button reads it.
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).

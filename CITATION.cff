@@ -12,12 +12,17 @@ abstract: >-
   Developed as part of Project HIDE (HLA Interference through Disguise and
   Erasure).
 authors:
-  - family-names: van Reem
+  - family-names: Reem
     given-names: Dennis Ragnar
-    role: Programmer, Project Manager
+    name-particle: van
   - family-names: Symalla
     given-names: Florian
-    role: Programmer
+  - family-names: Koch
+    given-names: Lucas
+  - family-names: Jaimes Jaramillo
+    given-names: Itzel
+  - family-names: Schallmey
+    given-names: Leonie
   - name: "iGEM GU Frankfurt 2026"
 version: 1.0.0
 date-released: "2026-10-14"
