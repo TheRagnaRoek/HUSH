@@ -83,7 +83,7 @@ export function CandidatesStep() {
             )}
             {seedIsOn ? (
               <>
-                {" "}The seed filter is the siDirect standard but deliberately
+                {" "}The seed filter (Naito et al. 2009) is deliberately
                 strict - on a GC-rich target it can reject everything.
                 <br />
                 <button

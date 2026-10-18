@@ -11,10 +11,10 @@ from core.sirna import enumerate_candidates
 from core.seed import (
     SEED_END,
     SEED_LENGTH,
+    SEED_SODIUM_M,
     SEED_START,
     SEED_TM_THRESHOLD_C,
-    SIDIRECT_SODIUM_M,
-    SIDIRECT_TOTAL_STRAND_CONC_M,
+    SEED_TOTAL_STRAND_CONC_M,
     seed_duplex_tm,
     seed_region,
     seed_tm,
@@ -67,8 +67,9 @@ def all_heptamer_tms() -> list[float]:
 
 
 class TestSiDirectPublishedFigures:
-    """Reproduce siDirect 2.0 (Naito 2009): of all 4^7 = 16384 seed heptamers, 4488 (27.4%)
-    have Tm below 21.5 C, with values from -12 C to 60 C. Any wrong constant moves the count."""
+    """Reproduce the figures of Naito et al. 2009: of all 4^7 = 16384 seed heptamers, 4488
+    (27.4%) have Tm below 21.5 C, with values from -12 C to 60 C. Any wrong constant moves
+    the count."""
 
     def test_covers_every_heptamer(self, all_heptamer_tms):
         assert len(all_heptamer_tms) == 4**SEED_LENGTH == 16384
@@ -128,13 +129,13 @@ class TestSeedDuplexTm:
         assert high - low == pytest.approx(16.6)
 
     def test_defaults_are_the_sidirect_conditions(self):
-        assert SIDIRECT_TOTAL_STRAND_CONC_M == 100e-6
-        assert SIDIRECT_SODIUM_M == 0.1
+        assert SEED_TOTAL_STRAND_CONC_M == 100e-6
+        assert SEED_SODIUM_M == 0.1
         assert seed_duplex_tm("GCAUGCA") == pytest.approx(
             seed_duplex_tm(
                 "GCAUGCA",
-                total_strand_conc=SIDIRECT_TOTAL_STRAND_CONC_M,
-                sodium=SIDIRECT_SODIUM_M,
+                total_strand_conc=SEED_TOTAL_STRAND_CONC_M,
+                sodium=SEED_SODIUM_M,
             )
         )
 
@@ -175,8 +176,8 @@ class TestSeedTmFilter:
         assert result.passes is False
 
     def test_one_strong_strand_fails_the_whole_candidate(self):
-        # The passenger strand is loaded often enough to matter, so siDirect
-        # requires BOTH seeds below the cut-off. Find a real candidate where the
+        # The passenger strand is loaded often enough to matter, so Naito et al.
+        # 2009 require BOTH seeds below the cut-off. Find a real candidate where the
         # two strands disagree and confirm the strict one wins.
         target = BioSequence(
             "AUAUAUAGCGCGCGCGCGCGCGCAUAUAUAUAUAUAUAU", id="mixed", moltype=MolType.RNA
@@ -219,7 +220,7 @@ class TestRealHlaTarget:
 
         passing = [r for r in results if r.passes]
         # At 63.8% GC this CDS yields far fewer passing seeds than the ~3% of
-        # all human 23-mers siDirect reports genome-wide; the point is that the
+        # all human 23-mers reported genome-wide by Naito et al. 2009; the point is that the
         # filter bites hard here rather than admitting most candidates.
         assert 0 < len(passing) < 0.25 * len(results)
 

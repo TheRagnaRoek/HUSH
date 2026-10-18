@@ -81,9 +81,6 @@ built HUSH, with no registry login:
 ```bash
 docker compose up hush          # must build from source and serve :8000
 pytest -q                       # after: pip install -r requirements.txt -r requirements-dev.txt
-python tools/compare_sidirect.py \
-  --sidirect data/testing/siDirect_PDCD1-CDS.ods \
-  --hush data/testing/pdcd1_hush_relaxed.tsv
 ```
 
 If the first command reaches <http://localhost:8000> without pulling anything,
