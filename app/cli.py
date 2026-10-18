@@ -56,7 +56,13 @@ from app.parsing import (
 from service.params import AlleleTargetingSpec, DesignParams
 from service.results import ConvertResult, DesignResult
 from service.session import HushSession, apply_convert_filters
-from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions, convert
+from shrna.convert import (
+    DEFAULT_TERMINATOR_LENGTH,
+    ShrnaOptions,
+    StemOverhang,
+    convert,
+    get_stem_overhang,
+)
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold, get_loop
 
 # Option groups in 'design --help'.
@@ -1045,6 +1051,13 @@ def _parse_loop(spec: str) -> LoopScaffold:
         raise typer.BadParameter(str(exc), param_hint="--loop")
 
 
+def _parse_stem_overhang(spec: str) -> StemOverhang:
+    try:
+        return get_stem_overhang(spec)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--stem-overhang")
+
+
 # Columns convert needs from a 'hush design' TSV.
 _DESIGN_TSV_REQUIRED = {
     "region",
@@ -1173,6 +1186,7 @@ def render_convert_result(result: ConvertResult, limit: int) -> None:
     typer.echo(
         typer.style(
             f"Scaffold: stem-loop (SA)  |  loop {loop.name} {loop.seq}  |  "
+            f"sense overhang {options.stem_overhang.value}  |  "
             f"terminator {term}",
             fg=typer.colors.CYAN,
             bold=True,
@@ -1225,6 +1239,12 @@ def convert_cmd(
         help="Loop scaffold: jensen (UGUGCUU, default) | psuper (UUCAAGAGA) | "
         "trc (CUCGAG).",
     ),
+    stem_overhang: str = typer.Option(
+        StemOverhang.KEEP.value, "--stem-overhang",
+        help="Sense 3' overhang between stem and loop: keep (default, the full "
+        "21-nt sense strand is encoded) | trim (the loop joins the core). The "
+        "guide overhang is always kept.",
+    ),
     terminator: bool = typer.Option(
         True, "--terminator/--no-terminator",
         help="Append the Pol III poly-T terminator to the hairpin insert.",
@@ -1250,7 +1270,8 @@ def convert_cmd(
 
     Reads a 'hush design -o' TSV and, for each selected candidate, grafts its
     full strands (paired core plus 3' overhang) onto the chosen loop as a
-    sense-loop-antisense hairpin. The output is the bare insert as top and bottom
+    sense-loop-antisense hairpin; --stem-overhang trim leaves out the sense
+    overhang. The output is the bare insert as top and bottom
     DNA oligos with a Pol III poly-T terminator. It has no vector-specific
     sequences; add the restriction sticky-end tails of the vector before cloning.
     Each construct is folded to check that it forms the intended stem-loop, and QC
@@ -1258,9 +1279,11 @@ def convert_cmd(
     reported.
     """
     loop_scaffold = _parse_loop(loop)
+    stem_mode = _parse_stem_overhang(stem_overhang)
     try:
         options = ShrnaOptions(
             loop=loop_scaffold,
+            stem_overhang=stem_mode,
             include_terminator=terminator,
             terminator_length=terminator_length,
             drop_premature_terminators=drop_premature_terminators,

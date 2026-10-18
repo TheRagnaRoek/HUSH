@@ -206,6 +206,14 @@ def test_session_lifecycle(client, demo_target):
     assert body["construct_count"] + body["withheld_count"] == body["converted_count"]
     assert len(body["constructs"]) == body["construct_count"]
     assert len(body["withheld"]) == body["withheld_count"]
+    assert body["stem_overhang"] == "keep"
+
+    trimmed = client.post(
+        f"/sessions/{sid}/convert", json={"stem_overhang": "trim"}
+    )
+    assert trimmed.status_code == 200
+    assert trimmed.json()["stem_overhang"] == "trim"
+    assert all(c["sense_overhang"] == "" for c in trimmed.json()["constructs"])
 
     assert client.delete(f"/sessions/{sid}").status_code == 204
     assert client.get(f"/sessions/{sid}").status_code == 404

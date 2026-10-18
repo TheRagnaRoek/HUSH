@@ -34,6 +34,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
   const [convertOptions, setConvertOptions] = useState<ConvertOptions>({
     loop: DEFAULT_LOOP,
+    stem_overhang: "keep",
     include_terminator: true,
     terminator_length: DEFAULT_TERMINATOR_LENGTH,
   });

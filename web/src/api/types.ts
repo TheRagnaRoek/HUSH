@@ -57,8 +57,11 @@ export interface DesignParams {
   sort?: "auto" | "position" | "discrimination";
 }
 
+export type StemOverhang = "keep" | "trim";
+
 export interface ConvertOptions {
   loop?: string;
+  stem_overhang?: StemOverhang;
   include_terminator?: boolean;
   terminator_length?: number;
 }
@@ -211,6 +214,7 @@ export interface ConstructResult {
 export interface ConvertResponse {
   loop_name: string;
   loop_seq: string;
+  stem_overhang?: StemOverhang;
   terminator_length?: number | null;
   construct_count: number;
   converted_count: number;

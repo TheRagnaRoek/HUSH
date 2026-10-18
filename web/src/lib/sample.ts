@@ -308,6 +308,7 @@ const CONSTRUCTS: ConstructResult[] = [
 export const sampleConvert: ConvertResponse = {
   loop_name: "jensen",
   loop_seq: "UGUGCUU",
+  stem_overhang: "keep",
   terminator_length: 6,
   construct_count: CONSTRUCTS.length,
   fold_ok_count: CONSTRUCTS.filter((c) => c.folds_as_designed).length,

@@ -32,6 +32,38 @@ The QC read-outs distinguish three regions:
   with the terminator and is excluded from the fold search.
 - Only the **core** forms the stem.
 
+### Sense overhang: keep or trim
+
+`--stem-overhang` (API: `stem_overhang`) chooses what happens to the sense
+overhang:
+
+| Mode | Hairpin body | Use |
+|---|---|---|
+| `keep` (default) | sense core, sense overhang, loop, guide core | Encodes the full 21-nt sense strand. |
+| `trim` | sense core, loop, guide core | The loop joins the core directly; the construct is the bare 19-bp stem plus loop. |
+
+The guide overhang is kept in both modes. The 2-nt 3' overhang at the open end of
+the stem is the structure Dicer and RISC loading expect, so `trim` does not
+touch it.
+
+The published designs disagree on this point. Dicer measures from the ends of the
+hairpin and also from the loop, and it cuts more precisely when the cleavage site
+is 2 nt from a loop or bulge (Gu et al. 2012, *Cell* 151:900). The sense overhang
+plus the loop therefore help decide where the guide's 5' end is cut, so the
+choice can change the guide that is produced. HUSH does not decide this: it
+exposes the choice and reports the same QC for both modes.
+
+Effects of `trim` on the QC read-outs:
+
+- `folds_as_designed` expects the loop to be the scaffold loop alone, because
+  there is no sense overhang to add to it.
+- The `AA` overhang interaction with the `jensen` loop (see
+  [folds_as_designed](#folds_as_designed)) cannot occur.
+- The premature-terminator check no longer sees the `U + UU + U` junction run
+  that a `uu` or `dtdt` sense overhang can create.
+- The `sense_overhang` field of the construct is empty, because the hairpin does
+  not encode it.
+
 Earlier versions built the stem from the 19-nt core alone and omitted both
 overhangs, so the hairpin did not encode the 21-nt guide that the upstream gates
 had validated. Output from before this change differs for every construct.

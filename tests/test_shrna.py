@@ -7,8 +7,10 @@ from shrna.convert import (
     MIN_TERMINATOR_LENGTH,
     Orientation,
     ShrnaOptions,
+    StemOverhang,
     convert,
     convert_candidate,
+    get_stem_overhang,
 )
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold, get_loop
 
@@ -250,6 +252,69 @@ def test_sense_overhang_can_build_a_premature_terminator():
     )
     assert c.hairpin_rna.seq.startswith(sense.seq + "UUU")
     assert c.premature_terminator_free is False
+
+
+# Stem overhang: keep (default) or trim the sense overhang
+
+_TRIM = ShrnaOptions(stem_overhang=StemOverhang.TRIM)
+
+
+def test_stem_overhang_defaults_to_keep():
+    assert ShrnaOptions().stem_overhang is StemOverhang.KEEP
+
+
+def test_get_stem_overhang_is_case_insensitive_and_validates():
+    assert get_stem_overhang(" Trim ") is StemOverhang.TRIM
+    with pytest.raises(ValueError, match="choose from keep, trim"):
+        get_stem_overhang("fill")
+
+
+def test_stem_overhang_must_be_the_enum():
+    with pytest.raises(TypeError):
+        ShrnaOptions(stem_overhang="trim")
+
+
+def test_trim_joins_the_loop_to_the_core_and_keeps_the_guide_overhang():
+    sense, antisense = _pair(CLEAN)
+    c = convert(
+        sense, antisense, region="1-19", start=0, end=19,
+        sense_overhang="CC", guide_overhang="CG", options=_TRIM,
+    )
+    loop = LOOPS["jensen"].seq
+    assert c.sense_overhang == ""
+    assert c.guide_overhang == "CG"
+    assert c.hairpin_rna.seq == (
+        sense.seq + loop + antisense.seq + "CG" + "U" * 6
+    )
+
+
+def test_trim_matches_keep_when_there_is_no_sense_overhang():
+    sense, antisense = _pair(CLEAN)
+    kwargs = dict(region="1-19", start=0, end=19, guide_overhang="CG")
+    kept = convert(sense, antisense, **kwargs)
+    trimmed = convert(sense, antisense, options=_TRIM, **kwargs)
+    assert trimmed.hairpin_rna.seq == kept.hairpin_rna.seq
+
+
+def test_trim_removes_the_aa_loop_misfold():
+    # Under keep, an AA sense overhang pairs with the jensen loop end; trimming
+    # it leaves the loop exactly as published, so the construct folds as designed.
+    sense, antisense = _pair(CLEAN)
+    kwargs = dict(region="1-19", start=0, end=19, sense_overhang="AA")
+    assert convert(sense, antisense, **kwargs).folds_as_designed is False
+    trimmed = convert(sense, antisense, options=_TRIM, **kwargs)
+    assert trimmed.folds_as_designed is True
+    assert trimmed.fold is not None
+    assert trimmed.fold.loop == LOOPS["jensen"].seq
+
+
+def test_trim_removes_the_overhang_built_premature_terminator():
+    sense, antisense = _pair("GCACCGUCAAGGCUGAGAU")
+    c = convert(
+        sense, antisense, region="1-19", start=0, end=19,
+        sense_overhang="UU", options=_TRIM,
+    )
+    assert c.premature_terminator_free is True
 
 
 @pytest.mark.parametrize("loop_name", ["psuper", "trc"])
