@@ -134,9 +134,9 @@ explicit and each candidate keeps its per-criterion breakdown, so every verdict
 can be traced. The run prints the criteria, a funnel (the number of candidates
 that pass each gate) and the selected table.
 
-> **GC-rich families:** the seed filter follows Amarzguioui (2004) and is strict.
-> On a very GC-rich coding sequence such as HLA it may reject every candidate.
-> Relax it there with `--no-seed`.
+> **GC-rich families:** the seed filter follows Ui-Tei et al. (2008) and Naito et
+> al. (2009) and is strict. On a very GC-rich coding sequence such as HLA it may
+> reject every candidate. Relax it there with `--no-seed`.
 
 Every flag, its default and what it does: [`docs/cli.md`](docs/cli.md), or
 `hush design --help`.
