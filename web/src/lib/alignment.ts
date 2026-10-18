@@ -11,7 +11,9 @@ import type { CandidateResult, DiscriminationResult } from "../api/types";
 export interface AlnMismatch {
   /** 0-based column on the sense/target window. */
   col: number;
+  /** The target base at that column. */
   from: string;
+  /** The base the spared allele carries there (the one the row displays). */
   to: string;
   disc: DiscriminationResult;
 }
@@ -43,10 +45,10 @@ function core(seq: string, overhang: string): string {
   return n > 0 ? seq.slice(0, seq.length - n) : seq;
 }
 
-/** Parse a "G>A" mutation string into [from, to]; tolerant of odd input. */
+/** Parse the API's "spared>target" mutation string into [target, spared]; tolerant of odd input. */
 function parseMut(mutation: string): [string, string] {
   const m = /([A-Za-z])\s*[>/-]\s*([A-Za-z])/.exec(mutation);
-  return m ? [m[1].toUpperCase(), m[2].toUpperCase()] : ["?", "?"];
+  return m ? [m[2].toUpperCase(), m[1].toUpperCase()] : ["?", "?"];
 }
 
 export function buildAlignment(
@@ -68,8 +70,10 @@ export function buildAlignment(
     const mism: AlnMismatch[] = [];
     if (pa.discrimination) {
       const [from, to] = parseMut(pa.discrimination.mutation);
+      // DNA letters from the API; the window is shown in RNA.
+      const rna = (b: string) => (b === "T" ? "U" : b);
       const col = Math.min(Math.max(L - pa.discrimination.guide_position, 0), L - 1);
-      mism.push({ col, from, to, disc: pa.discrimination });
+      mism.push({ col, from: rna(from), to: rna(to), disc: pa.discrimination });
     }
     return { name: pa.allele, diff: pa.diff_count, weak: i === 0, mism };
   });

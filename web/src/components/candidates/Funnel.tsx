@@ -1,3 +1,5 @@
+import { gateLabel } from "../../lib/text";
+
 export function Funnel({
   funnel,
   offtargetSkipped,
@@ -13,7 +15,7 @@ export function Funnel({
       <div className="funnel">
         {entries.map(([name, v]) => (
           <div className="frow" key={name}>
-            <span className="fn">{name}</span>
+            <span className="fn">{gateLabel(name)}</span>
             <div className="ftrack">
               <div className="fbar" style={{ width: `${Math.max(5, (v / max) * 100)}%` }} />
             </div>
@@ -22,12 +24,12 @@ export function Funnel({
         ))}
         {offtargetSkipped && (
           <div className="frow">
-            <span className="fn">off-target</span>
+            <span className="fn">Off-target</span>
             <div className="ftrack">
               <div className="fbar skip" style={{ width: "100%" }} />
             </div>
             <span className="fv" style={{ color: "var(--muted)", fontWeight: 400 }}>
-              skip
+              Skip
             </span>
           </div>
         )}

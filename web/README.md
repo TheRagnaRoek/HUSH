@@ -52,6 +52,8 @@ src/
   session/    SessionProvider + context + useSession (app state over the API)
   lib/        disc.ts (decode discrimination), alignment.ts (view model), sample.ts
   hooks/      useTheme (light default + persisted toggle)
+  reference/  content.ts (the in-app reference: rules and rationales), sources.ts
+              (the citations behind them; tooltips and (i) panels link to it)
   styles/     tokens.css (HIDE palette, light+dark), theme.css (Bootstrap vars),
               fonts.css, app.css (ported mockup component styles)
   components/ layout/ steps/ criteria/ candidates/ viewer/ common/

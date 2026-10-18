@@ -27,7 +27,8 @@ function initialIntent(t: TargetingSchema | null | undefined, hasPanel: boolean)
   return hasPanel ? "allele" : "pan";
 }
 
-export function TargetingStep() {
+/** compact: the expert-mode panel body, without heading, notes or navigation. */
+export function TargetingStep({ compact = false }: { compact?: boolean }) {
   const { inspect, params, updateParams, setStep } = useSession();
   const members = useMemo(() => inspect?.panel?.members ?? [], [inspect]);
   const memberIds = useMemo(() => members.map((m) => m.id), [members]);
@@ -78,29 +79,33 @@ export function TargetingStep() {
   const discriminates = intent === "allele" || intent === "target" || intent === "custom";
 
   return (
-    <div className="workspace">
-      <div className="whead">
-        <h2>What should this construct hit and spare?</h2>
-        <p>
-          The allele gate is ANDed on top of every efficacy filter: a candidate must hit the
-          alleles you want silenced and carry enough mismatches against the ones you want spared.
-        </p>
-      </div>
-
-      {!hasPanel && (
-        <div className="banner">
-          No panel loaded - add one in step 1 to use allele targeting. A design with no panel runs
-          the efficacy filters alone.
+    <div className={compact ? "xp-body" : "workspace"}>
+      {!compact && (
+        <div className="whead">
+          <h2>What should this construct hit and spare?</h2>
+          <p>
+            The allele gate is ANDed on top of every efficacy filter: a candidate must hit the
+            alleles you want silenced and carry enough mismatches against the ones you want spared.
+          </p>
         </div>
       )}
 
-      <div className="intent">
+      {!hasPanel && (
+        <div className="banner">
+          {compact
+            ? "No panel loaded, so the options below do not apply. Add one above to use allele targeting. Without a panel only the efficacy filters run, and candidates are ordered by position along the target."
+            : "No panel loaded, so the options below do not apply. Add one in step 1 to use allele targeting. Without a panel only the efficacy filters run, and candidates are ordered by position along the target."}
+        </div>
+      )}
+
+      <div className={hasPanel ? "intent" : "intent off"}>
         {INTENTS.map((it) => (
-          <label key={it.id}>
+          <label key={it.id} title={it.d}>
             <input
               type="radio"
               name="intent"
               checked={intent === it.id}
+              disabled={!hasPanel}
               onChange={() => setIntent(it.id)}
             />
             <span className="t">{it.t}</span>
@@ -111,7 +116,7 @@ export function TargetingStep() {
 
       {hasPanel && (
         <>
-          <div className="divider" />
+          {!compact && <div className="divider" />}
           <div className="funnel-h">
             Panel members
             {interactive && (
@@ -139,20 +144,24 @@ export function TargetingStep() {
         </>
       )}
 
-      <p className="hint" style={{ marginTop: 14 }}>
-        {discriminates
-          ? "A request that spares something is ranked by discrimination by default - survivors are ordered by how well they distinguish the weakest spared allele."
-          : "Pan-allele targeting spares nothing, so there is no discrimination to rank; survivors come back in target-position order."}
-      </p>
+      {!compact && (
+        <>
+          <p className="hint" style={{ marginTop: 14 }}>
+            {discriminates
+              ? "A request that spares something is ranked by discrimination by default - survivors are ordered by how well they distinguish the weakest spared allele."
+              : "Pan-allele targeting spares nothing, so there is no discrimination to rank; survivors come back in target-position order."}
+          </p>
 
-      <div className="actions">
-        <button type="button" className="hbtn ghost" onClick={() => setStep("input")}>
-          &larr; Back
-        </button>
-        <button type="button" className="hbtn" onClick={() => setStep("criteria")}>
-          Continue &rarr;
-        </button>
-      </div>
+          <div className="actions">
+            <button type="button" className="hbtn ghost" onClick={() => setStep("input")}>
+              &larr; Back
+            </button>
+            <button type="button" className="hbtn" onClick={() => setStep("criteria")}>
+              Continue &rarr;
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

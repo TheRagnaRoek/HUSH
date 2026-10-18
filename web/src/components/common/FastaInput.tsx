@@ -69,10 +69,12 @@ export function FastaInput({
         <span className="ic">{icon}</span>
         <div className="dropbody">
           <b>{title}</b>
-          <small>{fileName ? `Loaded: ${fileName}` : hint}</small>
+          <small className={fileName ? "loaded" : undefined}>
+            {fileName ? `Loaded: ${fileName}` : hint}
+          </small>
         </div>
         <div className="dropactions">
-          <span className="pick">browse</span>
+          <span className="pick">Browse</span>
           <button
             type="button"
             className="pastelink"
@@ -81,7 +83,7 @@ export function FastaInput({
               setPasteOpen((v) => !v);
             }}
           >
-            {pasteOpen ? "hide" : "paste"}
+            {pasteOpen ? "Hide" : "Paste"}
           </button>
         </div>
       </div>
