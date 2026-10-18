@@ -266,12 +266,21 @@ the supported ranges.
 HUSH was developed by iGEM GU Frankfurt 2026 as part of Project HIDE (HLA
 Interference through Disguise and Erasure).
 
+<img src="web/public/hide-logo.svg" alt="Project HIDE logo" align="right" width="160">
+
 - Dennis Ragnar van Reem - project management, programming, research
 - Florian Symalla - programming, research
 - Leonie Schallmey - research
 - Lucas Koch - programming, research
 - Itzel Jaimes Jaramillo - design
 
+<br clear="right">
+
+Anthropic's Claude (through Claude Code) assisted in the implementation of HUSH.
+HUSH itself uses no AI model at runtime; see
+[Data, models and disclosure](#data-models-and-disclosure). Thank you to
+[Anthropic](https://www.anthropic.com) for partnering with iGEM for the 2026
+competition.
 
 To cite HUSH, see [`CITATION.cff`](CITATION.cff). GitHub's "Cite this
 repository" button reads it.
