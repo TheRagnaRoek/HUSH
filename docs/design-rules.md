@@ -509,8 +509,8 @@ and the regional finding disagree.
 
 HUSH is benchmarked against **siDirect** (Naito et al. 2004, 2009), which it
 positions itself as a successor to: on matched settings the rule pre-screen
-reproduces its picks candidate-for-candidate. The siDirect export and the
-matching HUSH design are kept in `data/testing/`.
+reproduces its picks candidate-for-candidate. The siDirect export, the PDCD1 CDS
+and the matching HUSH design are kept in `data/testing/`.
 
 When comparing in `natural` overhang mode, compare on the **guide** or the target
 position, not the passenger: the guide equals siDirect's listed guide, but the

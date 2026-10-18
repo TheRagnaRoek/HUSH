@@ -166,10 +166,10 @@ loaded once and reused.
 
 ```bash
 # Default paradigm. On a GC-rich CDS the seed filter may select nothing.
-hush design data/examples/hla_a01.fasta
+hush design data/hla_a01.fasta
 
 # Relaxed for a GC-rich target, with the standalone structure gates
-hush design data/examples/hla_a01.fasta --no-seed --gc --hairpin -o selected.tsv
+hush design data/hla_a01.fasta --no-seed --gc --hairpin -o selected.tsv
 
 # Allele-specific: hit one panel member, discriminate against the rest
 hush design data/examples/target_example.fasta --no-seed \

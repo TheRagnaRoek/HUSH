@@ -200,8 +200,8 @@ from the lockfile first so the versions match.
 
 **1. The rule pre-screen reproduces siDirect.** siDirect is HUSH's
 gold-standard reference; on matched settings the pre-screen reproduces its
-picks candidate-for-candidate. The siDirect export and the HUSH design that were
-compared are kept in `data/testing/`.
+picks candidate-for-candidate. The siDirect export, the PDCD1 CDS and the HUSH
+design that were compared are kept in `data/testing/`.
 
 **2. Allele-aware design on a real HLA target.** A GC-rich class I CDS, which
 is why the seed filter is relaxed here:
