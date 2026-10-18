@@ -41,6 +41,20 @@ def test_health(client):
     assert r.json()["status"] == "ok"
 
 
+def test_health_reports_offtarget_prerequisites(client, monkeypatch):
+    monkeypatch.setattr("api.app.shutil.which", lambda _name: None)
+    monkeypatch.setattr("api.app.index_exists", lambda _prefix: False)
+    body = client.get("/health").json()
+    assert body["bowtie_available"] is False
+    assert body["offtarget_reference"] is False
+
+    monkeypatch.setattr("api.app.shutil.which", lambda _name: "/usr/bin/bowtie")
+    monkeypatch.setattr("api.app.index_exists", lambda _prefix: True)
+    body = client.get("/health").json()
+    assert body["bowtie_available"] is True
+    assert body["offtarget_reference"] is True
+
+
 def test_openapi_is_served(client):
     r = client.get("/openapi.json")
     assert r.status_code == 200

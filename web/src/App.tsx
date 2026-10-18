@@ -7,6 +7,7 @@ import "./styles/app.css";
 
 import { Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
+import { ReferencePage } from "./components/reference/ReferencePage";
 import { DesignerPage } from "./DesignerPage";
 import { SessionProvider } from "./session/SessionProvider";
 
@@ -16,6 +17,7 @@ export default function App() {
       <AppShell>
         <Routes>
           <Route path="/" element={<DesignerPage />} />
+          <Route path="/reference" element={<ReferencePage />} />
           <Route path="*" element={<DesignerPage />} />
         </Routes>
       </AppShell>

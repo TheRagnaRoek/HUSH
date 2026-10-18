@@ -14,7 +14,7 @@ The container serves the API and the web client together on port 8000.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health` | Liveness check; returns service name and version |
+| `GET` | `/health` | Liveness check; returns service name and version, and whether bowtie and the off-target reference are available |
 | `POST` | `/inspect` | Preview a target and optional panel |
 | `POST` | `/design` | One-shot design; the request contains all inputs |
 | `POST` | `/sessions` | Create a session from a target and optional panel |

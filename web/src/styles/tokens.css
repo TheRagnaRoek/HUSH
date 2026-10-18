@@ -9,13 +9,14 @@
  * redefined in the dark blocks.
  */
 :root {
-  --bg: #eef0f5;
+  --bg: #f9f3ff;
+  --switch: #57477d;
   --surface: #ffffff;
   --surface-2: #f3f4f8;
   --inset: #f6f7fa;
-  --fg: #1a1e2b;
-  --muted: #5f6880;
-  --faint: #99a0b5;
+  --fg: #11131b;
+  --muted: #2b2f3e;
+  --faint: #5c637a;
   --line: #e5e7ef;
   --line-2: #eceef4;
   --brand: #e30222;
@@ -37,11 +38,20 @@
   --mismatch: #01c9dd;
   --mismatch-ink: #0a8a99;
   --mismatch-soft: #d6f4f8;
-  --seg-sense: #7d68a0;
-  --seg-loop: #0b93a4;
-  --seg-anti: #e30222;
-  --seg-term: #58607a;
-  --seg-oh: #b07d5a;
+  /* Construct sections in the HUSH logo colours, in the logo's reverse order
+     (the logo runs red, dark red, cyan, purple); the same in both themes. */
+  --seg-sense: #9d8bba;
+  --seg-sense-ink: #1b1430;
+  --seg-loop: #01c9dd;
+  --seg-loop-ink: #06262c;
+  --seg-anti: #ab011b;
+  --seg-anti-ink: #ffffff;
+  --seg-term: #e30222;
+  --seg-term-ink: #ffffff;
+  --seg-oh: #aeb6cd;
+  --seg-oh-ink: #1c2233;
+  --good-ink: #14532d;
+  --warn-ink: #6b4308;
   --font-ui: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-title: "Be Vietnam Pro", "DM Sans", system-ui, sans-serif;
   --font-lead: "Lato", system-ui, sans-serif;
@@ -76,16 +86,13 @@
     --good-soft: #16281d;
     --warn: #e0a14a;
     --warn-soft: #2c2411;
+    --good-ink: #8ee0b4;
+    --warn-ink: #f0c07a;
     --bad: #ff5e6c;
     --bad-soft: #2d1519;
     --mismatch: #01c9dd;
     --mismatch-ink: #3bd6e8;
     --mismatch-soft: #0a2c31;
-    --seg-sense: #b9a7d6;
-    --seg-loop: #2bc3d6;
-    --seg-anti: #f5324a;
-    --seg-term: #8891a8;
-    --seg-oh: #d9a37c;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.42);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     color-scheme: dark;
@@ -116,16 +123,13 @@
   --good-soft: #16281d;
   --warn: #e0a14a;
   --warn-soft: #2c2411;
+  --good-ink: #8ee0b4;
+  --warn-ink: #f0c07a;
   --bad: #ff5e6c;
   --bad-soft: #2d1519;
   --mismatch: #01c9dd;
   --mismatch-ink: #3bd6e8;
   --mismatch-soft: #0a2c31;
-  --seg-sense: #b9a7d6;
-  --seg-loop: #2bc3d6;
-  --seg-anti: #f5324a;
-  --seg-term: #8891a8;
-  --seg-oh: #d9a37c;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.42);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   color-scheme: dark;

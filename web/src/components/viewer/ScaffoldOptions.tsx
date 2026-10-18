@@ -10,6 +10,7 @@ export function ScaffoldOptions() {
   const stemOverhang = convertOptions.stem_overhang ?? "keep";
   const include = convertOptions.include_terminator ?? true;
   const termLen = convertOptions.terminator_length ?? 6;
+  const drop = convertOptions.drop_premature_terminators ?? true;
   const info = loopInfo(loop);
 
   return (
@@ -31,8 +32,8 @@ export function ScaffoldOptions() {
           value={stemOverhang}
           onChange={(e) => updateConvertOptions({ stem_overhang: e.target.value as StemOverhang })}
         >
-          <option value="keep">keep (21-nt sense)</option>
-          <option value="trim">trim (loop joins core)</option>
+          <option value="keep">Keep (21-nt sense)</option>
+          <option value="trim">Trim (loop joins core)</option>
         </select>
       </label>
 
@@ -45,8 +46,8 @@ export function ScaffoldOptions() {
         <span className="so-label">Pol III poly-U terminator</span>
       </label>
 
-      <label className="so-field">
-        <span className="so-label">length</span>
+      <label className="so-field so-len">
+        <span className="so-label">Length</span>
         <input
           type="number"
           min={MIN_TERMINATOR_LENGTH}
@@ -57,6 +58,18 @@ export function ScaffoldOptions() {
             if (!Number.isNaN(n)) updateConvertOptions({ terminator_length: Math.round(n) });
           }}
         />
+      </label>
+
+      <label
+        className="so-field so-check so-wide"
+        title="Pol III stops at a run of four or more U, so a hairpin with one in its body is cut short."
+      >
+        <input
+          type="checkbox"
+          checked={drop}
+          onChange={(e) => updateConvertOptions({ drop_premature_terminators: e.target.checked })}
+        />
+        <span className="so-label">Withhold premature terminators</span>
       </label>
 
       {info && <span className="so-cite">{info.citation}</span>}

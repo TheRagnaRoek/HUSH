@@ -6,8 +6,8 @@ import { useSession } from "../../session/useSession";
 const LINES: Record<Step, ReactNode> = {
   input: (
     <>
-      <b>Step 1.</b> Drop in the transcript to silence. Add a panel to unlock allele-aware
-      targeting - I&apos;ll flag if it&apos;s GC-rich.
+      <b>Hi, I&apos;m Heidi.</b> Let&apos;s start with your target: drop in the transcript to
+      silence. Add a panel to unlock allele-aware targeting - I&apos;ll flag if it&apos;s GC-rich.
     </>
   ),
   targeting: (
@@ -18,14 +18,15 @@ const LINES: Record<Step, ReactNode> = {
   ),
   criteria: (
     <>
-      <b>Step 3.</b> These are best-practice defaults. Open any <b>?</b> to learn a gate - or take
+      <b>Step 3.</b> These are best-practice defaults. Open any <b>i</b> marker to learn a gate - or take
       my one-click HLA preset.
     </>
   ),
   candidates: (
     <>
-      <b>Hi, I&apos;m Heidi.</b> Pick a candidate on the left and I&apos;ll walk you through why
-      it&apos;s a strong pick.
+      <b>Step 4.</b> Pick a candidate on the left and I&apos;ll walk you through why
+      it&apos;s a strong pick. Want a hairpin to express from a vector? Convert it to an shRNA with
+      the button below.
     </>
   ),
   construct: (

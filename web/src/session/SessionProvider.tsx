@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createSession,
+  health,
   inspect as apiInspect,
   sessionConvert,
   sessionDesign,
@@ -10,6 +11,7 @@ import type {
   ConvertResponse,
   DesignParams,
   DesignResponse,
+  HealthResponse,
   InspectResponse,
 } from "../api/types";
 import { DEFAULT_LOOP, DEFAULT_TERMINATOR_LENGTH } from "../lib/loops";
@@ -22,7 +24,7 @@ import { SessionContext, type SessionValue, type Step } from "./context";
  * FASTA input is present and fall back to the sample, flagged offline, on failure.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [step, setStep] = useState<Step>("candidates");
+  const [step, setStep] = useState<Step>("input");
   const [expert, setExpert] = useState(false);
 
   const [targetFasta, setTargetFasta] = useState("");
@@ -37,6 +39,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     stem_overhang: "keep",
     include_terminator: true,
     terminator_length: DEFAULT_TERMINATOR_LENGTH,
+    drop_premature_terminators: true,
   });
   const updateConvertOptions = useCallback(
     (patch: Partial<ConvertOptions>) => setConvertOptions((o) => ({ ...o, ...patch })),
@@ -50,10 +53,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(
     sampleDesign.selected[0]?.region ?? null,
   );
+  const [engine, setEngine] = useState<HealthResponse | null>(null);
   const [offline, setOffline] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sessionId = useRef<string | null>(null);
+
+  // What the engine reports about itself; none reachable leaves the sample.
+  useEffect(() => {
+    let cancelled = false;
+    health()
+      .then((h) => {
+        if (!cancelled) setEngine(h);
+      })
+      .catch(() => {
+        if (!cancelled) setEngine(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Refresh the inspect summary (the targeting step reads panel members from
   // it) when the inputs change; debounced because textareas fire per keystroke.
@@ -80,6 +99,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearTimeout(timer);
     };
+  }, [targetFasta, panelFasta]);
+
+  // A session holds one target and panel, so a changed input needs a new one.
+  useEffect(() => {
+    sessionId.current = null;
   }, [targetFasta, panelFasta]);
 
   const ensureSession = useCallback(async (): Promise<string> => {
@@ -166,6 +190,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       (offline ? constructForRegion(selectedRegion) : undefined)
     );
   }, [convert, selectedRegion, offline]);
+  const selectedWithheld = useMemo(
+    () => (selectedRegion ? convert?.withheld.find((c) => c.region === selectedRegion) : undefined),
+    [convert, selectedRegion],
+  );
   const enrichment = useMemo(
     () => (offline && selectedRegion ? sampleEnrichment[selectedRegion] : undefined),
     [offline, selectedRegion],
@@ -191,7 +219,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSelectedRegion,
     selectedCandidate,
     selectedConstruct,
+    selectedWithheld,
     enrichment,
+    engine,
     offline,
     busy,
     error,

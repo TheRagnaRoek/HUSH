@@ -3,7 +3,8 @@ import { FastaInput } from "../common/FastaInput";
 import { validateFasta } from "../../lib/fasta";
 import { useSession } from "../../session/useSession";
 
-export function InputStep() {
+/** compact: the expert-mode panel body, without heading, divider or navigation. */
+export function InputStep({ compact = false }: { compact?: boolean }) {
   const { inspect, targetFasta, setTargetFasta, panelFasta, setPanelFasta, setStep } = useSession();
 
   const tSum = useMemo(
@@ -23,24 +24,26 @@ export function InputStep() {
   const gc = usingOwn ? tSum.gcPercent : inspect?.target.gc_percent;
   const panelLabel = usingOwn
     ? pSum
-      ? `loaded · ${pSum.recordCount}`
-      : "none"
+      ? `Loaded · ${pSum.recordCount}`
+      : "None"
     : inspect?.panel
       ? `${inspect.panel.name} · ${inspect.panel.count}`
-      : "none";
+      : "None";
   const ready = usingOwn ? tSum.ok : (inspect?.target_ready ?? false);
   const gcRich = (gc ?? 0) >= 60;
   const blockContinue = usingOwn && !tSum.ok;
 
   return (
-    <div className="workspace">
-      <div className="whead">
-        <h2>Load a target, and optionally a panel</h2>
-        <p>
-          Give HUSH the transcript you want to silence. Add a panel of related sequences - an HLA
-          locus, a gene family - to turn on allele-aware targeting.
-        </p>
-      </div>
+    <div className={compact ? "xp-body" : "workspace"}>
+      {!compact && (
+        <div className="whead">
+          <h2>Load a target, and optionally a panel</h2>
+          <p>
+            Give HUSH the transcript you want to silence. Add a panel of related sequences - an HLA
+            locus, a gene family - to turn on allele-aware targeting.
+          </p>
+        </div>
+      )}
 
       <div className="intake">
         <div className="sources">
@@ -74,7 +77,7 @@ export function InputStep() {
             <dt>Target</dt>
             <dd className="mono">{targetId}</dd>
             <dt>Molecule</dt>
-            <dd>{moltype}</dd>
+            <dd className="cap">{moltype}</dd>
             <dt>Length</dt>
             <dd className="num">
               {length != null ? `${length} ${moltype === "protein" ? "aa" : "nt"}` : "-"}
@@ -84,14 +87,14 @@ export function InputStep() {
             <dt>Panel</dt>
             <dd className="mono">{panelLabel}</dd>
             <dt>Readiness</dt>
-            <dd className={ready ? "ready" : ""}>{ready ? "ready" : usingOwn ? "fix errors" : "-"}</dd>
+            <dd className={ready ? "ready" : ""}>{ready ? "Ready" : usingOwn ? "Fix errors" : "-"}</dd>
           </dl>
         </div>
       </div>
 
-      {gcRich && moltype === "nucleotide" && (
+      {!compact && gcRich && moltype === "nucleotide" && (
         <>
-          <div className="divider" />
+          {!compact && <div className="divider" />}
           <div className="callout cyan">
             <span className="ic">{"ⓘ"}</span>
             <span>
@@ -102,17 +105,21 @@ export function InputStep() {
         </>
       )}
 
-      <div className="actions">
-        <button
-          type="button"
-          className="hbtn"
-          disabled={blockContinue}
-          onClick={() => setStep("targeting")}
-        >
-          Continue &rarr;
-        </button>
-        {blockContinue && <span className="hint">Fix the target sequence errors to continue.</span>}
-      </div>
+      {!compact && (
+        <div className="actions">
+          <button
+            type="button"
+            className="hbtn"
+            disabled={blockContinue}
+            onClick={() => setStep("targeting")}
+          >
+            Continue &rarr;
+          </button>
+          {blockContinue && (
+            <span className="hint">Fix the target sequence errors to continue.</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
