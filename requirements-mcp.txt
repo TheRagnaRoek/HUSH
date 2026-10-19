@@ -1,39 +1,70 @@
-# Pinned runtime environment: the exact versions HUSH was built and tested
-# with, including transitive dependencies. Generated from the shipped image.
+# Pinned MCP server environment, on top of requirements.txt.
 #
-# pyproject.toml holds the supported *ranges* and is what `pip install .` uses.
-# This file is the lock: it reproduces the tested environment exactly, and the
-# container build installs from it.
-#
-#   pip install -r requirements.txt
+#   pip install -r requirements-mcp.txt
 #   pip install --no-deps .
 #
-# Regenerate after changing a dependency:
-#   docker run --rm hush:local pip freeze | grep -v '^hush' | sort
+# mcp/mcp_server.py is run as a script, not installed, and imports only the "mcp"
+# package. fastmcp is pinned but not imported; it is kept on purpose. httpx2 and
+# httpcore2 match requirements-dev.txt so the two files can be installed together.
+#
+# Generated on Python 3.12 (Linux image). Lines with a marker are OS-specific. On
+# 3.11, keyring also needs importlib_metadata, which pip then resolves unpinned.
+# Regenerate after bumping mcp or fastmcp: install them on top of requirements.txt
+# in the image, run `pip freeze | grep -v '^hush' | sort`, and keep the new lines.
 
-Pygments==2.21.0
-annotated-doc==0.0.5
-annotated-types==0.8.0
-anyio==4.15.1
-biopython==1.88
-click==8.5.0
-fastapi==0.143.1
-h11==0.16.0
-idna==3.20
-markdown-it-py==4.2.0
-mdurl==0.1.2
-numpy==2.5.4
-opentelemetry-api==1.45.1
-pydantic==2.14.1
-pydantic_core==2.50.1
-rich==15.0.0
-shellingham==1.5.4
-starlette==1.8.0
-typer==0.27.3
-typing-inspection==0.4.4
-typing_extensions==4.16.0
-uvicorn==0.54.0
+-r requirements.txt
 
-# Additional pinned MCP requirements
-mcp==2.3.0
+Authlib==1.9.1
+PyJWT==2.15.1
+PyYAML==6.0.3
+SecretStorage==3.5.0; sys_platform == "linux"
+aiofile==3.12.3
+attrs==26.1.0
+beartype==0.23.1
+cachetools==7.2.4
+caio==0.12.9
+cffi==2.1.1
+cryptography==50.0.2
+cyclopts==5.2.0
+dnspython==2.9.0
+docstring_parser==0.18.0
+email-validator==2.3.0
+exceptiongroup==1.3.1
+fastmcp-slim==4.1.0
 fastmcp==4.1.0
+griffelib==2.4.0
+httpcore2==2.13.1
+httpx2==2.13.1
+jaraco.classes==3.4.0
+jaraco.context==6.1.2
+jaraco.functools==4.6.0
+jeepney==0.9.0; sys_platform == "linux"
+joserfc==1.7.7
+jsonref==1.1.0
+jsonschema-path==0.5.0
+jsonschema-specifications==2025.9.1
+jsonschema==4.26.0
+keyring==25.7.0
+mcp-types==2.3.0
+mcp==2.3.0
+more-itertools==11.2.1
+openapi-pydantic==0.6.0
+packaging==26.3
+pathable==0.6.0
+platformdirs==4.13.5
+py-key-value-aio==0.4.6
+pycparser==3.11
+pydantic-settings==2.16.0
+pyperclip==1.11.0
+python-dotenv==1.2.4
+python-multipart==0.0.32
+pywin32-ctypes==0.2.3; sys_platform == "win32"
+pywin32==312; sys_platform == "win32"
+referencing==0.37.0
+rich-rst==2.2.0
+rpds-py==2026.9.1
+sse-starlette==3.5.0
+truststore==0.10.5
+uncalled-for==0.4.1
+watchfiles==1.3.0
+websockets==17.3
