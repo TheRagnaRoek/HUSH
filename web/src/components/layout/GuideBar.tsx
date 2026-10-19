@@ -41,7 +41,7 @@ export function GuideBar() {
   const { step } = useSession();
   return (
     <div className="guide">
-      <img className="heidi" src="/heidi.png" alt="Heidi, the HUSH design wizard" />
+      <img className="heidi" src="/shRNA_wizard_Heidi.svg" alt="Heidi, the HUSH design wizard" />
       <span className="gt">{LINES[step]}</span>
     </div>
   );
