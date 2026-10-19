@@ -3,8 +3,8 @@ This module exposes a basic MCP server making
 hush design
 hush convert
 hush reference
-available to AI agents. This MCP server exposes all possible parameters and executes commands as subprocesses using the
-HUSH executable.
+available to AI agents. This MCP server exposes all possible parameters and executes
+commands as subprocesses using the HUSH executable.
 """
 import os
 import subprocess
