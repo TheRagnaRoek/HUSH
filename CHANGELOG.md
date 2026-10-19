@@ -11,6 +11,9 @@ versioning. The version is declared in `pyproject.toml` and must match
   from the checkout by default; set `HUSH_IMAGE` to run a published image.
 - Release workflow refuses a `v*` tag that differs from the `pyproject.toml`
   version.
+- `requirements-mcp.txt` is now a lock on top of `requirements.txt` instead of a
+  copy of it, and `pyproject.toml` has an `mcp` extra. The MCP server stays a
+  script (`mcp/mcp_server.py`) and is not installed as a package.
 
 ## 1.0.0 - not yet released
 

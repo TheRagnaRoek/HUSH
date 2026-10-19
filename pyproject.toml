@@ -24,6 +24,9 @@ dependencies = [
 # The HTTP API is an optional extra: the core library, CLI and tests never need
 # it. Install with ".[api]" (or ".[dev,api]") to run the FastAPI backend.
 api = ["fastapi>=0.110", "uvicorn>=0.29"]
+# The MCP server is an optional extra too. It needs the 2.x "mcp" API
+# (mcp.server.mcpserver); see requirements-mcp.txt for the tested pins.
+mcp = ["mcp>=2.3,<3"]
 # starlette's TestClient moved to httpx2; httpx alone fails collection on a
 # current starlette, so pin the one the test client actually imports.
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "httpx2>=2.13", "ruff>=0.6"]
@@ -34,6 +37,8 @@ hush = "app.cli:app"
 [tool.setuptools]
 # Flat top-level packages mirroring the pipeline stages, plus the service layer
 # (the orchestration layer used by the CLI and the API) and the HTTP API.
+# mcp/ is deliberately absent: a top-level "mcp" package would shadow the PyPI
+# "mcp" that the server imports. The server runs as a script instead.
 packages = ["core", "msa", "shrna", "service", "app", "api"]
 
 [tool.pytest.ini_options]
