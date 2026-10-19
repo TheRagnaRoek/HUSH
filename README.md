@@ -192,6 +192,33 @@ cd web && npm run dev  # GUI on :5173, proxying the API
 Interactive API docs are at `/docs`, the OpenAPI schema at `/openapi.json`. See
 [`docs/api.md`](docs/api.md) and [`web/README.md`](web/README.md).
 
+## MCP Server
+HUSH includes an optional MCP server, making its `design`, `convert` and `reference` commands available to AI applications.
+### Requisites
+To set up the MCP server, follow the instructions in the "Install from source" section but use `requirements-mcp.txt`
+instead of `requirements.txt`. Then note down the absolute path of the HUSH executable now located in `.venv/Scripts`.
+### Connecting to an AI application
+The following config was validated on Claude Desktop version 2.42304.2. 
+
+You can find the relevant config file under (`Settings`>`Developer`>`Local MCP servers`>`Edit config`). Insert the
+following into the main `{}` brackets.
+```json
+
+  "mcpServers": {
+    "hush-sirna": {
+      "command": "<path to hush directory>/.venv/Scripts/python[.exe]",
+      "args": [
+        "<path to hush directory>/mcp/mcp_server.py"
+      ],
+      "env": {
+        "HUSH_EXECUTABLE": "<path to hush directory>/.venv/Scripts/hush[.exe]"
+      }
+    }
+  }
+
+```
+This configuration allows Claude Desktop to automatically start the MCP server when the application is opened. Local 
+file access may be required for input files.
 ## Test Suite
 
 Install from the lockfile first so that the versions match. The suite includes the
@@ -257,7 +284,7 @@ transcriptome off-target index, which is built on the user's machine by
 redistributed, so the reference always matches a RefSeq release that the user can
 name, and the index manifest records which one.
 
-**Dependencies are pinned.** `requirements.txt`, `requirements-dev.txt` and
+**Dependencies are pinned.** `requirements.txt`, `requirements-dev.txt`, `requirements-mcp.txt` and
 `web/package-lock.json` record the exact versions used; `pyproject.toml` holds
 the supported ranges.
 
