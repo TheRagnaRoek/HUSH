@@ -63,6 +63,7 @@ from shrna.convert import (
     convert,
     get_stem_overhang,
 )
+from core.version import __version__
 from shrna.loops import DEFAULT_LOOP, LOOPS, LoopScaffold, get_loop
 
 # Option groups in 'design --help'.
@@ -81,6 +82,25 @@ reference_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(reference_app, name="reference")
+
+
+def _show_version(value: bool) -> None:
+    if value:
+        typer.echo(f"hush {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_show_version,
+        is_eager=True,
+        help="Show the HUSH version and exit.",
+    ),
+) -> None:
+    """HUSH - Human genome Universal Silencing Hairpin-designer."""
 
 
 def _echo_sequence(

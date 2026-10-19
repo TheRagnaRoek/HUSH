@@ -1,0 +1,18 @@
+# Changelog
+
+All notable changes to HUSH are recorded here. Versions follow semantic
+versioning. The version is declared in `pyproject.toml` and must match
+`CITATION.cff` and `web/package.json` (checked by `tests/test_version.py`).
+
+## Unreleased
+
+- `hush --version` and the API `/health` report the installed version.
+- Docker Compose and the `docker/hush.*` launchers build and run `hush:local`
+  from the checkout by default; set `HUSH_IMAGE` to run a published image.
+- Release workflow refuses a `v*` tag that differs from the `pyproject.toml`
+  version.
+
+## 1.0.0 - not yet released
+
+First release. Includes the allele-aware siRNA/shRNA design pipeline, the CLI,
+the HTTP API and web GUI, and the Docker image with bowtie1.

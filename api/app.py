@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import shutil
-from importlib import metadata
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -20,13 +19,11 @@ from api import inputs, schemas, serialize
 from api.store import SessionStore
 from core.errors import HushError
 from core.reference import default_index_prefix, index_exists
+from core.version import __version__
 from service.params import DesignParams
 from service.session import HushSession
 
-try:
-    _VERSION = metadata.version("hush")
-except metadata.PackageNotFoundError:  # pragma: no cover - editable/uninstalled
-    _VERSION = "0.0.0"
+_VERSION = __version__
 
 WEB_DIR_ENV = "HUSH_WEB_DIR"
 
