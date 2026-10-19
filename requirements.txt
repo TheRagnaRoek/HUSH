@@ -3,7 +3,8 @@
 #
 # pyproject.toml holds the supported *ranges* and is what `pip install .` uses.
 # This file is the lock: it reproduces the tested environment exactly, and the
-# container build installs from it.
+# container build installs from it. It needs Python 3.12 or newer (numpy 2.5 has
+# no 3.11 wheels); on 3.11 install the ranges with `pip install .` instead.
 #
 #   pip install -r requirements.txt
 #   pip install --no-deps .

@@ -86,6 +86,9 @@ pip install -r requirements.txt -r requirements-dev.txt
 pip install --no-deps -e .
 ```
 
+The lockfile needs Python 3.12 or newer, because numpy 2.5 does not support 3.11.
+On 3.11, use the first command.
+
 All dependencies install with pip except **bowtie1**, which is used only for the
 transcriptome off-target search. Install it from a package manager or bioconda,
 or use the container, which already contains it. The design engine, the MSA stage,
