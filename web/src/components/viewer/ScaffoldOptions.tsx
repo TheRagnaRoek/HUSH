@@ -1,13 +1,16 @@
+import type { StemOverhang } from "../../api/types";
 import { LOOPS, loopInfo, MIN_TERMINATOR_LENGTH } from "../../lib/loops";
 import { useSession } from "../../session/useSession";
 
-/** Binds the shRNA scaffold options (loop, poly-U terminator) to the session's
+/** Binds the shRNA scaffold options (loop, sense overhang, poly-U terminator) to the session's
  * ConvertOptions, which runConvert sends to the API. */
 export function ScaffoldOptions() {
   const { convertOptions, updateConvertOptions } = useSession();
   const loop = convertOptions.loop ?? "jensen";
+  const stemOverhang = convertOptions.stem_overhang ?? "keep";
   const include = convertOptions.include_terminator ?? true;
   const termLen = convertOptions.terminator_length ?? 6;
+  const drop = convertOptions.drop_premature_terminators ?? true;
   const info = loopInfo(loop);
 
   return (
@@ -23,6 +26,17 @@ export function ScaffoldOptions() {
         </select>
       </label>
 
+      <label className="so-field">
+        <span className="so-label">Sense overhang</span>
+        <select
+          value={stemOverhang}
+          onChange={(e) => updateConvertOptions({ stem_overhang: e.target.value as StemOverhang })}
+        >
+          <option value="keep">Keep (21-nt sense)</option>
+          <option value="trim">Trim (loop joins core)</option>
+        </select>
+      </label>
+
       <label className="so-field so-check">
         <input
           type="checkbox"
@@ -32,8 +46,8 @@ export function ScaffoldOptions() {
         <span className="so-label">Pol III poly-U terminator</span>
       </label>
 
-      <label className="so-field">
-        <span className="so-label">length</span>
+      <label className="so-field so-len">
+        <span className="so-label">Length</span>
         <input
           type="number"
           min={MIN_TERMINATOR_LENGTH}
@@ -44,6 +58,18 @@ export function ScaffoldOptions() {
             if (!Number.isNaN(n)) updateConvertOptions({ terminator_length: Math.round(n) });
           }}
         />
+      </label>
+
+      <label
+        className="so-field so-check so-wide"
+        title="Pol III stops at a run of four or more U, so a hairpin with one in its body is cut short."
+      >
+        <input
+          type="checkbox"
+          checked={drop}
+          onChange={(e) => updateConvertOptions({ drop_premature_terminators: e.target.checked })}
+        />
+        <span className="so-label">Withhold premature terminators</span>
       </label>
 
       {info && <span className="so-cite">{info.citation}</span>}

@@ -1,8 +1,11 @@
 import { useState } from "react";
 import type { DesignParams } from "../../api/types";
+import { RefNote } from "../common/RefLink";
 import { rulesEnabled, type GateDef } from "./gates";
 
 type Update = (patch: Partial<DesignParams>) => void;
+
+const OVERHANG_LABELS: Record<string, string> = { natural: "Natural", dtdt: "dTdT", uu: "UU" };
 
 /** Number input that writes back only valid numbers (clearing keeps the prior
  * value rather than pushing NaN into params). */
@@ -73,8 +76,8 @@ function GateControl({
             value={params.rule_mode ?? "any"}
             onChange={(e) => update({ rule_mode: e.target.value as "any" | "all" })}
           >
-            <option value="any">any</option>
-            <option value="all">all</option>
+            <option value="any">Any</option>
+            <option value="all">All</option>
           </select>
         </span>
       );
@@ -93,7 +96,7 @@ function GateControl({
     case "homo":
       return (
         <span className="ctl">
-          max{" "}
+          Max{" "}
           <NumberInput
             value={params.max_homopolymer_run ?? 3}
             onCommit={(n) => update({ max_homopolymer_run: Math.round(n) })}
@@ -104,7 +107,7 @@ function GateControl({
     case "offtarget":
       return (
         <span className="ctl">
-          min mm{" "}
+          Minimum mismatch{" "}
           <NumberInput
             value={params.offtarget_min_mismatch ?? 2}
             onCommit={(n) => update({ offtarget_min_mismatch: Math.round(n) })}
@@ -143,7 +146,7 @@ function GateControl({
     case "asym":
       return (
         <span className="ctl">
-          win{" "}
+          Win{" "}
           <NumberInput
             value={params.asymmetry_window ?? 4}
             onCommit={(n) => update({ asymmetry_window: Math.round(n) })}
@@ -164,7 +167,7 @@ function GateControl({
             value={params.overhang ?? "natural"}
             onChange={(e) => update({ overhang: e.target.value })}
           >
-            <option value="natural">natural</option>
+            <option value="natural">Natural</option>
             <option value="dtdt">dTdT</option>
             <option value="uu">UU</option>
           </select>
@@ -177,10 +180,13 @@ export function GateRow({
   gate,
   params,
   update,
+  notice,
 }: {
   gate: GateDef;
   params: DesignParams;
   update: Update;
+  /** A warning about this gate, shown while it is switched on. */
+  notice?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -200,6 +206,14 @@ export function GateRow({
     }
   }
 
+  // The pill shows the live setting, not the gate's default.
+  const stateLabel =
+    gate.toggle === "none"
+      ? `${params.length ?? 19} / ${OVERHANG_LABELS[params.overhang ?? "natural"] ?? params.overhang}`
+      : enabled
+        ? "On"
+        : "Off";
+
   return (
     <div className="gate">
       {gate.toggle === "none" ? (
@@ -216,7 +230,9 @@ export function GateRow({
       )}
       <div className="name">
         {gate.name}
-        <span className="default">{gate.def}</span>
+        <span className={`state ${enabled ? "on" : "off"}${gate.toggle === "none" ? " value" : ""}`}>
+          {stateLabel}
+        </span>
       </div>
       <div className="right">
         <GateControl gate={gate} params={params} update={update} />
@@ -227,14 +243,23 @@ export function GateRow({
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
-          ?
+          i
         </button>
       </div>
       <div className="sub">{gate.sub}</div>
+      {notice && enabled && (
+        <div className="gnote">
+          <span className="ic">{"\u26A0"}</span>
+          {notice}
+        </div>
+      )}
       {open && (
         <div className="info">
           <b>What it does.</b> {gate.what}
           <div className="opt">{gate.opt}</div>
+          <div className="refline">
+            <RefNote cites={gate.cites} to={gate.ref} />
+          </div>
         </div>
       )}
     </div>

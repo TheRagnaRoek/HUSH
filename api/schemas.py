@@ -24,7 +24,12 @@ from core.sirna import OverhangPolicy
 from core.thermo import REFERENCE_TEMPERATURE_C, ThermoParams
 from msa.windows import DEFAULT_MIN_SPARE_MISMATCHES
 from service.params import AlleleTargetingSpec, DesignParams
-from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions
+from shrna.convert import (
+    DEFAULT_TERMINATOR_LENGTH,
+    ShrnaOptions,
+    StemOverhang,
+    get_stem_overhang,
+)
 from shrna.loops import DEFAULT_LOOP, get_loop
 
 
@@ -142,6 +147,7 @@ class ConvertOptionsSchema(BaseModel):
     """shRNA conversion options."""
 
     loop: str = DEFAULT_LOOP
+    stem_overhang: str = StemOverhang.KEEP.value
     include_terminator: bool = True
     terminator_length: int = DEFAULT_TERMINATOR_LENGTH
     drop_premature_terminators: bool = True
@@ -149,6 +155,7 @@ class ConvertOptionsSchema(BaseModel):
     def to_domain(self) -> ShrnaOptions:
         return ShrnaOptions(
             loop=get_loop(self.loop),
+            stem_overhang=get_stem_overhang(self.stem_overhang),
             include_terminator=self.include_terminator,
             terminator_length=self.terminator_length,
             drop_premature_terminators=self.drop_premature_terminators,
@@ -315,6 +322,7 @@ class ConstructResult(BaseModel):
 class ConvertResponse(BaseModel):
     loop_name: str
     loop_seq: str
+    stem_overhang: str = StemOverhang.KEEP.value
     terminator_length: Optional[int] = None
     construct_count: int
     fold_ok_count: int
@@ -333,9 +341,15 @@ class SessionResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    """Liveness, plus what the off-target check needs on this host."""
+
     status: str
     service: str
     version: str
+    # bowtie1 found on PATH (searched as the default bowtie_path).
+    bowtie_available: bool
+    # The default transcriptome index exists; 'hush reference build' makes it.
+    offtarget_reference: bool
 
 
 class ErrorResponse(BaseModel):

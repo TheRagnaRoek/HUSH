@@ -1,8 +1,13 @@
 import { CandidateList } from "../candidates/CandidateList";
 import { Funnel } from "../candidates/Funnel";
 import { ConstructViewer } from "../viewer/ConstructViewer";
+import { WithheldSummary } from "../viewer/WithheldSummary";
 import { terminatorString } from "../../lib/loops";
 import { RELAXED_HLA_PATCH } from "../../lib/params";
+import { OFFTARGET_REASON, offtargetStatus } from "../../lib/engine";
+import { POSITION_ORDER, rankMode } from "../../lib/targeting";
+import { acronyms } from "../../lib/text";
+import { exportConstruct, exportDesign, type ExportFormat } from "../../lib/tsv";
 import { useSession } from "../../session/useSession";
 
 /** The gate fewest candidates cleared: the one to loosen first.
@@ -19,13 +24,15 @@ function narrowestGate(
   return { name, passed };
 }
 
-export function CandidatesStep() {
+/** compact: the expert-mode results pane (funnel, list and viewer side by side). */
+export function CandidatesStep({ compact = false }: { compact?: boolean }) {
   const {
     design,
     inspect,
     convert,
     selectedCandidate,
     selectedConstruct,
+    selectedWithheld,
     selectedRegion,
     enrichment,
     offline,
@@ -33,6 +40,8 @@ export function CandidatesStep() {
     setStep,
     params,
     runDesign,
+    runConvert,
+    engine,
     busy,
   } = useSession();
 
@@ -45,18 +54,17 @@ export function CandidatesStep() {
   const emptyRun = !offline && !error && !busy && design.selected.length === 0;
   const narrowest = emptyRun ? narrowestGate(design.funnel) : null;
   const seedIsOn = params.use_seed_filter;
+  const mode = rankMode(design.targeting);
+  const offtarget = offtargetStatus(engine);
 
-  return (
-    <div className="workspace">
-      <div className="whead">
-        <h2>Candidates</h2>
-        <p>
-          {design.selected.length} of {design.candidate_count} enumerated windows cleared every
-          gate. The funnel shows where the rest fell out; pick a candidate to load it into the
-          viewer.
-        </p>
-      </div>
+  const summary = (
+    <>
+      {design.selected.length} of {design.candidate_count} enumerated windows cleared every gate.
+    </>
+  );
 
+  const notices = (
+    <>
       {error && (
         <div className="banner err">
           Your design did not run: {error} The results below are representative
@@ -65,25 +73,38 @@ export function CandidatesStep() {
       )}
       {offline && !error && (
         <div className="banner">
-          Representative sample data. Load a target in step 1 and run a design to
-          see your own results.
+          {compact
+            ? "Representative sample data. Load a target and run a design to see your own results."
+            : "Representative sample data. Load a target in step 1 and run a design to see your own results."}
         </div>
+      )}
+      {design.offtarget_skipped && !offline && !error && (
+        <div className="banner warn">
+          Off-target screening was skipped, so these guides have not been checked against the
+          human transcriptome.{" "}
+          {offtarget === "no-bowtie" || offtarget === "no-reference"
+            ? OFFTARGET_REASON[offtarget]
+            : "No reference index was available to the engine."}
+        </div>
+      )}
+      {mode !== "discriminating" && !error && (
+        <div className="banner">{POSITION_ORDER[mode]}</div>
       )}
 
       {emptyRun && (
         <div className="callout warn">
-          <span className="ic">{"\u26A0"}</span>
+          <span className="ic">{"⚠"}</span>
           <span>
             <b>No candidate cleared every gate.</b>
             {narrowest && (
               <>
-                {" "}The narrowest was <b>{narrowest.name}</b>, which{" "}
+                {" "}The narrowest was <b>{acronyms(narrowest.name)}</b>, which{" "}
                 {narrowest.passed} of {design.candidate_count} passed.
               </>
             )}
             {seedIsOn ? (
               <>
-                {" "}The seed filter is the siDirect standard but deliberately
+                {" "}The seed filter (Naito et al. 2009) is deliberately
                 strict - on a GC-rich target it can reject everything.
                 <br />
                 <button
@@ -97,30 +118,112 @@ export function CandidatesStep() {
               </>
             ) : (
               <>
-                {" "}Loosen it in{" "}
-                <button
-                  type="button"
-                  className="linkbtn"
-                  onClick={() => setStep("criteria")}
-                >
-                  step 3
-                </button>{" "}
+                {" "}Loosen the criteria
+                {compact ? (
+                  " "
+                ) : (
+                  <>
+                    {" "}in{" "}
+                    <button
+                      type="button"
+                      className="linkbtn"
+                      onClick={() => setStep("criteria")}
+                    >
+                      step 3
+                    </button>{" "}
+                  </>
+                )}
                 and run again.
               </>
             )}
           </span>
         </div>
       )}
+    </>
+  );
+
+  const listHead = (
+    <div className="listhead">
+      <span className="lh">
+        {mode === "discriminating" ? "Selected - by discrimination" : "Selected - by target position"}
+      </span>
+      <span className="exports">
+        <button
+          type="button"
+          className="linkbtn"
+          disabled={design.selected.length === 0}
+          onClick={() => exportDesign(design, offline, "tsv")}
+        >
+          Export TSV
+        </button>
+        <button
+          type="button"
+          className="linkbtn"
+          disabled={design.selected.length === 0}
+          onClick={() => exportDesign(design, offline, "txt")}
+        >
+          Export TXT
+        </button>
+      </span>
+    </div>
+  );
+
+  const onExport = selectedConstruct
+    ? (format: ExportFormat) => exportConstruct(selectedConstruct, targetId, offline, format)
+    : undefined;
+
+  if (compact) {
+    return (
+      <div className="xp-body">
+        <p className="xp-sum">{summary}</p>
+        {notices}
+        <WithheldSummary />
+        <div className="xp-top">
+          <div>
+            <Funnel funnel={design.funnel} offtargetSkipped={design.offtarget_skipped} />
+          </div>
+          <div>
+            {listHead}
+            <CandidateList />
+          </div>
+        </div>
+        {selectedCandidate && (
+          <ConstructViewer
+            candidate={selectedCandidate}
+            construct={selectedConstruct}
+            withheld={selectedWithheld}
+            enrichment={enrichment}
+            criteria={design.criteria}
+            offtargetSkipped={design.offtarget_skipped}
+            rank={rank}
+            mode={mode}
+            targetId={targetId}
+            terminator={terminator}
+            startTab="align"
+            keepTab
+            onExport={onExport}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="workspace">
+      <div className="whead">
+        <h2>Candidates</h2>
+        <p>
+          {summary} The funnel shows where the rest fell out; pick a candidate to load it into the
+          viewer.
+        </p>
+      </div>
+
+      {notices}
 
       <div className="split">
         <div className="leftcol">
           <Funnel funnel={design.funnel} offtargetSkipped={design.offtarget_skipped} />
-          <div className="listhead">
-            <span className="lh">Selected - by discrimination</span>
-            <button type="button" className="linkbtn">
-              Export TSV
-            </button>
-          </div>
+          {listHead}
           <CandidateList />
         </div>
         <div className="rightcol">
@@ -128,17 +231,43 @@ export function CandidatesStep() {
             <ConstructViewer
               candidate={selectedCandidate}
               construct={selectedConstruct}
+              withheld={selectedWithheld}
               enrichment={enrichment}
               criteria={design.criteria}
               offtargetSkipped={design.offtarget_skipped}
               rank={rank}
+              mode={mode}
               targetId={targetId}
               terminator={terminator}
               startTab="align"
-              onOpenConstruct={() => setStep("construct")}
+              buildView="overview"
+              onOpenConstruct={
+                selectedConstruct || selectedWithheld
+                  ? () => setStep("construct")
+                  : () => void runConvert()
+              }
+              onExport={onExport}
             />
           )}
         </div>
+      </div>
+
+      <div className="actions">
+        <button type="button" className="hbtn ghost" onClick={() => setStep("criteria")}>
+          &larr; Back
+        </button>
+        <button
+          type="button"
+          className="hbtn"
+          disabled={busy || design.selected.length === 0}
+          onClick={() => (convert ? setStep("construct") : void runConvert())}
+        >
+          {busy ? "Converting..." : convert ? "Continue to shRNA construct →" : "Convert to shRNA →"}
+        </button>
+        <span className="hint">
+          Optional. The siRNA duplex of each candidate is ready to use as it is; convert to get a
+          hairpin to express from a vector.
+        </span>
       </div>
     </div>
   );

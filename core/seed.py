@@ -43,13 +43,13 @@ def seed_region(strand: BioSequence | str) -> str:
 
 
 # Constants of Naito et al. 2009, taken verbatim. Do not tune.
-SIDIRECT_HELIX_INIT_DS = -10.8
+SEED_HELIX_INIT_DS = -10.8
 
 # The paper's rounded gas constant, not core.thermo's R_CAL.
-SIDIRECT_R = 1.987
+SEED_GAS_CONSTANT = 1.987
 
-SIDIRECT_TOTAL_STRAND_CONC_M = 100e-6
-SIDIRECT_SODIUM_M = 0.1
+SEED_TOTAL_STRAND_CONC_M = 100e-6
+SEED_SODIUM_M = 0.1
 SALT_CORRECTION_COEFFICIENT = 16.6
 
 # A seed passes when its Tm is strictly below this.
@@ -58,8 +58,8 @@ SEED_TM_THRESHOLD_C = 21.5
 
 def seed_duplex_tm(
     seq: BioSequence | str,
-    total_strand_conc: float = SIDIRECT_TOTAL_STRAND_CONC_M,
-    sodium: float = SIDIRECT_SODIUM_M,
+    total_strand_conc: float = SEED_TOTAL_STRAND_CONC_M,
+    sodium: float = SEED_SODIUM_M,
 ) -> float:
     """Tm in degrees C of a seed duplex (Naito et al. 2009).
 
@@ -85,9 +85,9 @@ def seed_duplex_tm(
     dh, ds = stacking_terms(rna, params=NN_PARAMS_FREIER_1986)
 
     denominator = (
-        SIDIRECT_HELIX_INIT_DS
+        SEED_HELIX_INIT_DS
         + ds
-        + SIDIRECT_R * math.log(total_strand_conc / 4.0)
+        + SEED_GAS_CONSTANT * math.log(total_strand_conc / 4.0)
     )
     kelvin = (1000.0 * dh) / denominator
     return (

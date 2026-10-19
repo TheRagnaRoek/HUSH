@@ -282,6 +282,7 @@ def convert_response(result: ConvertResult) -> schemas.ConvertResponse:
     return schemas.ConvertResponse(
         loop_name=options.loop.name,
         loop_seq=options.loop.seq,
+        stem_overhang=options.stem_overhang.value,
         terminator_length=(
             options.terminator_length if options.include_terminator else None
         ),

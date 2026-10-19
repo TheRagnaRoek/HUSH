@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AlignmentModel } from "../../lib/alignment";
 import { discProse } from "../../lib/disc";
+import { NO_ALLELES, type RankMode } from "../../lib/targeting";
 
 interface TipState {
   show: boolean;
@@ -15,9 +16,11 @@ const EMPTY: TipState = { show: false, x: 0, y: 0, title: "", lines: [] };
 export function AlignmentTrack({
   model,
   targetId,
+  mode = "discriminating",
 }: {
   model: AlignmentModel;
   targetId: string;
+  mode?: RankMode;
 }) {
   const [tip, setTip] = useState<TipState>(EMPTY);
   const target = [...model.target];
@@ -26,6 +29,8 @@ export function AlignmentTrack({
   const cols = Array.from({ length: L }, (_, i) => i);
 
   const weakest = model.alleles.find((a) => a.weak) ?? model.alleles[0];
+  // Without a panel or without anything spared there is no allele to compare.
+  const compare = model.alleles.length > 0;
 
   return (
     <div className="vpane">
@@ -35,18 +40,26 @@ export function AlignmentTrack({
             className="sw"
             style={{ background: "var(--brand-soft)", boxShadow: "inset 0 0 0 1px var(--brand)" }}
           />
-          target / guide
+          Target / guide
         </span>
         <span>
-          <span className="sw" style={{ background: "var(--mismatch)" }} />
-          mismatch vs a spared allele
+          <span className="sw" style={{ background: "var(--cyan-soft)" }} />
+          Seed (guide P2-P8)
         </span>
-        <span>hover a highlighted base for its discrimination criteria</span>
+        {compare && (
+          <>
+            <span>
+              <span className="sw" style={{ background: "var(--mismatch)" }} />
+              Mismatch vs a spared allele
+            </span>
+            <span>Hover a highlighted base for its discrimination criteria</span>
+          </>
+        )}
       </div>
 
       <div className="aln">
         <div className="alnrow">
-          <span className="rl">position</span>
+          <span className="rl">Target position</span>
           <div className="track">
             {cols.map((i) => (
               <span className="poslab" key={i}>
@@ -58,7 +71,7 @@ export function AlignmentTrack({
 
         <div className="alnrow target">
           <span className="rl">
-            <b>{targetId}</b>target &middot; sense
+            <b>{targetId}</b>Target &middot; sense
           </span>
           <div className="track">
             {target.map((b, i) => (
@@ -70,7 +83,7 @@ export function AlignmentTrack({
         </div>
 
         <div className="alnrow">
-          <span className="rl">guide 3&prime;&rarr;5&prime;</span>
+          <span className="rl">Guide 3&prime;&rarr;5&prime;</span>
           <div className="track">
             {guideRev.map((b, i) => (
               <span className="base dim" key={i}>
@@ -80,18 +93,28 @@ export function AlignmentTrack({
           </div>
         </div>
 
-        <div className="alnrow sep">
-          <span className="rl" style={{ color: "var(--cyan-ink)" }}>
-            spared alleles
-          </span>
-          <div className="track" />
+        <div className="alnrow">
+          <span className="rl">Guide position</span>
+          <div className="track">
+            {cols.map((i) => {
+              // The guide runs the other way: window column i pairs with guide position L - i.
+              const p = L - i;
+              return (
+                <span className={p >= 2 && p <= 8 ? "poslab gpos seed" : "poslab gpos"} key={i}>
+                  P{p}
+                </span>
+              );
+            })}
+          </div>
         </div>
+
+        {compare && <div className="funnel-h aln-h">Spared alleles</div>}
 
         {model.alleles.map((a) => (
           <div className="alnrow" key={a.name}>
             <span className="rl">
               <b>{a.name}</b>
-              {a.diff} diff{a.weak ? " · weakest" : ""}
+              {a.diff} diff{a.weak ? " · Weakest" : ""}
             </span>
             <div className="track">
               {cols.map((i) => {
@@ -131,17 +154,31 @@ export function AlignmentTrack({
       </div>
 
       <p className="hint" style={{ marginTop: 14 }}>
-        The guide matches the target across the window; highlighted columns are where each spared
-        allele differs. HUSH scores a window by its <b>weakest</b> spared allele
-        {weakest ? <> &mdash; here {weakest.name}</> : null}.
-        {!model.complete && (
-          <>
-            {" "}
-            Showing each allele&apos;s deciding mismatch; the full per-base window alignment needs
-            the panel surfaced by the API (planned).
-          </>
-        )}
+        Target positions count along the window from its 5′ end. Guide positions (P) count from the
+        guide&apos;s 5′ end, so they run the opposite way; the mismatch tooltips and the
+        discrimination chips use the guide positions.
       </p>
+
+      {compare ? (
+        <p className="hint" style={{ marginTop: 14 }}>
+          The guide matches the target across the window; highlighted columns are where each spared
+          allele differs. HUSH scores a window by its <b>weakest</b> spared allele
+          {weakest ? <> &mdash; here {weakest.name}</> : null}.
+          {!model.complete && (
+            <>
+              {" "}
+              Showing each allele&apos;s deciding mismatch; the full per-base window alignment
+              needs the panel surfaced by the API (planned).
+            </>
+          )}
+        </p>
+      ) : (
+        <p className="hint" style={{ marginTop: 14 }}>
+          {mode === "discriminating" ? NO_ALLELES.none : NO_ALLELES[mode]} The guide pairs with the
+          target across the whole window.
+          {mode === "none" && " Add a panel to see where each allele differs."}
+        </p>
+      )}
 
       {tip.show && (
         <div className="tip show" role="tooltip" style={{ left: tip.x, top: tip.y }}>

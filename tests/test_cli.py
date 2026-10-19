@@ -86,8 +86,8 @@ def test_design_default_mode_is_union(target_fasta):
 
 
 def test_design_offtarget_on_by_default_warns_without_index(target_fasta):
-    # The reference check is the safety floor, so running without one still
-    # works but has to say so in terms of the consequence, not the missing flag.
+    # Running without a reference works, but the output must state the
+    # consequence (no off-target screening), not only the missing flag.
     result = runner.invoke(app, ["design", str(target_fasta)])
     assert result.exit_code == 0
     assert "UNREFERENCED RUN" in result.stdout
@@ -198,7 +198,7 @@ def test_design_unknown_overhang_errors(target_fasta):
 
 
 def test_design_homopolymer_filter_on_by_default(target_fasta):
-    # The homopolymer gate is part of the default paradigm.
+    # The homopolymer gate is part of the default settings.
     result = runner.invoke(app, ["design", str(target_fasta), "--no-seed"])
     assert result.exit_code == 0
     assert "homopolymer:" in result.stdout
@@ -457,6 +457,41 @@ def test_convert_bottom_oligo_is_reverse_complement_of_top(target_fasta, tmp_pat
     top, bottom = row["insert_top_dna_5to3"], row["insert_bottom_dna_5to3"]
     complement = {"A": "T", "T": "A", "G": "C", "C": "G"}
     assert bottom == "".join(complement[b] for b in reversed(top))
+
+
+def test_convert_stem_overhang_trim_shortens_the_hairpin(target_fasta, tmp_path):
+    sel = _design_tsv(target_fasta, tmp_path)
+    keep_out, trim_out = tmp_path / "keep.tsv", tmp_path / "trim.tsv"
+    assert runner.invoke(app, ["convert", str(sel), "-o", str(keep_out)]).exit_code == 0
+    result = runner.invoke(
+        app,
+        [
+            "convert", str(sel), "--stem-overhang", "trim",
+            "--keep-premature-terminators", "-o", str(trim_out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "sense overhang trim" in result.stdout
+
+    def rows(path):
+        lines = path.read_text(encoding="ascii").splitlines()
+        cols = lines[0].split("\t")
+        return [dict(zip(cols, ln.split("\t"))) for ln in lines[1:]]
+
+    trimmed = rows(trim_out)
+    assert trimmed and all(r["sense_overhang"] == "" for r in trimmed)
+    keep_by_region = {r["region"]: r for r in rows(keep_out)}
+    for r in trimmed:
+        kept = keep_by_region.get(r["region"])
+        if kept is not None:
+            drop = len(kept["sense_overhang"])
+            assert len(r["hairpin_rna_5to3"]) == len(kept["hairpin_rna_5to3"]) - drop
+
+
+def test_convert_unknown_stem_overhang_errors(target_fasta, tmp_path):
+    sel = _design_tsv(target_fasta, tmp_path)
+    result = runner.invoke(app, ["convert", str(sel), "--stem-overhang", "fill"])
+    assert result.exit_code != 0
 
 
 def test_convert_unknown_loop_errors(target_fasta, tmp_path):

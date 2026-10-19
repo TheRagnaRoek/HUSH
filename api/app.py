@@ -8,7 +8,7 @@ Endpoints, errors and CORS behaviour: docs/api.md.
 from __future__ import annotations
 
 import os
-from importlib import metadata
+import shutil
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -18,12 +18,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from api import inputs, schemas, serialize
 from api.store import SessionStore
 from core.errors import HushError
+from core.reference import default_index_prefix, index_exists
+from core.version import __version__
+from service.params import DesignParams
 from service.session import HushSession
 
-try:
-    _VERSION = metadata.version("hush")
-except metadata.PackageNotFoundError:  # pragma: no cover - editable/uninstalled
-    _VERSION = "0.0.0"
+_VERSION = __version__
 
 WEB_DIR_ENV = "HUSH_WEB_DIR"
 
@@ -100,7 +100,13 @@ def create_app(
 
     @app.get("/health", response_model=schemas.HealthResponse, tags=["meta"])
     def health() -> schemas.HealthResponse:
-        return schemas.HealthResponse(status="ok", service="HUSH API", version=_VERSION)
+        return schemas.HealthResponse(
+            status="ok",
+            service="HUSH API",
+            version=_VERSION,
+            bowtie_available=shutil.which(DesignParams().bowtie_path) is not None,
+            offtarget_reference=index_exists(default_index_prefix()),
+        )
 
     @app.post("/inspect", response_model=schemas.InspectResponse, tags=["stateless"])
     def inspect(req: schemas.InspectRequest) -> schemas.InspectResponse:

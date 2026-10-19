@@ -35,12 +35,34 @@ class Orientation(str, Enum):
     SA = "sa"
 
 
+class StemOverhang(str, Enum):
+    """Fate of the sense overhang between stem and loop.
+
+    KEEP encodes it, so the hairpin carries the full 21-nt sense strand. TRIM
+    drops it, so the loop joins the core directly. The guide overhang is always
+    kept as the 3' end.
+    """
+
+    KEEP = "keep"
+    TRIM = "trim"
+
+
+def get_stem_overhang(spec: str) -> StemOverhang:
+    """The StemOverhang for a name; ValueError if unknown."""
+    try:
+        return StemOverhang(spec.strip().lower())
+    except ValueError:
+        choices = ", ".join(m.value for m in StemOverhang)
+        raise ValueError(f"unknown stem overhang {spec!r}; choose from {choices}.")
+
+
 @dataclass(frozen=True)
 class ShrnaOptions:
-    """Loop, orientation, terminator and whether to withhold premature terminators."""
+    """Loop, orientation, stem overhang, terminator and premature-terminator policy."""
 
     loop: LoopScaffold = LOOPS[DEFAULT_LOOP]
     orientation: Orientation = Orientation.SA
+    stem_overhang: StemOverhang = StemOverhang.KEEP
     include_terminator: bool = True
     terminator_length: int = DEFAULT_TERMINATOR_LENGTH
     drop_premature_terminators: bool = True
@@ -49,6 +71,11 @@ class ShrnaOptions:
         if not isinstance(self.loop, LoopScaffold):
             raise TypeError(
                 f"loop must be a LoopScaffold, got {type(self.loop).__name__}"
+            )
+        if not isinstance(self.stem_overhang, StemOverhang):
+            raise TypeError(
+                "stem_overhang must be a StemOverhang, got "
+                f"{type(self.stem_overhang).__name__}"
             )
         if self.orientation is not Orientation.SA:
             raise ValueError(
@@ -110,11 +137,13 @@ def convert(
 
     The overhangs are separate because the sense overhang lands between stem
     and loop, and the guide overhang in the 3' tail, so the stem is the core.
+    With stem_overhang=TRIM the sense overhang is left out of the hairpin.
     """
     opts = options or ShrnaOptions()
     sense_rna = sense.as_rna()
     antisense_rna = antisense.as_rna()
-    sense_oh = _as_encoded_overhang(sense_overhang)
+    trim = opts.stem_overhang is StemOverhang.TRIM
+    sense_oh = "" if trim else _as_encoded_overhang(sense_overhang)
     guide_oh = _as_encoded_overhang(guide_overhang)
 
     # The sense overhang is unpaired, so it counts as loop; the guide overhang

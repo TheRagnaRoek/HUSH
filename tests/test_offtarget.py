@@ -17,7 +17,7 @@ from core.offtarget import (
     evaluate_offtarget,
     resolve_self_transcripts,
 )
-from core.selection import RuleMode, SelectionCriteria, evaluate
+from core.selection import SelectionCriteria, evaluate
 from core.sequence import BioSequence, MolType
 from core.sirna import enumerate_candidates
 

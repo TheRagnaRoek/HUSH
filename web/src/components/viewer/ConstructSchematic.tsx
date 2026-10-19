@@ -16,33 +16,33 @@ export function ConstructSchematic({
   return (
     <div className="schematic">
       <div className="segbar">
-        <div className="seg" style={{ background: "var(--seg-sense)" }}>
-          <span className="sl">sense</span>
+        <div className="seg sense">
+          <span className="sl">Sense (Passenger)</span>
           {sense}
         </div>
         {senseOverhang && (
-          <div className="seg" style={{ background: "var(--seg-oh)" }}>
-            <span className="sl">3&prime; overhang</span>
+          <div className="seg oh">
+            <span className="sl">3&prime; Overhang</span>
             {senseOverhang}
           </div>
         )}
-        <div className="seg" style={{ background: "var(--seg-loop)" }}>
-          <span className="sl">loop</span>
+        <div className="seg loop">
+          <span className="sl">Loop</span>
           {loop}
         </div>
-        <div className="seg" style={{ background: "var(--seg-anti)" }}>
-          <span className="sl">antisense (guide)</span>
+        <div className="seg anti">
+          <span className="sl">Antisense (Guide)</span>
           {antisense}
         </div>
         {guideOverhang && (
-          <div className="seg" style={{ background: "var(--seg-oh)" }}>
-            <span className="sl">3&prime; overhang</span>
+          <div className="seg oh">
+            <span className="sl">3&prime; Overhang</span>
             {guideOverhang}
           </div>
         )}
         {terminator && (
-          <div className="seg" style={{ background: "var(--seg-term)" }}>
-            <span className="sl">Pol III term</span>
+          <div className="seg term">
+            <span className="sl">Pol III Terminator</span>
             {terminator}
           </div>
         )}

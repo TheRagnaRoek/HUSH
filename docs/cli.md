@@ -1,33 +1,33 @@
 # CLI reference
 
-Every command and flag, its default, and what it does. The *why* behind each
-gate is in [design-rules.md](design-rules.md).
+All commands and flags with their defaults. The rationale for each gate is in
+[design-rules.md](design-rules.md).
 
-| Command | Does |
+| Command | Purpose |
 |---|---|
 | `hush inspect` | Preview a FASTA/PDB/mmCIF input, or a target plus panel |
 | `hush design` | Enumerate and filter siRNA candidates |
 | `hush convert` | Graft selected candidates onto a stem-loop shRNA scaffold |
-| `hush shell` | Interactive session: load once, re-design repeatedly |
-| `hush reference build` | Fetch the transcriptome and build the off-target index |
-| `hush reference status` | Report the index present, and its provenance |
+| `hush shell` | Interactive session: load the inputs once and re-run the design |
+| `hush reference build` | Download the transcriptome and build the off-target index |
+| `hush reference status` | Report whether the index exists, and its provenance |
 
 ## `hush reference`
 
-The transcriptome off-target check is on by default and needs this index. Run
-the build once; designs find it automatically afterwards.
+The transcriptome off-target check is on by default and needs this index. Run the
+build once; designs then find the index automatically.
 
-| Flag | Default | What it does |
+| Flag | Default | Description |
 |---|---|---|
-| `--outdir` | `$HUSH_REFERENCE_DIR`, else `data/reference` | Where the index and manifest go |
-| `--base-url` | RefSeq `H_sapiens/mRNA_Prot` | Point at an archived release to pin exactly |
+| `--outdir` | `$HUSH_REFERENCE_DIR`, else `data/reference` | Directory for the index and manifest |
+| `--base-url` | RefSeq `H_sapiens/mRNA_Prot` | Use an archived release to fix the reference version |
 | `--index-name` | `refseq_human_mrna` | Basename of the bowtie index prefix |
 | `--keep-fasta` | off | Keep the concatenated FASTA after building |
 
-The download is several gigabytes and needs `bowtie-build` on PATH; the
-container already has it. `hush reference status` prints the manifest's RefSeq
-release, bowtie version and build date, and exits non-zero when no index exists,
-so it works as a readiness check.
+The download is several gigabytes and needs `bowtie-build` on PATH; the container
+already contains it. `hush reference status` prints the RefSeq release, bowtie
+version and build date from the manifest, and exits with a non-zero status when no
+index exists, so it can be used as a readiness check.
 
 ## `hush design`
 
@@ -35,20 +35,19 @@ so it works as a readiness check.
 hush design TARGET.fasta [-o selected.tsv]
 ```
 
-Enumerates every candidate site and reports those clearing the enabled gates.
-It is a **filter, not a ranking**: each candidate keeps its full per-criterion
-breakdown, so any verdict is legible. The run prints the criteria, a funnel of
-how many candidates clear each gate, and the selected table, so an empty result
-shows exactly which gate removed them.
+Enumerates every candidate site and reports those that pass the enabled gates. It
+is a **filter, not a ranking**: each candidate keeps its per-criterion breakdown,
+so every verdict can be traced. The run prints the criteria, a funnel (the number
+of candidates that pass each gate) and the selected table. For an empty result,
+the funnel shows which gate removed the candidates.
 
-**The default paradigm** - what a bare `hush design TARGET` applies: all three
-rule sets combined by union; the seed off-target Tm filter; the homopolymer
-gate; and transcriptome off-target scanning. GC, hairpin and asymmetry are
-opt-in.
+**Defaults.** `hush design TARGET` applies all three rule sets combined by union,
+the seed off-target Tm filter, the homopolymer gate and the transcriptome
+off-target search. The GC, hairpin and asymmetry gates are opt-in.
 
 ### Standard options
 
-| Flag | `SelectionCriteria` field | Default | What it does |
+| Flag | `SelectionCriteria` field | Default | Description |
 |---|---|---|---|
 | `--length` / `-l` | (enumeration arg) | `19` | siRNA **core** length, 19-24 nt. Overhangs are added on top. |
 | `--overhang` | (enumeration arg) | `natural` | 3' overhang per strand: `natural` (mRNA-derived flanks), `dtdt` (shown lowercase `tt`), or `uu`. |
@@ -56,17 +55,17 @@ opt-in.
 | `--mode` | `rule_mode` | `any` | Combine them by `any` (union) or `all` (intersection). |
 | `--reynolds-threshold` | `reynolds_threshold` | `6` | Reynolds score cut-off (out of 10). |
 | `--amarzguioui-threshold` | `amarzguioui_threshold` | `3` | Amarzguioui score cut-off. |
-| `--seed` / `--no-seed` | `use_seed_filter` | **on** | siDirect seed-duplex off-target Tm filter, both strands. |
+| `--seed` / `--no-seed` | `use_seed_filter` | **on** | Seed-duplex off-target Tm filter (Naito et al. 2009), both strands. |
 | `--seed-tm` | `seed_tm_threshold` | `21.5` | Seed-duplex Tm cut-off in C. |
 | `--offtarget` / `--no-offtarget` | `use_offtarget_filter` | **on** | Transcriptome homology filter. Uses the built reference automatically. |
 | `--offtarget-db` | (searcher) | auto | bowtie index prefix. Defaults to the one `hush reference build` produced; set it to use a different reference genome. |
 | `--offtarget-min-mismatch` | `offtarget_min_mismatch` | `2` | Reject when the nearest off-target has fewer than this many mismatches. |
 | `--offtarget-max-mismatch` | (searcher depth) | `3` | Mismatch depth searched (bowtie `-v` allows 0-3). |
-| `--offtarget-self-accession` | `offtarget_self_accessions` | - | Accessions the design owns, excluded from hits (comma-separated, version-insensitive). Added to the header accession and whatever homology resolves. |
-| `--offtarget-self-fasta` | `offtarget_self_fasta` | - | FASTA whose entries count as the design's own sequence, resolved to transcripts by homology. For an allele family the target and panel do not cover. |
-| `--offtarget-resolve-self` / `--no-offtarget-resolve-self` | `resolve_offtarget_self` | **on** | Resolve the owned transcripts by homology to the target, the panel and `--offtarget-self-fasta`. The only mechanism that works for a gene family. |
-| `--offtarget-self-coverage` | `offtarget_self_coverage` | `10` | Percent of a design sequence's k-mers a transcript must match exactly to count as owned. Lower widens the family; raise it to own only the target gene. |
-| `--bowtie-path` | (backend) | `bowtie` | Path to the bowtie executable. CLI only - deliberately not exposed over HTTP. |
+| `--offtarget-self-accession` | `offtarget_self_accessions` | - | Accessions of the design's own transcripts, excluded from hits (comma-separated, version-insensitive). Added to the header accession and to the transcripts found by homology. |
+| `--offtarget-self-fasta` | `offtarget_self_fasta` | - | FASTA whose entries count as the design's own sequence and are resolved to transcripts by homology. For an allele family that the target and panel do not cover. |
+| `--offtarget-resolve-self` / `--no-offtarget-resolve-self` | `resolve_offtarget_self` | **on** | Resolve the owned transcripts by homology to the target, the panel and `--offtarget-self-fasta`. This is the only option that covers a whole gene family. |
+| `--offtarget-self-coverage` | `offtarget_self_coverage` | `10` | Percent of the k-mers of a design sequence that a transcript must match exactly to count as owned. A lower value includes more of the family; a higher value restricts the set to the target gene. |
+| `--bowtie-path` | (backend) | `bowtie` | Path to the bowtie executable. CLI only; not available over HTTP. |
 | `--gc` / `--no-gc` | `use_gc_filter` | off | Standalone GC-content window. |
 | `--gc-min` / `--gc-max` | `gc_min` / `gc_max` | `30` / `52` | GC window bounds, in percent. |
 | `--forbid-homopolymers` / `--allow-homopolymers` | `use_homopolymer_filter` | **forbid** | Reject a core with a single-nucleotide run over `--max-run`. |
@@ -75,10 +74,11 @@ opt-in.
 
 ### Allele-aware options
 
-Off unless `--panel` is given. The allele gate is ANDed with every gate above.
-Window length equals `--length`, so windows and candidates line up one-for-one.
+Off unless `--panel` is given. The allele gate is combined with every gate above
+by AND. The window length equals `--length`, so each candidate has exactly one
+window.
 
-| Flag | Default | What it does |
+| Flag | Default | Description |
 |---|---|---|
 | `--panel` / `-p` | - | Allele-family FASTA. Its presence turns the allele gate on. |
 | `--panel-format` | auto | Override: `fasta` / `pdb` / `cif`. |
@@ -94,14 +94,14 @@ Window length equals `--length`, so windows and candidates line up one-for-one.
 \* The default intent when `--panel` is given without another targeting flag. The
 four intents are mutually exclusive.
 
-The `disc` readout (e.g. `P16 post H+ S pp`) is explained in
+The `disc` readout (for example `P16 post H+ S pp`) is explained in
 [design-rules.md](design-rules.md#discrimination-ranking).
 
 ### Advanced options
 
-Correct by default and safe to ignore.
+The defaults are suitable for normal use.
 
-| Flag | Default | What it does |
+| Flag | Default | Description |
 |---|---|---|
 | `--hairpin` / `--no-hairpin` | off | Reject a sense strand that folds into a stable internal hairpin. |
 | `--hairpin-tm` | `20.0` | Internal-structure Tm cut-off in C. |
@@ -109,18 +109,20 @@ Correct by default and safe to ignore.
 | `--asym-temp` | `37.0` | Temperature in C for the asymmetry free energy. |
 | `--params` | `xia` | Nearest-neighbor set (`xia` / `freier`) for the asymmetry and hairpin read-outs **only**. |
 
-### Deliberately not tunable
+### Fixed values
 
-Some values are pinned so a published calibration stays valid:
+Some values cannot be changed because they belong to a published calibration:
 
-- **The seed filter's internals** (Freier parameters, initiation constant,
-  concentration, salt). Only `--seed-tm` moves, and `--params` never reaches
-  them: siDirect's 21.5 C cut-off is meaningful only against those numbers.
-- **Reynolds' internal GC (30-52%) and internal-repeat (Tm <= 20 C) criteria.**
-  The standalone `--gc` and `--hairpin` gates are the tunable counterparts; the
+- **The internals of the seed filter** (Freier parameters, initiation constant,
+  concentration, salt). Only `--seed-tm` can be changed, and `--params` does not
+  affect the seed filter: the 21.5 C cut-off of Naito et al. 2009 is only valid
+  with those values.
+- **The internal GC (30-52%) and internal-repeat (Tm <= 20 C) criteria of
+  Reynolds.** The `--gc` and `--hairpin` gates are the tunable counterparts; the
   rule keeps its published form.
-- **The asymmetry magnitude threshold** - there is none, by design. Only the sign
-  is used; a kcal/mol cut-off would need calibration data HUSH does not have.
+- **The asymmetry magnitude threshold.** There is no magnitude threshold. Only the
+  sign is used, because a kcal/mol cut-off would need calibration data that HUSH
+  does not have.
 
 ## `hush convert`
 
@@ -131,9 +133,10 @@ hush convert selected.tsv [-o shrna.tsv]
 Reads a `hush design -o` TSV and grafts each candidate's **full strands** onto a
 stem-loop scaffold. See [shrna-conversion.md](shrna-conversion.md).
 
-| Flag | Default | What it does |
+| Flag | Default | Description |
 |---|---|---|
 | `--loop` | `jensen` | Loop scaffold: `jensen` (UGUGCUU), `psuper` (UUCAAGAGA), `trc` (CUCGAG). |
+| `--stem-overhang` | `keep` | Sense 3' overhang between stem and loop: `keep` encodes the full 21-nt sense strand, `trim` leaves it out so the loop joins the core. The guide overhang is always kept. |
 | `--terminator` / `--no-terminator` | on | Append the Pol III poly-T terminator. |
 | `--terminator-length` | `6` | Length of that run (>= 4 when included). |
 | `--drop-premature-terminators` / `--keep-premature-terminators` | **drop** | Withhold constructs whose body carries a premature Pol III terminator (>= 4 U). |
@@ -141,15 +144,16 @@ stem-loop scaffold. See [shrna-conversion.md](shrna-conversion.md).
 
 The input TSV must carry `region`, `start`, `end`, `passenger_5to3`,
 `passenger_overhang` and `guide_overhang`. The guide overhang has its own column
-because under the `natural` policy it comes from the opposite, upstream flank -
-it is not the passenger's reverse-complement and cannot be re-derived.
+because under the `natural` policy it comes from the opposite (upstream) flank. It
+is therefore not the reverse complement of the passenger overhang and cannot be
+derived from it.
 
 ## `hush shell`
 
-Keeps one session alive: the target, the panel and the panel alignment are
-loaded once and reused.
+Keeps one session open: the target, the panel and the panel alignment are loaded
+once and reused.
 
-| Command | Does |
+| Command | Purpose |
 |---|---|
 | `load <path>` | Load the target mRNA/CDS |
 | `panel <path>` | Load a panel (turns on allele targeting) |
@@ -164,11 +168,11 @@ loaded once and reused.
 ## Examples
 
 ```bash
-# Default paradigm. On a GC-rich CDS the seed filter may select nothing.
-hush design data/examples/hla_a01.fasta
+# Default settings. On a GC-rich CDS the seed filter may select nothing.
+hush design data/hla_a01.fasta
 
 # Relaxed for a GC-rich target, with the standalone structure gates
-hush design data/examples/hla_a01.fasta --no-seed --gc --hairpin -o selected.tsv
+hush design data/hla_a01.fasta --no-seed --gc --hairpin -o selected.tsv
 
 # Allele-specific: hit one panel member, discriminate against the rest
 hush design data/examples/target_example.fasta --no-seed \

@@ -6,6 +6,7 @@ import type {
   ConvertResponse,
   DesignParams,
   DesignResponse,
+  HealthResponse,
   InspectResponse,
 } from "../api/types";
 import type { AlleleEnrichment } from "../lib/alignment";
@@ -17,7 +18,7 @@ export const STEPS: { id: Step; label: string }[] = [
   { id: "targeting", label: "Targeting" },
   { id: "criteria", label: "Criteria" },
   { id: "candidates", label: "Candidates" },
-  { id: "construct", label: "Construct" },
+  { id: "construct", label: "shRNA construct" },
 ];
 
 export interface SessionValue {
@@ -47,11 +48,15 @@ export interface SessionValue {
   setSelectedRegion: (r: string) => void;
   selectedCandidate: CandidateResult | undefined;
   selectedConstruct: ConstructResult | undefined;
+  /** The selected candidate's construct when the engine withheld it. */
+  selectedWithheld: ConstructResult | undefined;
   /** Full per-base enrichment for the selected region, when available (sample /
    * post-API-addition); undefined means the alignment shows deciding mismatches
    * only. */
   enrichment: AlleleEnrichment[] | undefined;
 
+  /** The engine's health report; null when no engine is reachable. */
+  engine: HealthResponse | null;
   offline: boolean;
   busy: boolean;
   error: string | null;

@@ -36,7 +36,12 @@ from app.parsing import (
 from core.errors import HushError
 from service.params import AlleleTargetingSpec, DesignParams
 from service.session import HushSession
-from shrna.convert import DEFAULT_TERMINATOR_LENGTH, ShrnaOptions
+from shrna.convert import (
+    DEFAULT_TERMINATOR_LENGTH,
+    ShrnaOptions,
+    StemOverhang,
+    get_stem_overhang,
+)
 from shrna.loops import DEFAULT_LOOP, LOOPS, get_loop
 
 
@@ -110,6 +115,7 @@ def _build_convert_parser() -> _ShellArgParser:
         prog="convert", add_help=False, argument_default=argparse.SUPPRESS
     )
     p.add_argument("--loop")
+    p.add_argument("--stem-overhang")
     p.add_argument("--terminator", action=argparse.BooleanOptionalAction)
     p.add_argument("--terminator-length", type=int)
     p.add_argument(
@@ -191,8 +197,14 @@ def apply_convert_flags(tokens: list[str]) -> ShrnaOptions:
     """ShrnaOptions from the convert flags in tokens; unset flags keep defaults."""
     provided = vars(_CONVERT_PARSER.parse_args(tokens))
     loop = get_loop(provided["loop"]) if "loop" in provided else LOOPS[DEFAULT_LOOP]
+    stem = (
+        get_stem_overhang(provided["stem_overhang"])
+        if "stem_overhang" in provided
+        else StemOverhang.KEEP
+    )
     return ShrnaOptions(
         loop=loop,
+        stem_overhang=stem,
         include_terminator=provided.get("terminator", True),
         terminator_length=provided.get("terminator_length", DEFAULT_TERMINATOR_LENGTH),
         drop_premature_terminators=provided.get(
@@ -208,7 +220,7 @@ Commands:
   unpanel               drop the panel
   set [flags]           set persistent design criteria (same flags as 'hush design');
                         with no flags, print the current criteria
-  reset                 reset the criteria to the best-practice defaults
+  reset                 reset the criteria to the defaults
   limit [n]             set how many rows design/convert print (0 = all)
   show                  show the loaded inputs, criteria, and last results
   inspect               preview the design input (roles, readiness)
@@ -217,7 +229,8 @@ Commands:
   assess [region]       show every spared allele's discrimination for the last design
                         (all selected, or just <region> e.g. 6-24)
   convert [flags]       convert the last design's selected candidates to shRNA
-                        (flags: --loop, --terminator/--no-terminator,
+                        (flags: --loop, --stem-overhang keep|trim,
+                        --terminator/--no-terminator,
                         --terminator-length,
                         --drop-premature-terminators/--keep-premature-terminators)
   save <dir>            write design.tsv (and shrna.tsv, if converted) into <dir>
@@ -318,7 +331,7 @@ class HushShell:
 
     def _cmd_reset(self, rest: str) -> bool:
         self.params = DesignParams()
-        typer.echo("criteria reset to the best-practice defaults.")
+        typer.echo("criteria reset to the defaults.")
         return True
 
     def _cmd_limit(self, rest: str) -> bool:
@@ -462,10 +475,13 @@ class HushShell:
             f"  rules:           {', '.join(rules) or 'none'} "
             f"(mode {p.rule_mode.value.upper()})"
         )
-        typer.echo(
-            f"  seed Tm:         {'< %.1f C' % p.seed_tm_threshold if p.use_seed_filter else 'off'}"
+        seed = f"< {p.seed_tm_threshold:.1f} C" if p.use_seed_filter else "off"
+        typer.echo(f"  seed Tm:         {seed}")
+        off = (
+            "on (built reference, or --offtarget-db)"
+            if p.use_offtarget_filter
+            else "off"
         )
-        off = "on (needs --offtarget-db)" if p.use_offtarget_filter else "off"
         if p.use_offtarget_filter and p.offtarget_db is not None:
             off = f"on ({p.offtarget_db})"
         typer.echo(f"  off-target:      {off}")
@@ -483,15 +499,22 @@ class HushShell:
             typer.echo(
                 f"  own txs:         {', '.join(own) or 'nothing excluded'}"
             )
-        typer.echo(
-            f"  GC window:       {'%.0f-%.0f%%' % (p.gc_min * 100, p.gc_max * 100) if p.use_gc_filter else 'off'}"
+        gc = (
+            f"{p.gc_min * 100:.0f}-{p.gc_max * 100:.0f}%"
+            if p.use_gc_filter
+            else "off"
         )
-        typer.echo(
-            f"  hairpin:         {'Tm <= %.1f C' % p.hairpin_tm_max if p.use_hairpin_filter else 'off'}"
+        typer.echo(f"  GC window:       {gc}")
+        hairpin = (
+            f"Tm <= {p.hairpin_tm_max:.1f} C" if p.use_hairpin_filter else "off"
         )
-        typer.echo(
-            f"  homopolymer:     {'reject runs > %d nt' % p.max_homopolymer_run if p.use_homopolymer_filter else 'off'}"
+        typer.echo(f"  hairpin:         {hairpin}")
+        homopolymer = (
+            f"reject runs > {p.max_homopolymer_run} nt"
+            if p.use_homopolymer_filter
+            else "off"
         )
+        typer.echo(f"  homopolymer:     {homopolymer}")
         typer.echo(f"  asymmetry:       {'on' if p.use_asymmetry_filter else 'off'}")
         typer.echo(f"  targeting:       {_format_targeting(p.targeting)}")
         typer.echo(f"  sort:            {p.sort}")

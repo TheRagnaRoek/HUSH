@@ -1,6 +1,7 @@
 """Tests for the star alignment backend (msa.align_star)."""
 
 import random
+import warnings
 
 import pytest
 
@@ -192,6 +193,29 @@ class TestMoleculeTypes:
         row = align_star(target, _panel(rna))["rna"]
         assert row.bases == TARGET_SEQ
         assert row.coverage == 1.0
+
+
+class TestAlignerConfiguration:
+    def test_aligning_raises_no_biopython_deprecation(self, target):
+        # The end-gap score is set through the aggregate attribute because the
+        # per-end pair was renamed in Biopython 1.87. If someone reinstates the
+        # old spelling, or Biopython deprecates the aggregate too, this fails
+        # instead of quietly adding a warning to every run.
+        from Bio import BiopythonDeprecationWarning
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", BiopythonDeprecationWarning)
+            rows = align_star(target, _panel(_dna(TARGET_SEQ, "same")))
+        assert rows["same"].bases == TARGET_SEQ
+
+    def test_end_gaps_are_free_so_a_short_member_is_not_penalised(self, target):
+        # What the end-gap score is for: a member covering only the middle of
+        # the target must still align there rather than being pushed to an end.
+        inner = TARGET_SEQ[6:26]
+        row = align_star(target, _panel(_dna(inner, "inner")))["inner"]
+        assert row.bases[6:26] == inner
+        assert row.bases[:6] == GAP * 6
+        assert row.bases[26:] == GAP * (len(TARGET_SEQ) - 26)
 
 
 class TestValidation:

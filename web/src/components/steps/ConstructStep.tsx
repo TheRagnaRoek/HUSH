@@ -1,6 +1,9 @@
 import { ConstructViewer } from "../viewer/ConstructViewer";
 import { ScaffoldOptions } from "../viewer/ScaffoldOptions";
+import { WithheldSummary } from "../viewer/WithheldSummary";
 import { terminatorString } from "../../lib/loops";
+import { rankMode } from "../../lib/targeting";
+import { exportConstruct } from "../../lib/tsv";
 import { useSession } from "../../session/useSession";
 
 export function ConstructStep() {
@@ -10,6 +13,7 @@ export function ConstructStep() {
     convert,
     selectedCandidate,
     selectedConstruct,
+    selectedWithheld,
     selectedRegion,
     enrichment,
     offline,
@@ -52,17 +56,26 @@ export function ConstructStep() {
       </div>
       <div className="divider" />
 
+      <WithheldSummary />
+
       {selectedCandidate && (
         <ConstructViewer
           candidate={selectedCandidate}
           construct={selectedConstruct}
+          withheld={selectedWithheld}
           enrichment={enrichment}
           criteria={design.criteria}
           offtargetSkipped={design.offtarget_skipped}
           rank={rank}
+          mode={rankMode(design.targeting)}
           targetId={targetId}
           terminator={terminator}
           startTab="build"
+          onExport={
+            selectedConstruct
+              ? (format) => exportConstruct(selectedConstruct, targetId, offline, format)
+              : undefined
+          }
         />
       )}
     </div>

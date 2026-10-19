@@ -82,13 +82,14 @@ def _make_aligner(
     aligner.match_score = match
     aligner.mismatch_score = mismatch
     # open/extend_gap_score also set the terminal gap scores, so the end-gap
-    # scores must be assigned after them.
+    # score must be assigned after them.
     aligner.open_gap_score = open_gap
     aligner.extend_gap_score = extend_gap
-    # Biopython renamed these and warns on the old spelling; the old one is
-    # what the biopython>=1.83 floor in pyproject.toml guarantees.
-    aligner.target_end_gap_score = end_gap
-    aligner.query_end_gap_score = end_gap
+    # The aggregate attribute, which sets both ends at once. The per-end pair
+    # (target_end_gap_score / query_end_gap_score) was renamed in Biopython 1.87
+    # and warns on the old spelling; both ends take the same score here, so the
+    # aggregate avoids the rename without pinning a Biopython version.
+    aligner.end_gap_score = end_gap
     return aligner
 
 

@@ -1,5 +1,6 @@
 import type { CandidateResult } from "../../api/types";
 import { discToken } from "../../lib/disc";
+import { rankMode } from "../../lib/targeting";
 import { useSession } from "../../session/useSession";
 
 function discLabel(c: CandidateResult): string {
@@ -8,8 +9,10 @@ function discLabel(c: CandidateResult): string {
 }
 
 export function CandidateList() {
-  const { design, selectedRegion, setSelectedRegion } = useSession();
+  const { design, convert, selectedRegion, setSelectedRegion } = useSession();
   const selected = design?.selected ?? [];
+  const withheld = new Set(convert?.withheld.map((c) => c.region));
+  const discriminating = rankMode(design?.targeting) === "discriminating";
   return (
     <div className="clist">
       {selected.map((c, i) => (
@@ -23,12 +26,19 @@ export function CandidateList() {
           <span className="rank">{i + 1}</span>
           <span className="seq">{c.guide_5to3}</span>
           <span className="pos">
-            region {c.region} &middot; guide 5&prime;&rarr;3&prime;
+            Region {c.region} &middot; Guide 5&prime;&rarr;3&prime;
           </span>
           <span className="badges">
-            <span className="mini disc">disc {discLabel(c)}</span>
-            {c.allele?.spare_min_mismatch != null && (
-              <span className="mini gc">minDiff {c.allele.spare_min_mismatch}</span>
+            {withheld.has(c.region) && <span className="mini warn">Withheld</span>}
+            {discriminating ? (
+              <>
+                <span className="mini disc">Disc {discLabel(c)}</span>
+                {c.allele?.spare_min_mismatch != null && (
+                  <span className="mini gc">Min diff {c.allele.spare_min_mismatch}</span>
+                )}
+              </>
+            ) : (
+              <span className="mini gc">GC {c.gc_percent.toFixed(1)}%</span>
             )}
           </span>
         </button>

@@ -57,10 +57,15 @@ export interface DesignParams {
   sort?: "auto" | "position" | "discrimination";
 }
 
+export type StemOverhang = "keep" | "trim";
+
 export interface ConvertOptions {
   loop?: string;
+  stem_overhang?: StemOverhang;
   include_terminator?: boolean;
   terminator_length?: number;
+  /** Withhold constructs with a premature Pol III terminator (the default). */
+  drop_premature_terminators?: boolean;
 }
 
 export interface InspectRequest {
@@ -140,8 +145,11 @@ export interface DiscriminationResult {
   region: string;
   sources_agree: boolean;
   strongest_position: boolean;
+  /** Inside the P9-P16 window; the field name is kept from the old wire format. */
   consistent_position: boolean;
   multi_mismatch: boolean;
+  /** Every difference to that allele, in ranking order. */
+  all_guide_positions?: number[];
 }
 
 export interface PerAlleleDiscrimination {
@@ -211,6 +219,7 @@ export interface ConstructResult {
 export interface ConvertResponse {
   loop_name: string;
   loop_seq: string;
+  stem_overhang?: StemOverhang;
   terminator_length?: number | null;
   construct_count: number;
   converted_count: number;
@@ -232,4 +241,7 @@ export interface HealthResponse {
   status: string;
   service: string;
   version: string;
+  /** Absent on an engine older than this field. */
+  bowtie_available?: boolean;
+  offtarget_reference?: boolean;
 }
