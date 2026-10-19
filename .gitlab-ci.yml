@@ -10,8 +10,21 @@ stages:
 default:
   interruptible: true
 
-python:
+variables:
+  # Inside the project directory, so that the cache below can keep it.
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+# Lint before testing, as on GitHub: a lint failure is cheaper to read than a
+# test failure.
+.python-checks:
   stage: test
+  script:
+    - ruff check .
+    - python -m pytest -q
+
+# The locked environment on the Python that the image ships: what was released.
+python:
+  extends: .python-checks
   image: python:3.12-slim-bookworm
   before_script:
     # bowtie1 so the off-target parity test runs instead of skipping itself.
@@ -19,13 +32,29 @@ python:
     - apt-get install -y -qq --no-install-recommends bowtie git
     - pip install --quiet -r requirements.txt -r requirements-dev.txt
     - pip install --quiet --no-deps .
-  script:
-    - python -m pytest -q
   cache:
     key:
+      prefix: python-3.12
       files:
         - requirements.txt
         - requirements-dev.txt
+    paths:
+      - .cache/pip
+
+# pyproject declares requires-python >= 3.11, but the lock needs 3.12 (numpy 2.5
+# has no 3.11 wheels), so the floor is checked against the ranges, as on GitHub.
+python-311:
+  extends: .python-checks
+  image: python:3.11-slim-bookworm
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends bowtie git
+    - pip install --quiet -e ".[dev,api]"
+  cache:
+    key:
+      prefix: python-3.11
+      files:
+        - pyproject.toml
     paths:
       - .cache/pip
 
