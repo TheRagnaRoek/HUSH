@@ -221,7 +221,6 @@ a {
   height: 50px;
   width: auto;
   flex: none;
-  image-rendering: pixelated;
   filter: drop-shadow(0 2px 4px rgba(26, 30, 43, 0.22));
 }
 .guide .gt {
