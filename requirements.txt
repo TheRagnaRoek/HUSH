@@ -10,6 +10,7 @@
 #
 # Regenerate after changing a dependency:
 #   docker run --rm hush:local pip freeze | grep -v '^hush' | sort
+# The freeze comes from Linux, so re-add the sys_platform lines it omits.
 
 Pygments==2.21.0
 annotated-doc==0.0.5
@@ -17,6 +18,7 @@ annotated-types==0.8.0
 anyio==4.15.1
 biopython==1.88
 click==8.5.0
+colorama==0.4.6; sys_platform == "win32"
 fastapi==0.143.1
 h11==0.16.0
 idna==3.20

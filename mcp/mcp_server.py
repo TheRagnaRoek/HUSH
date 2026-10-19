@@ -287,7 +287,7 @@ def build_reference(
         off-target filtering during siRNA design.
     """
 
-    cmd = ["hush", "reference", "build"]
+    cmd = [HUSH_EXECUTABLE, "reference", "build"]
 
     if outdir is not None:
         outdir_path = Path(outdir).expanduser().resolve()
