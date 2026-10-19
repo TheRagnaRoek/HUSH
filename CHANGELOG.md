@@ -6,16 +6,17 @@ versioning. The version is declared in `pyproject.toml` and must match
 
 ## Unreleased
 
+## 1.0.0 - 2026-10-20
+
+First release. Includes the allele-aware siRNA/shRNA design pipeline, the CLI,
+the HTTP API and web GUI, the optional MCP server, and the Docker image with
+bowtie1.
+
 - `hush --version` and the API `/health` report the installed version.
 - Docker Compose and the `docker/hush.*` launchers build and run `hush:local`
   from the checkout by default; set `HUSH_IMAGE` to run a published image.
 - Release workflow refuses a `v*` tag that differs from the `pyproject.toml`
   version.
-- `requirements-mcp.txt` is now a lock on top of `requirements.txt` instead of a
-  copy of it, and `pyproject.toml` has an `mcp` extra. The MCP server stays a
-  script (`mcp/mcp_server.py`) and is not installed as a package.
-
-## 1.0.0 - not yet released
-
-First release. Includes the allele-aware siRNA/shRNA design pipeline, the CLI,
-the HTTP API and web GUI, and the Docker image with bowtie1.
+- `requirements-mcp.txt` is a lock on top of `requirements.txt`, and
+  `pyproject.toml` has an `mcp` extra. The MCP server is a script
+  (`mcp/mcp_server.py`) and is not installed as a package.
