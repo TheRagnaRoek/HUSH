@@ -26,7 +26,7 @@ dependencies = [
 api = ["fastapi>=0.110", "uvicorn>=0.29"]
 # starlette's TestClient moved to httpx2; httpx alone fails collection on a
 # current starlette, so pin the one the test client actually imports.
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "httpx2>=2.13"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "httpx2>=2.13", "ruff>=0.6"]
 
 [project.scripts]
 hush = "app.cli:app"
@@ -44,3 +44,9 @@ addopts = "-ra"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# ruff's defaults are E4 (imports), E7/E9 (statement and syntax errors) and F
+# (pyflakes). E501 is not among them - without it line-length above would only
+# steer `ruff format`, which is not run here, so long lines would pass the gate.
+select = ["E4", "E7", "E9", "F", "E501"]

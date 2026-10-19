@@ -104,8 +104,11 @@ class TestHomopolymerFilter:
 
     def test_max_run_is_tunable(self):
         seq = "ACGGGUACGUACGUACGUA"  # longest run 3
-        assert evaluate(seq_c := one_candidate(seq), self._criteria(max_homopolymer_run=2)).homopolymer_pass is False
-        assert evaluate(seq_c, self._criteria(max_homopolymer_run=3)).homopolymer_pass is True
+        candidate = one_candidate(seq)
+        strict = evaluate(candidate, self._criteria(max_homopolymer_run=2))
+        lenient = evaluate(candidate, self._criteria(max_homopolymer_run=3))
+        assert strict.homopolymer_pass is False
+        assert lenient.homopolymer_pass is True
 
 
 class TestOnlyEnabledCriteriaAreComputed:
