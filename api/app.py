@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from api import inputs, schemas, serialize
 from api.store import SessionStore
-from core.errors import HushError
+from core.errors import HushError, NothingToConvertError
 from core.reference import default_index_prefix, index_exists
 from core.version import __version__
 from service.params import DesignParams
@@ -71,11 +71,17 @@ def create_app(
 
     @app.exception_handler(HushError)
     async def _hush_error(request: Request, exc: HushError) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(NothingToConvertError)
+    async def _nothing_to_convert(
+        request: Request, exc: NothingToConvertError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
 
     @app.exception_handler(ValueError)
     async def _value_error(request: Request, exc: ValueError) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     def _build_session(target_fasta: str, panel_fasta: str | None) -> HushSession:
         session = HushSession()

@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from core.errors import HushError
+from core.errors import HushError, NothingToConvertError
 from core.inputs import load_panel as _load_panel_file
 from core.inputs import load_sequences as _load_sequences_file
 from core.inputs import load_target as _load_target_file
@@ -376,7 +376,7 @@ class HushSession:
         options = options or ShrnaOptions()
         if candidates is None:
             if self._last_design is None:
-                raise HushError(
+                raise NothingToConvertError(
                     "Nothing to convert; run design first, or pass candidates."
                 )
             candidates = [e.candidate for e in self._last_design.selected]

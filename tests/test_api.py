@@ -1,5 +1,6 @@
 """HTTP contract tests for api.app: status codes, JSON shape, session lifecycle and
-domain errors as 400. Fresh app and store per test; the pipeline is covered elsewhere."""
+domain errors as 422, convert before design as 409. Fresh app and store per test;
+the pipeline is covered elsewhere."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -152,7 +153,7 @@ def test_design_target_specific_shape(client, target, panel):
     assert body["targeting"]["discriminating"] is True
 
 
-def test_design_inverted_gc_window_is_400(client, demo_target):
+def test_design_inverted_gc_window_is_422(client, demo_target):
     r = client.post(
         "/design",
         json={
@@ -160,11 +161,11 @@ def test_design_inverted_gc_window_is_400(client, demo_target):
             "params": {"use_gc_filter": True, "gc_min": 0.6, "gc_max": 0.3},
         },
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
     assert "detail" in r.json()
 
 
-def test_design_unknown_allele_is_400(client, target, panel):
+def test_design_unknown_allele_is_422(client, target, panel):
     r = client.post(
         "/design",
         json={
@@ -173,25 +174,25 @@ def test_design_unknown_allele_is_400(client, target, panel):
             "params": {"targeting": {"allele_specific": "NOT_IN_PANEL"}},
         },
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
-def test_design_unknown_overhang_is_400(client, demo_target):
+def test_design_unknown_overhang_is_422(client, demo_target):
     r = client.post(
         "/design",
         json={"target_fasta": demo_target, "params": {"overhang": "bogus"}},
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
-def test_design_protein_target_is_400(client):
+def test_design_protein_target_is_422(client):
     r = client.post("/design", json={"target_fasta": _PROTEIN})
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
-def test_design_empty_target_is_400(client):
+def test_design_empty_target_is_422(client):
     r = client.post("/design", json={"target_fasta": "   "})
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
 # sessions
@@ -245,10 +246,10 @@ def test_session_design_reuses_and_reparams(client, target, panel):
     assert second.json()["length"] == 21
 
 
-def test_session_convert_without_design_is_400(client, demo_target):
+def test_session_convert_without_design_is_409(client, demo_target):
     sid = client.post("/sessions", json={"target_fasta": demo_target}).json()["id"]
     r = client.post(f"/sessions/{sid}/convert", json={})
-    assert r.status_code == 400
+    assert r.status_code == 409
 
 
 def test_unknown_session_is_404(client):

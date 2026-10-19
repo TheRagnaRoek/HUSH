@@ -19,6 +19,10 @@ class InputParseError(HushError):
     """An input file could not be parsed into sequences."""
 
 
+class NothingToConvertError(HushError):
+    """A conversion was requested before any design exists to convert."""
+
+
 class OffTargetError(HushError):
     """The transcriptome off-target search could not be run."""
 

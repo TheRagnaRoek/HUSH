@@ -105,8 +105,15 @@ converted construct is accounted for.
 
 ## Errors
 
-Domain errors (`HushError`) and invalid requests (`ValueError`) return status
-**400** with a `{"detail": "..."}` body. An unknown session id returns **404**.
+| Status | Cause |
+|---|---|
+| **404** | Unknown session id |
+| **409** | `convert` on a session that has no design yet |
+| **422** | Well-formed JSON that fails validation: schema errors, and domain errors (`HushError`, `ValueError`) such as a protein target or an inverted GC window |
+
+Domain errors return `{"detail": "..."}`. Schema errors raised by FastAPI return
+`detail` as a list of per-field errors. Malformed JSON also returns 422, because
+FastAPI reports it as a body validation error. The API does not return 400.
 
 ## Security
 
