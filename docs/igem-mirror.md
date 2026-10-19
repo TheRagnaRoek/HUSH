@@ -39,14 +39,23 @@ its absence is not an omission.
 
 ## Producing the mirror
 
+Build the mirror from the release tag, not from `main`. `main` keeps moving, and
+the mirror has to stay frozen at the submitted version. Apply the two edits under
+"The differences to apply" on a branch cut from the tag, then push that branch as
+the mirror's `main`:
+
 ```bash
-git remote add igem https://gitlab.igem.org/2026/software-tools/<team>.git
-git push igem main
+git checkout -b gitlab-mirror v1.0.0
+# apply the two edits below, then:
+git commit -am "Mark this copy as the iGEM submission"
+git remote add igem https://gitlab.igem.org/2026/software/gu-frankfurt/hush.git
+git push igem gitlab-mirror:main
 git push igem v1.0.0
 ```
 
 Push the tag as well. It connects the mirror to the published image and to the
-version in `pyproject.toml` and `CITATION.cff`.
+version in `pyproject.toml` and `CITATION.cff`. The mirror's `main` is the tag
+plus that one commit, so the diff to the release is exactly the two edits.
 
 `.gitlab-ci.yml` runs on GitLab in place of `.github/workflows/`. GitLab ignores
 the GitHub workflows. Keeping them avoids a difference that would have to be
@@ -54,8 +63,8 @@ re-applied at every sync.
 
 ## The differences to apply
 
-Only the README changes. Add this directly under the logo, above the `# HUSH`
-heading:
+Two files change. In `README.md`, add this directly under the logo, above the
+`# HUSH` heading:
 
 ```markdown
 > **iGEM 2026 competition submission.** This is the frozen copy of HUSH as
@@ -67,7 +76,7 @@ heading:
 In `CITATION.cff`, add the mirror next to the development repository:
 
 ```yaml
-repository: https://gitlab.igem.org/2026/software-tools/<team>
+repository: https://gitlab.igem.org/2026/software/gu-frankfurt/hush
 ```
 
 No other file differs.

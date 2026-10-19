@@ -5,6 +5,7 @@
 #
 # httpx2, not httpx: starlette's TestClient imports it, and with httpx alone
 # every API test fails at collection. truststore is httpx2's own dependency.
+# ruff is the linter CI runs (rules are in pyproject.toml).
 
 -r requirements.txt
 
@@ -16,4 +17,5 @@ packaging==26.3
 pluggy==1.6.0
 pytest==9.1.1
 pytest-cov==7.1.0
+ruff==0.17.1
 truststore==0.10.5
