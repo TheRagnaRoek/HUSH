@@ -41,21 +41,34 @@ its absence is not an omission.
 
 Build the mirror from the release tag, not from `main`. `main` keeps moving, and
 the mirror has to stay frozen at the submitted version. Apply the two edits under
-"The differences to apply" on a branch cut from the tag, then push that branch as
-the mirror's `main`:
+"The differences to apply" on a branch cut from the tag, merge in what iGEM has
+already put in the project, then push that branch as the mirror's `main`:
 
 ```bash
 git checkout -b gitlab-mirror v1.0.0
 # apply the two edits below, then:
 git commit -am "Mark this copy as the iGEM submission"
 git remote add igem https://gitlab.igem.org/2026/software/gu-frankfurt/hush.git
+git fetch igem
+git merge --allow-unrelated-histories igem/main
+# README.md and LICENSE conflict; keep this project's versions of both:
+git checkout --ours -- README.md LICENSE
+git add README.md LICENSE
+git commit --no-edit
 git push igem gitlab-mirror:main
 git push igem v1.0.0
 ```
 
+The iGEM project is not empty. It is created from a team template with its own
+history: a README, an Apache-2.0 `LICENSE`, `CLAUDE.md` and
+`.claude/RESPONSIBLE_AI_USE.md`. A plain push is rejected, and a forced push would
+delete iGEM's files and history, so the template is merged in instead. Its two
+AI-use files are kept unchanged. This project's README and MIT `LICENSE` replace
+the template's, which iGEM allows for any OSI-approved license.
+
 Push the tag as well. It connects the mirror to the published image and to the
-version in `pyproject.toml` and `CITATION.cff`. The mirror's `main` is the tag
-plus that one commit, so the diff to the release is exactly the two edits.
+version in `pyproject.toml` and `CITATION.cff`. iGEM creates the judging release
+from `main` by itself at the Wiki Freeze, so push before then.
 
 `.gitlab-ci.yml` runs on GitLab in place of `.github/workflows/`. GitLab ignores
 the GitHub workflows. Keeping them avoids a difference that would have to be
@@ -79,7 +92,9 @@ In `CITATION.cff`, add the mirror next to the development repository:
 repository: https://gitlab.igem.org/2026/software/gu-frankfurt/hush
 ```
 
-No other file differs.
+The merge with the template adds iGEM's `CLAUDE.md` and
+`.claude/RESPONSIBLE_AI_USE.md` unchanged, so the mirror differs from the tag in
+four files. No other file differs.
 
 ## Checking the mirror
 
@@ -97,12 +112,17 @@ frozen copy is self-contained.
 Also check, outside the clone, that:
 
 - the repository is under 50 MB (`git count-objects -vH`),
+- `git diff --stat v1.0.0 HEAD` lists only the four files named above,
 - `LICENSE` is present and the license is OSI-approved (MIT),
 - `CITATION.cff` contains the real author list and not a placeholder,
 - the published image, if referenced, is public.
 
 ## Fixing something after submission
 
-Fix it on GitHub, tag a new version, and push that tag to the mirror as well. Do not
-edit the mirror directly: a change that exists only in the mirror is lost at the
-next sync, and the two copies are no longer the same software.
+Fix it on GitHub, tag a new version, and repeat the steps above from the new tag:
+cut the branch from it, apply the same two edits (with the new version and tag in
+the banner), merge `igem/main` and push the branch and the tag. The mirror already
+contains this project's history, so that merge needs no `--allow-unrelated-histories`
+and has no conflicts. Do not edit the mirror directly: a change that exists only in
+the mirror is lost at the next sync, and the two copies are no longer the same
+software.
