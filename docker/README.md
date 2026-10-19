@@ -14,13 +14,14 @@ From the repository root, building from source:
 
 ```bash
 docker compose run --rm reference-build
-docker compose up hush
+docker compose up --build hush
 ```
 
 Then open <http://localhost:8000>. The first command is the one-time reference
-download; the second serves the GUI and the API together on port 8000. Compose
-builds from `docker/Dockerfile` when the image is not already present, so this
-needs no registry access.
+download; the second serves the GUI and the API together on port 8000. The image
+is built from `docker/Dockerfile` and tagged `hush:local`, so this needs no
+registry access. Compose reuses an existing `hush:local` without rebuilding, so
+keep `--build` after pulling new code, or the container will run the old source.
 
 The same two steps with the published image, pinned to an exact version:
 

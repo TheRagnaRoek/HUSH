@@ -1,15 +1,16 @@
-# HUSH, run locally from the published image.
+# HUSH, built from this checkout and run locally.
 #
 #   docker compose run --rm reference-build   # once: fetch the RefSeq reference
-#   docker compose up hush                    # then: GUI + API on :8000
+#   docker compose up --build hush            # then: GUI + API on :8000
 #
 # Both services share the `hush_ref` volume, so the reference is built once and
-# every later run finds it automatically. Set HUSH_IMAGE to use a local build
-# instead of the published image.
+# every later run finds it automatically. Compose only builds when the image tag
+# is missing, so pass --build after pulling new code. Set HUSH_IMAGE to run a
+# published image instead, e.g. ghcr.io/theragnaroek/hush:1.0.0.
 services:
   # The GUI and API on one port. Open http://localhost:8000 once it is up.
   hush:
-    image: ${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:1.0.0}
+    image: ${HUSH_IMAGE:-hush:local}
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -24,7 +25,7 @@ services:
   # One-shot reference build: fetch the RefSeq human transcriptome and run
   # bowtie-build into the shared volume. Several GB, and needs a network.
   reference-build:
-    image: ${HUSH_IMAGE:-ghcr.io/theragnaroek/hush:1.0.0}
+    image: ${HUSH_IMAGE:-hush:local}
     build:
       context: .
       dockerfile: docker/Dockerfile
