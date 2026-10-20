@@ -8,6 +8,15 @@ pip install -e ".[dev,api]"
 pytest
 ```
 
+The optional extras are `dev` (tests and linting), `api` (the FastAPI backend) and
+`mcp` (the MCP server, see the [README](../README.md#mcp-server)). Combine them as
+needed, for example `".[dev,api,mcp]"`.
+
+The lockfiles `requirements.txt`, `requirements-dev.txt` and `requirements-mcp.txt`
+pin exact versions and need **Python 3.12 or newer**, because numpy 2.5 does not
+support 3.11. On Python 3.11 install the version ranges from `pyproject.toml` with
+the command above. The Python tests in CI run on both 3.11 and 3.12.
+
 For the web client:
 
 ```bash
