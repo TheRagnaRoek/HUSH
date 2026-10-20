@@ -196,32 +196,51 @@ Interactive API docs are at `/docs`, the OpenAPI schema at `/openapi.json`. See
 [`docs/api.md`](docs/api.md) and [`web/README.md`](web/README.md).
 
 ## MCP Server
-HUSH includes an optional MCP server, making its `design`, `convert` and `reference` commands available to AI applications.
-### Requisites
-To set up the MCP server, follow the instructions in the "Install from source" section but use `requirements-mcp.txt`
-instead of `requirements.txt`. Then note down the absolute path of the HUSH executable now located in `.venv/Scripts`.
+
+HUSH includes an optional MCP server. It makes the `design`, `convert` and
+`reference build` commands available to AI applications.
+
+### Requirements
+
+Install HUSH as described in "Install from source", but use the MCP lockfile:
+
+```bash
+pip install -r requirements-mcp.txt
+pip install --no-deps -e .
+```
+
+Like the other lockfiles, it needs Python 3.12 or newer. On Python 3.11, use
+`pip install -e ".[mcp]"` instead.
+
+Then note the absolute path of the `hush` executable in the virtual environment. It
+is in `.venv/Scripts` on Windows and in `.venv/bin` on Linux and macOS.
+
 ### Connecting to an AI application
-The following config was validated on Claude Desktop version 2.42304.2. 
 
-You can find the relevant config file under (`Settings`>`Developer`>`Local MCP servers`>`Edit config`). Insert the
-following into the main `{}` brackets.
+This configuration was validated with Claude Desktop version 2.42304.2.
+
+In Claude Desktop, open the configuration file under Settings > Developer > Local
+MCP servers > Edit config. Insert the following inside the outer `{}` brackets, and
+replace `<path to hush directory>` with the absolute path of the HUSH directory:
+
 ```json
-
-  "mcpServers": {
-    "hush-sirna": {
-      "command": "<path to hush directory>/.venv/Scripts/python[.exe]",
-      "args": [
-        "<path to hush directory>/mcp/mcp_server.py"
-      ],
-      "env": {
-        "HUSH_EXECUTABLE": "<path to hush directory>/.venv/Scripts/hush[.exe]"
-      }
+"mcpServers": {
+  "hush-sirna": {
+    "command": "<path to hush directory>/.venv/Scripts/python[.exe]",
+    "args": [
+      "<path to hush directory>/mcp/mcp_server.py"
+    ],
+    "env": {
+      "HUSH_EXECUTABLE": "<path to hush directory>/.venv/Scripts/hush[.exe]"
     }
   }
-
+}
 ```
-This configuration allows Claude Desktop to automatically start the MCP server when the application is opened. Local 
-file access may be required for input files.
+
+With this configuration, Claude Desktop starts the MCP server when the application
+opens. The server reads input files from local paths, so every input file must be
+accessible on the machine that runs it.
+
 ## Test Suite
 
 Install from the lockfile first so that the versions match. The suite includes the

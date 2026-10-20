@@ -2,7 +2,8 @@
 
 HUSH is a five-stage pipeline with a single orchestration layer (`service`). Three
 front ends (a CLI, an HTTP API and a browser client) call this layer; none of them
-contains pipeline logic.
+contains pipeline logic. The optional MCP server is a fourth interface that does not
+call this layer but runs the CLI; see [MCP server](#mcp-server).
 
 ```
             core.inputs / core.sequence          stage 1  input
@@ -82,10 +83,27 @@ paired-core strands and the two overhangs separately, because it needs the bound
 between core and overhang to compute the QC read-outs. See
 [shrna-conversion.md](shrna-conversion.md).
 
+## MCP server
+
+`mcp/mcp_server.py` makes `design`, `convert` and `reference build` available to AI
+applications over the Model Context Protocol (stdio transport). It does not use
+`HushSession`. Each tool builds a `hush` command line, runs it as a subprocess with
+`NO_COLOR` set, and returns the text that the CLI printed. `design` and `convert`
+are stopped after 300 seconds and `reference build` after 3600 seconds.
+
+- The server contains no pipeline logic, and its results are the CLI's results.
+- The tool parameters mirror the CLI flags. A new CLI flag is not available over MCP
+  until it is added to the signature of the tool.
+- The command that is run comes from `HUSH_EXECUTABLE`, and defaults to `hush` on
+  PATH.
+- The server is a script and not an installed package. A top-level `mcp` package
+  would shadow the `mcp` package from PyPI that the server imports.
+
 ## Where a change belongs
 
 - A new **gate**: `core/` (or `msa/` if it needs the panel), then a field on
-  `SelectionCriteria` and `DesignParams`, then the three front ends.
+  `SelectionCriteria` and `DesignParams`, then the three front ends, and the
+  matching parameter of the MCP tool.
 - A new **rendering**: `app/cli.py` for the terminal, `api/serialize.py` for JSON,
   `web/` for the GUI. A renderer must not recompute values; add them to the result.
 - A new **pipeline step**: a package at the domain layer, wired in `HushSession`.
@@ -101,6 +119,7 @@ few environment variables exist for deployment:
 | `HUSH_REFERENCE_DIR` | `data/reference` | `core.reference`, to locate the off-target index |
 | `HUSH_WEB_DIR` | unset | `api.app`, to serve a built web client |
 | `HUSH_API_HOST` / `HUSH_API_PORT` | `127.0.0.1` / `8000` | `api.__main__` |
+| `HUSH_EXECUTABLE` | `hush` | `mcp/mcp_server.py`, to locate the CLI that it runs |
 
 If `HUSH_WEB_DIR` is unset, the API serves no web client. This prevents a stale
 `web/dist` in a checkout from being served and from removing the CORS settings that

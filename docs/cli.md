@@ -11,6 +11,7 @@ All commands and flags with their defaults. The rationale for each gate is in
 | `hush shell` | Interactive session: load the inputs once and re-run the design |
 | `hush reference build` | Download the transcriptome and build the off-target index |
 | `hush reference status` | Report whether the index exists, and its provenance |
+| `hush --version` | Print the installed HUSH version and exit |
 
 ## `hush reference`
 
