@@ -6,7 +6,7 @@
 # Both services share the `hush_ref` volume, so the reference is built once and
 # every later run finds it automatically. Compose only builds when the image tag
 # is missing, so pass --build after pulling new code. Set HUSH_IMAGE to run a
-# published image instead, e.g. ghcr.io/theragnaroek/hush:1.0.0.
+# published image instead, e.g. ghcr.io/theragnaroek/hush:1.1.0.
 services:
   # The GUI and API on one port. Open http://localhost:8000 once it is up.
   hush:

@@ -38,15 +38,15 @@ version, never a moving tag, so a given revision of this repository always
 names the image built from it:
 
 ```bash
-docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0 hush reference build
-docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0
+docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.1.0 hush reference build
+docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.1.0
 ```
 
 For the CLI rather than the GUI:
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work -v hush_ref:/data/reference \
-  ghcr.io/theragnaroek/hush:1.0.0 hush design mytarget.fasta -o selected.tsv
+  ghcr.io/theragnaroek/hush:1.1.0 hush design mytarget.fasta -o selected.tsv
 ```
 
 See [`docker/README.md`](docker/README.md) for Compose, the launcher wrappers and
