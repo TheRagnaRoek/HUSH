@@ -94,7 +94,10 @@ repository: https://gitlab.igem.org/2026/software/gu-frankfurt/hush
 
 The merge with the template adds iGEM's `CLAUDE.md` and
 `.claude/RESPONSIBLE_AI_USE.md` unchanged, so the mirror differs from the tag in
-four files. No other file differs.
+four files. For 1.0.0 it also differs in `LICENSE`: the copyright holder was
+changed to the team name on GitLab before the software freeze. The same change is
+on GitHub `main`, so later releases carry it and a re-sync merges it cleanly. No
+other file differs.
 
 ## Checking the mirror
 
@@ -112,7 +115,8 @@ frozen copy is self-contained.
 Also check, outside the clone, that:
 
 - the repository is under 50 MB (`git count-objects -vH`),
-- `git diff --stat v1.0.0 HEAD` lists only the four files named above,
+- `git diff --stat v1.0.0 HEAD` lists only the files named above (five for 1.0.0,
+  counting `LICENSE`),
 - `LICENSE` is present and the license is OSI-approved (MIT),
 - `CITATION.cff` contains the real author list and not a placeholder,
 - the published image, if referenced, is public.
