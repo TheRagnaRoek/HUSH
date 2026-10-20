@@ -189,6 +189,20 @@ export function exportConstruct(
   );
 }
 
+/** Every kept construct of a conversion, as the CLI's 'convert -o' file. */
+export function exportConstructs(
+  constructs: ConstructResult[],
+  targetId: string,
+  offline: boolean,
+  format: ExportFormat = "tsv",
+): void {
+  downloadText(
+    `hush_constructs_${fileSafe(targetId)}${sampleTag(offline)}.${format}`,
+    constructTsv(constructs),
+    format,
+  );
+}
+
 /** Save text as a file through the browser's download. */
 export function downloadText(
   filename: string,

@@ -6,6 +6,10 @@ versioning. The version is declared in `pyproject.toml` and must match
 
 ## Unreleased
 
+- The web GUI can export all converted shRNA constructs at once (TSV or TXT,
+  in the column layout of `hush convert -o`), from the construct step and the
+  candidate list. Withheld constructs are left out, as in the CLI.
+
 ## 1.0.0 - 2026-10-20
 
 First release. Includes the allele-aware siRNA/shRNA design pipeline, the CLI,
