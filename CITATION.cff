@@ -24,7 +24,7 @@ authors:
   - family-names: Schallmey
     given-names: Leonie
   - name: "iGEM GU Frankfurt 2026"
-version: 1.0.0
+version: 1.1.0
 date-released: "2026-10-20"
 license: MIT
 repository-code: https://github.com/TheRagnaRoek/HUSH

@@ -116,12 +116,11 @@ export function designTsv(design: DesignResponse): string {
   const header = withAllele ? [...DESIGN_BASE, ...DESIGN_ALLELE] : DESIGN_BASE;
   const checked = !design.offtarget_skipped;
   const rows = design.selected.map((c) => designRow(c, checked, withAllele));
-  return [header, ...rows].map((r) => r.join("\t")).join("\n") + "\n";
+  return toTsv([header, ...rows]);
 }
 
-/** Constructs as a 'hush convert' TSV. */
-export function constructTsv(constructs: ConstructResult[]): string {
-  const rows = constructs.map((c) => [
+function constructRow(c: ConstructResult): string[] {
+  return [
     c.region,
     text(c.start),
     text(c.end),
@@ -139,8 +138,36 @@ export function constructTsv(constructs: ConstructResult[]): string {
     text(c.max_homopolymer_run),
     c.sense_overhang,
     c.guide_overhang,
-  ]);
-  return [CONVERT_COLUMNS, ...rows].map((r) => r.join("\t")).join("\n") + "\n";
+  ];
+}
+
+const toTsv = (rows: string[][]) => rows.map((r) => r.join("\t")).join("\n") + "\n";
+
+/** Constructs as a 'hush convert' TSV. */
+export function constructTsv(constructs: ConstructResult[]): string {
+  return toTsv([CONVERT_COLUMNS, ...constructs.map(constructRow)]);
+}
+
+/**
+ * Kept constructs with their siRNA candidate metrics: the design columns, then
+ * the construct columns that the design row does not already hold (region,
+ * start, end). Rows follow the design ranking; withheld constructs are absent.
+ */
+export function combinedTsv(design: DesignResponse, constructs: ConstructResult[]): string {
+  const withAllele = design.selected.some((c) => c.allele != null);
+  const checked = !design.offtarget_skipped;
+  const byRegion = new Map(constructs.map((c) => [c.region, c]));
+  const header = [
+    ...(withAllele ? [...DESIGN_BASE, ...DESIGN_ALLELE] : DESIGN_BASE),
+    ...CONVERT_COLUMNS.slice(3),
+  ];
+  const rows = design.selected.flatMap((cand) => {
+    const construct = byRegion.get(cand.region);
+    return construct
+      ? [[...designRow(cand, checked, withAllele), ...constructRow(construct).slice(3)]]
+      : [];
+  });
+  return toTsv([header, ...rows]);
 }
 
 /** Both formats hold the same tab-separated table; .txt just opens anywhere. */
@@ -185,6 +212,35 @@ export function exportConstruct(
   downloadText(
     `hush_construct_${fileSafe(targetId)}_${construct.region}${sampleTag(offline)}.${format}`,
     constructTsv([construct]),
+    format,
+  );
+}
+
+/** Every kept construct of a conversion, as the CLI's 'convert -o' file. */
+export function exportConstructs(
+  constructs: ConstructResult[],
+  targetId: string,
+  offline: boolean,
+  format: ExportFormat = "tsv",
+): void {
+  downloadText(
+    `hush_constructs_${fileSafe(targetId)}${sampleTag(offline)}.${format}`,
+    constructTsv(constructs),
+    format,
+  );
+}
+
+/** The combined design and construct table; see combinedTsv. */
+export function exportCombined(
+  design: DesignResponse,
+  constructs: ConstructResult[],
+  targetId: string,
+  offline: boolean,
+  format: ExportFormat = "tsv",
+): void {
+  downloadText(
+    `hush_constructs_metrics_${fileSafe(targetId)}${sampleTag(offline)}.${format}`,
+    combinedTsv(design, constructs),
     format,
   );
 }

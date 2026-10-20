@@ -1,6 +1,6 @@
 {
   "name": "hush-web",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "HUSH Designer - the browser GUI for the allele-aware siRNA/shRNA pipeline (Project HIDE)",
   "license": "MIT",
   "type": "module",

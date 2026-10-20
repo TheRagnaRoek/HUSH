@@ -7,7 +7,7 @@ import { RELAXED_HLA_PATCH } from "../../lib/params";
 import { OFFTARGET_REASON, offtargetStatus } from "../../lib/engine";
 import { POSITION_ORDER, rankMode } from "../../lib/targeting";
 import { acronyms } from "../../lib/text";
-import { exportConstruct, exportDesign, type ExportFormat } from "../../lib/tsv";
+import { exportConstruct, exportConstructs, exportDesign, type ExportFormat } from "../../lib/tsv";
 import { useSession } from "../../session/useSession";
 
 /** The gate fewest candidates cleared: the one to loosen first.
@@ -142,6 +142,8 @@ export function CandidatesStep({ compact = false }: { compact?: boolean }) {
     </>
   );
 
+  const keptConstructs = convert?.constructs ?? [];
+
   const listHead = (
     <div className="listhead">
       <span className="lh">
@@ -164,6 +166,24 @@ export function CandidatesStep({ compact = false }: { compact?: boolean }) {
         >
           Export TXT
         </button>
+        {keptConstructs.length > 0 && (
+          <>
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => exportConstructs(keptConstructs, targetId, offline, "tsv")}
+            >
+              Export shRNA TSV
+            </button>
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => exportConstructs(keptConstructs, targetId, offline, "txt")}
+            >
+              Export shRNA TXT
+            </button>
+          </>
+        )}
       </span>
     </div>
   );

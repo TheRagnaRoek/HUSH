@@ -3,7 +3,7 @@ import { ScaffoldOptions } from "../viewer/ScaffoldOptions";
 import { WithheldSummary } from "../viewer/WithheldSummary";
 import { terminatorString } from "../../lib/loops";
 import { rankMode } from "../../lib/targeting";
-import { exportConstruct } from "../../lib/tsv";
+import { exportCombined, exportConstruct, exportConstructs } from "../../lib/tsv";
 import { useSession } from "../../session/useSession";
 
 export function ConstructStep() {
@@ -26,6 +26,9 @@ export function ConstructStep() {
   const targetId = inspect?.target.id ?? design.target.id;
   const terminator = terminatorString(convert?.terminator_length);
   const converted = Boolean(selectedConstruct);
+  const kept = convert?.constructs ?? [];
+  const keptCount = kept.length;
+  const withheldCount = convert?.withheld.length ?? 0;
 
   return (
     <div className="workspace">
@@ -54,6 +57,44 @@ export function ConstructStep() {
           <span className="hint">Sample mode - options apply against a connected backend.</span>
         )}
       </div>
+      {keptCount > 0 && (
+        <div className="listhead" style={{ marginBottom: 16 }}>
+          <span className="lh">
+            All {keptCount} converted construct{keptCount === 1 ? "" : "s"}
+            {withheldCount > 0 && ` (${withheldCount} withheld, not included)`}
+          </span>
+          <span className="exports">
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => exportConstructs(kept, targetId, offline, "tsv")}
+            >
+              Export all TSV
+            </button>
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => exportConstructs(kept, targetId, offline, "txt")}
+            >
+              Export all TXT
+            </button>
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => exportCombined(design, kept, targetId, offline, "tsv")}
+            >
+              With siRNA metrics TSV
+            </button>
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => exportCombined(design, kept, targetId, offline, "txt")}
+            >
+              With siRNA metrics TXT
+            </button>
+          </span>
+        </div>
+      )}
       <div className="divider" />
 
       <WithheldSummary />

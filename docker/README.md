@@ -26,8 +26,8 @@ keep `--build` after pulling new code, or the container will run the old source.
 The same two steps with the published image, pinned to an exact version:
 
 ```bash
-docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0 hush reference build
-docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0
+docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.1.0 hush reference build
+docker run -p 8000:8000 -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.1.0
 ```
 
 ## The reference
@@ -43,7 +43,7 @@ so an empty hit count cannot be mistaken for "no off-targets found".
 Check the installed reference:
 
 ```bash
-docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.0.0 hush reference status
+docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.1.0 hush reference status
 ```
 
 This reports the RefSeq release, the bowtie version and the build date recorded in
@@ -62,7 +62,7 @@ HUSH reports this before the download starts and not part-way through it.
 Take ownership of the existing volume once:
 
 ```bash
-docker run --rm --user root -v hush_hush_ref:/data/reference   ghcr.io/theragnaroek/hush:1.0.0 chown -R 10001:10001 /data/reference
+docker run --rm --user root -v hush_hush_ref:/data/reference   ghcr.io/theragnaroek/hush:1.1.0 chown -R 10001:10001 /data/reference
 ```
 
 Alternatively, build into a fresh volume and delete the old one afterwards.
@@ -74,7 +74,7 @@ instead:
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work -v hush_ref:/data/reference \
-  ghcr.io/theragnaroek/hush:1.0.0 hush design mytarget.fasta -o selected.tsv
+  ghcr.io/theragnaroek/hush:1.1.0 hush design mytarget.fasta -o selected.tsv
 ```
 
 Mounting the current directory at `/work` lets HUSH read input files and write
@@ -112,7 +112,7 @@ hush() { /path/to/HUSH/docker/hush.sh "$@"; }
 
 ```bash
 docker run --rm -it -v hush_ref:/data/reference -v "$PWD:/work" -w /work \
-  ghcr.io/theragnaroek/hush:1.0.0 bash
+  ghcr.io/theragnaroek/hush:1.1.0 bash
 ```
 
 `hush`, `bowtie` and `bowtie-build` are all on `PATH`.
