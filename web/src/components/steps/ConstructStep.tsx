@@ -3,7 +3,7 @@ import { ScaffoldOptions } from "../viewer/ScaffoldOptions";
 import { WithheldSummary } from "../viewer/WithheldSummary";
 import { terminatorString } from "../../lib/loops";
 import { rankMode } from "../../lib/targeting";
-import { exportConstruct, exportConstructs } from "../../lib/tsv";
+import { exportCombined, exportConstruct, exportConstructs } from "../../lib/tsv";
 import { useSession } from "../../session/useSession";
 
 export function ConstructStep() {
@@ -77,6 +77,20 @@ export function ConstructStep() {
               onClick={() => exportConstructs(kept, targetId, offline, "txt")}
             >
               Export all TXT
+            </button>
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => exportCombined(design, kept, targetId, offline, "tsv")}
+            >
+              With siRNA metrics TSV
+            </button>
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => exportCombined(design, kept, targetId, offline, "txt")}
+            >
+              With siRNA metrics TXT
             </button>
           </span>
         </div>
