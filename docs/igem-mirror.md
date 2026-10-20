@@ -29,8 +29,8 @@ produce the output, and a prebuilt binary is not accepted.
 The published image is offered second and is **pinned to an exact version**, never
 `latest`. A moving tag would make the documented command pull the most recently
 published image, so the code that is read and the software that runs could differ
-without notice. Every reference in the repository names
-`ghcr.io/theragnaroek/hush:1.0.0`.
+without notice. Every reference in the repository names the image of the current
+version, for example `ghcr.io/theragnaroek/hush:1.1.0`.
 
 The transcriptome reference index is intentionally not included. It is several
 gigabytes, it is built from public RefSeq data by `hush reference build`, and its
@@ -42,7 +42,9 @@ its absence is not an omission.
 Build the mirror from the release tag, not from `main`. `main` keeps moving, and
 the mirror has to stay frozen at the submitted version. Apply the two edits under
 "The differences to apply" on a branch cut from the tag, merge in what iGEM has
-already put in the project, then push that branch as the mirror's `main`:
+already put in the project, then push that branch as the mirror's `main`. The
+commands below are the ones used to create the mirror at 1.0.0; for a later
+version see "Fixing something after submission":
 
 ```bash
 git checkout -b gitlab-mirror v1.0.0
@@ -81,7 +83,7 @@ Two files change. In `README.md`, add this directly under the logo, above the
 
 ```markdown
 > **iGEM 2026 competition submission.** This is the frozen copy of HUSH as
-> submitted for judging: version 1.0.0, tag `v1.0.0`. Development continues at
+> submitted for judging: version 1.1.0, tag `v1.1.0`. Development continues at
 > <https://github.com/TheRagnaRoek/HUSH>; later versions there will differ from
 > what is recorded here.
 ```
@@ -94,10 +96,10 @@ repository: https://gitlab.igem.org/2026/software/gu-frankfurt/hush
 
 The merge with the template adds iGEM's `CLAUDE.md` and
 `.claude/RESPONSIBLE_AI_USE.md` unchanged, so the mirror differs from the tag in
-four files. For 1.0.0 it also differs in `LICENSE`: the copyright holder was
+four files. For 1.0.0 it also differed in `LICENSE`: the copyright holder was
 changed to the team name on GitLab before the software freeze. The same change is
-on GitHub `main`, so later releases carry it and a re-sync merges it cleanly. No
-other file differs.
+on GitHub `main`, so every later release carries it and `LICENSE` no longer
+differs. No other file differs.
 
 ## Checking the mirror
 
@@ -115,22 +117,46 @@ frozen copy is self-contained.
 Also check, outside the clone, that:
 
 - the repository is under 50 MB (`git count-objects -vH`),
-- `git diff --stat v1.0.0 HEAD` lists only the files named above (five for 1.0.0,
-  counting `LICENSE`) and any documentation files merged in as described under
-  "Fixing something after submission",
+- `git diff --stat v<version> HEAD`, for the version the mirror is at, lists only
+  the files named above (four, or five for 1.0.0 with `LICENSE`) and any
+  documentation files merged in as described under "Fixing something after
+  submission",
 - `LICENSE` is present and the license is OSI-approved (MIT),
 - `CITATION.cff` contains the real author list and not a placeholder,
 - the published image, if referenced, is public.
 
 ## Fixing something after submission
 
-Fix it on GitHub, tag a new version, and repeat the steps above from the new tag:
-cut the branch from it, apply the same two edits (with the new version and tag in
-the banner), merge `igem/main` and push the branch and the tag. The mirror already
-contains this project's history, so that merge needs no `--allow-unrelated-histories`
-and has no conflicts. Do not edit the mirror directly: a change that exists only in
-the mirror is lost at the next sync, and the two copies are no longer the same
-software.
+Fix it on GitHub, release it there (version bump in `pyproject.toml`,
+`CITATION.cff` and `web/package.json`, the image pins, the changelog, then the
+tag on the merged `main`), and bring the new tag to the mirror. Do not edit the
+mirror directly: a change that exists only in the mirror is lost at the next
+sync, and the two copies are no longer the same software.
+
+For 1.1.0 this was:
+
+```bash
+git fetch origin --tags
+git fetch igem
+git checkout -b gitlab-mirror-1.1.0 v1.1.0
+# apply the two edits above, with the new version and tag in the banner, then:
+git commit -am "Mark this copy as the iGEM submission"
+git merge igem/main
+```
+
+The mirror already contains this project's history, so the merge needs no
+`--allow-unrelated-histories`. The one conflict to expect is the version line of
+the banner in `README.md`, because `igem/main` still carries the old banner: keep
+the new version. `CITATION.cff` already has the `repository:` line and merges
+cleanly. Before pushing, check that `git diff --stat v1.1.0 HEAD` lists only the
+four files named above, and that `igem/main` is an ancestor of the branch
+(`git merge-base --is-ancestor igem/main HEAD`), so that the push is a
+fast-forward and needs no force. Then push the branch and the tag:
+
+```bash
+git push igem gitlab-mirror-1.1.0:main
+git push igem v1.1.0
+```
 
 Documentation-only changes need no new version. For 1.0.0 the README and the docs
 were improved on GitHub after the tag and before the software freeze, and reached
@@ -150,7 +176,7 @@ documentation files. Then push the branch as the mirror's `main`:
 git push igem gitlab-docs-sync:main
 ```
 
-The banner still says version 1.0.0, which stays true because the software is
-unchanged. `git diff --stat v1.0.0 HEAD` then also lists the documentation files
-that were merged in. A change to code, a lockfile or CI is not documentation-only
+The banner still names the released version, which stays true because the
+software is unchanged. `git diff --stat v<version> HEAD` then also lists the
+documentation files that were merged in. A change to code, a lockfile or CI is not documentation-only
 and needs a new version, as described above.
