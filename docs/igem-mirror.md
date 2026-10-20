@@ -116,7 +116,8 @@ Also check, outside the clone, that:
 
 - the repository is under 50 MB (`git count-objects -vH`),
 - `git diff --stat v1.0.0 HEAD` lists only the files named above (five for 1.0.0,
-  counting `LICENSE`),
+  counting `LICENSE`) and any documentation files merged in as described under
+  "Fixing something after submission",
 - `LICENSE` is present and the license is OSI-approved (MIT),
 - `CITATION.cff` contains the real author list and not a placeholder,
 - the published image, if referenced, is public.
@@ -130,3 +131,26 @@ contains this project's history, so that merge needs no `--allow-unrelated-histo
 and has no conflicts. Do not edit the mirror directly: a change that exists only in
 the mirror is lost at the next sync, and the two copies are no longer the same
 software.
+
+Documentation-only changes need no new version. For 1.0.0 the README and the docs
+were improved on GitHub after the tag and before the software freeze, and reached
+the mirror by merging GitHub `main` into the mirror's `main`, not from a tag:
+
+```bash
+git fetch origin
+git fetch igem
+git checkout -b gitlab-docs-sync igem/main
+git merge origin/main
+```
+
+Before pushing, check that `git diff --stat igem/main HEAD` lists only
+documentation files. Then push the branch as the mirror's `main`:
+
+```bash
+git push igem gitlab-docs-sync:main
+```
+
+The banner still says version 1.0.0, which stays true because the software is
+unchanged. `git diff --stat v1.0.0 HEAD` then also lists the documentation files
+that were merged in. A change to code, a lockfile or CI is not documentation-only
+and needs a new version, as described above.
