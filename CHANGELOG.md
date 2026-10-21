@@ -6,6 +6,10 @@ versioning. The version is declared in `pyproject.toml` and must match
 
 ## Unreleased
 
+- The README quickstart now explains each step for readers new to Docker and the
+  command line: installing Docker, getting the files, opening a terminal in the
+  right folder, and common errors.
+
 ## 1.1.0 - 2026-10-20
 
 - The web GUI can export all converted shRNA constructs at once (TSV or TXT,
