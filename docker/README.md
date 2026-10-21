@@ -10,6 +10,9 @@ volume, and every later run finds it automatically.
 
 ## Quickstart
 
+New to Docker or the command line? The main [README](../README.md#quickstart)
+walks through installing Docker, getting the files and opening a terminal.
+
 From the repository root, building from source:
 
 ```bash

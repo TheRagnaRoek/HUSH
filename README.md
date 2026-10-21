@@ -21,7 +21,9 @@ HUSH is developed as part of **Project HIDE**
 
 ## Quickstart
 
-From a clone of this repository, with nothing else installed but Docker:
+HUSH runs inside a Docker container, so the only thing to install is Docker. No
+programming knowledge is needed. If you are used to the command line, the whole
+quickstart is two commands, run from a copy of this repository:
 
 ```bash
 docker compose run --rm reference-build   # one-time, see below
@@ -33,9 +35,132 @@ from this repository's own Dockerfile, so these commands depend on nothing but
 the source you already have. The container carries everything else, including
 the `bowtie1` binary the off-target check needs.
 
-A prebuilt image is published for convenience. It is pinned to an exact
-version, never a moving tag, so a given revision of this repository always
-names the image built from it:
+If any of that was unfamiliar, the steps below explain each part.
+
+### What you need
+
+- A computer running Windows 10/11, macOS or Linux, with an internet connection.
+- Several gigabytes of free disk space. The transcriptome reference alone is
+  several gigabytes (see [The reference check](#the-reference-check)).
+- Patience on the first run, most of which is waiting for downloads. Later starts
+  are quick.
+
+### 1. Install Docker
+
+Docker is a program that runs software in a self-contained "container", so you do
+not have to install HUSH's dependencies yourself.
+
+- **Windows and macOS:** install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+  On Windows the installer may ask to enable WSL 2 and to restart the computer;
+  accept both.
+- **Linux:** install Docker Engine and the Compose plugin by following
+  [docs.docker.com/engine/install](https://docs.docker.com/engine/install/).
+
+Start Docker Desktop and wait until it reports that it is running (on Windows and
+macOS look for the whale icon in the taskbar or menu bar). Docker Desktop must be
+running every time you use HUSH.
+
+### 2. Get a copy of HUSH
+
+You need the files of this repository on your computer. The simplest way needs no
+extra software: on the repository's web page click the green **Code** button, then
+**Download ZIP**, and unpack the ZIP file into a folder you will find again, for
+example your Documents folder. You end up with a folder called `HUSH` (or
+`HUSH-main`) that contains `docker-compose.yml` and `README.md`.
+
+If you already use Git, you can instead **clone** the repository, which means
+making a local copy of it with Git. Copy the address from the **Code** button, or
+for the GitHub copy:
+
+```bash
+git clone https://github.com/TheRagnaRoek/HUSH.git
+```
+
+### 3. Open a terminal in that folder
+
+The commands below are typed into a **terminal**, a window where you give the
+computer written instructions. They have to be run from inside the HUSH folder,
+because that is where Docker finds `docker-compose.yml`.
+
+- **Windows:** open the HUSH folder in File Explorer, click an empty spot in the
+  address bar, type `powershell` and press Enter. (Or right-click an empty spot
+  in the folder and choose **Open in Terminal**.)
+- **macOS:** open the **Terminal** app, type `cd ` (with a trailing space), drag
+  the HUSH folder from Finder into the window, and press Enter.
+- **Linux:** right-click an empty spot in the folder and choose **Open in
+  Terminal**, or use `cd` to go to the folder.
+
+Check that it worked. The first command should print a Docker version number. The
+second should print the two service names, `hush` and `reference-build`; that
+shows Docker can see the HUSH folder. If either prints an error instead, see "If
+something goes wrong" below.
+
+```bash
+docker --version
+```
+
+```bash
+docker compose config --services
+```
+
+### 4. Build the reference (once)
+
+Type the command and press Enter:
+
+```bash
+docker compose run --rm reference-build
+```
+
+This does two things. It first builds the HUSH container from the files in the
+folder, then it downloads the human transcriptome from NCBI RefSeq and prepares
+it for the off-target check. The download is several gigabytes and can take a
+while. Leave the window open until the command finishes and the prompt comes
+back. You only ever do this once: the result is stored in a Docker volume (a
+storage area managed by Docker) and every later start finds it automatically.
+
+### 5. Start HUSH
+
+```bash
+docker compose up hush
+```
+
+Wait until the text in the window stops scrolling (the last lines mention that
+the application is running), then open <http://localhost:8000> in your web
+browser. This address points to your own computer, so HUSH is not visible to
+anyone else. The window stays busy while HUSH runs; that is normal.
+
+If going to localhost does not work, as can be the case if you for example use
+Microsoft Edge, try opening <http://127.0.0.1:8000> instead.
+
+Files that HUSH saves for you appear in the `work` folder inside the HUSH folder.
+
+### Stopping and starting again
+
+Click into the terminal window and press **Ctrl+C** to stop HUSH, then close the
+window. To start it again later, open a terminal in the HUSH folder (step 3) and
+run only `docker compose up hush`. The reference does not have to be built again.
+
+If you replace the folder with a newer version of HUSH, add `--build` so that
+the container is rebuilt from the new files: `docker compose up --build hush`.
+
+### If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| `docker` is not recognized / command not found | Docker is not installed, or the terminal was opened before the installation. Close the terminal and open a new one. |
+| An error about connecting to the Docker daemon or engine (on Windows often mentioning a "pipe") | Docker is not running. Start Docker Desktop, wait until it reports that it is running, then retry. |
+| "no configuration file provided: not found" | The terminal is not in the HUSH folder. Repeat step 3. |
+| "port is already allocated" | Something else uses port 8000. Close it, or stop an earlier HUSH window. |
+| The reference download stops with an error | Check the internet connection and run the same command again. |
+| The page at localhost:8000 does not load | Check that the terminal from step 5 is still open and has not shown an error. |
+
+### Prebuilt image and CLI
+
+The steps above are the recommended route because they build HUSH from the source
+you are looking at. As an alternative, a prebuilt image is published for
+convenience. It is pinned to an exact version, never a moving tag, so a given
+revision of this repository always names the image built from it. These commands
+need Docker but not the repository files:
 
 ```bash
 docker run --rm -v hush_ref:/data/reference ghcr.io/theragnaroek/hush:1.1.0 hush reference build
